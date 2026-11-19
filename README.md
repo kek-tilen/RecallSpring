@@ -25,14 +25,17 @@ Requirements: Python 3.12+, Docker (for PostgreSQL), Node 22+ (frontend, later).
 # 1. Start the local dev database (binds to 127.0.0.1 only)
 docker compose -p recallspring-dev -f infra/compose.dev.yml --env-file infra/.env up -d
 
-# 2. Backend
+# 2. Backend (Windows paths; use .venv/bin/ on macOS/Linux)
 cd services/api
 python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements-dev.lock   # Windows
-.venv/Scripts/python -m pip install --no-deps -e .
+.venv/Scripts/python -m pip install --require-hashes -r requirements-dev.lock
+.venv/Scripts/python -m pip install --no-deps --no-build-isolation -e .
+cp .env.example .env    # set the password from infra/.env
 .venv/Scripts/alembic upgrade head
 .venv/Scripts/python -m pytest
 ```
+
+Copy `infra/.env.example` to `infra/.env` with a random password first.
 
 See `services/api/README.md` for configuration, the owner-account CLI and the demo seed.
 

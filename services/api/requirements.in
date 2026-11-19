@@ -1,0 +1,13 @@
+# Runtime dependencies. Compile the lock with:
+#   pip-compile --generate-hashes --allow-unsafe -o requirements.lock requirements.in
+fastapi
+uvicorn
+sqlalchemy>=2.0
+psycopg[binary]>=3.2
+alembic
+pydantic>=2
+pydantic-settings
+argon2-cffi
+jsonschema
+httpx
+tzdata

@@ -1,0 +1,35 @@
+"""FastAPI application factory. Run locally: ``uvicorn recallspring_api.main:app --host 127.0.0.1 --port 4318``."""
+
+from __future__ import annotations
+
+import logging
+
+from fastapi import FastAPI
+
+from . import __version__, errors
+from .api import attempts, auth, courses, health, questions, reviews, study
+from .config import get_settings
+from .security import LoginRateLimiter
+
+API_PREFIX = "/api/v1"
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    dev = settings.environment != "production"
+    app = FastAPI(
+        title="RecallSpring API",
+        version=__version__,
+        openapi_url=f"{API_PREFIX}/openapi.json",
+        docs_url=f"{API_PREFIX}/docs" if dev else None,
+        redoc_url=None,
+    )
+    app.state.login_limiter = LoginRateLimiter(settings.login_max_failures, settings.login_failure_window_seconds)
+    errors.install(app)
+    for module in (health, auth, courses, study, questions, attempts, reviews):
+        app.include_router(module.router, prefix=API_PREFIX)
+    return app
+
+
+app = create_app()

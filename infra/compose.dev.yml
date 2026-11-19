@@ -1,0 +1,26 @@
+# Local development database only. Never used on the VPS.
+# Start:  docker compose -p recallspring-dev -f infra/compose.dev.yml --env-file infra/.env up -d
+# Stop:   docker compose -p recallspring-dev -f infra/compose.dev.yml --env-file infra/.env stop
+name: recallspring-dev
+
+services:
+  db:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: recallspring
+      POSTGRES_DB: recallspring
+      POSTGRES_PASSWORD: ${RS_DEV_DB_PASSWORD:?set RS_DEV_DB_PASSWORD in infra/.env}
+    ports:
+      - "127.0.0.1:55432:5432"   # loopback only
+    volumes:
+      - recallspring_dev_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recallspring -d recallspring"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 384m
+    restart: unless-stopped
+
+volumes:
+  recallspring_dev_pgdata:

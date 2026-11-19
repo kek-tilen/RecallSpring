@@ -1,0 +1,228 @@
+"""Request/response models of the public API (published as OpenAPI at /api/v1/openapi.json)."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+Grade = int
+
+
+class _Out(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------------------------------------------- auth
+
+
+class LoginIn(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class UserOut(_Out):
+    id: uuid.UUID
+    username: str
+    timezone: str
+
+
+class SessionOut(BaseModel):
+    user: UserOut
+    expires_at: datetime
+
+
+# ---------------------------------------------------------------- courses
+
+
+class CourseIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=5000)
+    long_term_retention: bool = True
+
+
+class CourseOut(_Out):
+    id: uuid.UUID
+    title: str
+    description: str | None
+    long_term_retention: bool
+    status: str
+    revision: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class SyllabusItemIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    parent_id: uuid.UUID | None = None
+    position: int = Field(default=0, ge=0, le=10_000)
+
+
+class SyllabusItemOut(_Out):
+    id: uuid.UUID
+    course_id: uuid.UUID
+    parent_id: uuid.UUID | None
+    title: str
+    position: int
+    revision: int
+
+
+class ConceptIn(BaseModel):
+    term: str = Field(min_length=1, max_length=200)
+    definition_draft: str | None = Field(default=None, max_length=5000)
+    syllabus_item_id: uuid.UUID | None = None
+    source_confidence: Literal["high", "medium", "low", "inferred"] | None = None
+
+
+class ConceptOut(_Out):
+    id: uuid.UUID
+    course_id: uuid.UUID
+    syllabus_item_id: uuid.UUID | None
+    term: str
+    definition_draft: str | None
+    source_confidence: str | None
+    revision: int
+
+
+# ---------------------------------------------------------------- study sessions
+
+
+class StudySessionIn(BaseModel):
+    course_id: uuid.UUID | None = None
+    mode: Literal["new_learning", "review"]
+
+
+class StudySessionOut(_Out):
+    id: uuid.UUID
+    course_id: uuid.UUID | None
+    mode: str
+    started_at: datetime
+    ended_at: datetime | None
+
+
+# ---------------------------------------------------------------- questions
+
+
+class QuestionIn(BaseModel):
+    course_id: uuid.UUID
+    concept_ids: list[uuid.UUID] = Field(min_length=1, max_length=10)
+    bloom_level: int = Field(ge=1, le=6)
+    prompt: str = Field(min_length=1, max_length=4000)
+    expected_points: list[str] = Field(default_factory=list, max_length=12)
+    source_refs: list[str] = Field(default_factory=list, max_length=20)
+    difficulty: int | None = Field(default=None, ge=1, le=5)
+
+
+class QuestionGenerateIn(BaseModel):
+    course_id: uuid.UUID
+    concept_ids: list[uuid.UUID] = Field(min_length=1, max_length=10)
+    bloom_levels: list[int] = Field(default_factory=lambda: [3, 4, 5], min_length=1, max_length=10)
+    order: Literal["progressive", "mixed"] = "progressive"
+
+
+class QuestionOut(BaseModel):
+    id: uuid.UUID
+    course_id: uuid.UUID
+    concept_ids: list[uuid.UUID]
+    bloom_level: int
+    prompt: str
+    source_refs: list[str]
+    difficulty: int | None
+    provenance: dict[str, Any]
+    created_at: datetime
+    rubric: dict[str, Any] | None = Field(
+        default=None, description="Only present once the learner has submitted an attempt for this question."
+    )
+
+
+class QuestionListOut(BaseModel):
+    questions: list[QuestionOut]
+
+
+# ---------------------------------------------------------------- attempts and assessments
+
+
+class AttemptIn(BaseModel):
+    question_id: uuid.UUID
+    session_id: uuid.UUID | None = None
+    client_request_id: uuid.UUID
+    kind: Literal["answer", "dont_know", "skip"] = "answer"
+    answer_text: str = Field(default="", max_length=20_000)
+    answer_mode: Literal["closed_notes", "open_notes"] = "closed_notes"
+
+
+class AttemptCreatedOut(BaseModel):
+    attempt_id: uuid.UUID
+    status: str
+    saved_at: datetime
+
+
+class AssessmentOut(_Out):
+    id: uuid.UUID
+    evaluator_kind: str
+    provider: str | None
+    model: str | None
+    model_reported_by: str | None
+    simulated: bool
+    rubric_version: str
+    status: str
+    grade: Grade | None
+    confidence: str
+    feedback: str
+    evidence_refs: list[Any]
+    strengths: list[Any]
+    gaps: list[Any]
+    remediation: str | None
+    factuality_flags: list[Any]
+    supersedes_id: uuid.UUID | None
+    created_at: datetime
+
+
+class AttemptOut(BaseModel):
+    id: uuid.UUID
+    question_id: uuid.UUID
+    session_id: uuid.UUID | None
+    kind: str
+    answer_text: str
+    answer_mode: str
+    captured_via: str
+    status: str
+    submitted_at: datetime
+    last_evaluation_error: str | None
+    assessments: list[AssessmentOut]
+    effective_assessment_id: uuid.UUID | None
+
+
+class ChallengeIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=2000)
+    corrected_grade: int | None = Field(default=None, ge=0, le=4)
+
+
+# ---------------------------------------------------------------- reviews
+
+
+class ReviewItemOut(BaseModel):
+    concept_id: uuid.UUID
+    course_id: uuid.UUID
+    term: str
+    due_at: datetime
+    is_due: bool
+    step: int
+    evidence_count: int
+    lapse_count: int
+    last_review_at: datetime
+    due_reason: dict[str, Any]
+    policy_version: str
+
+
+class ReviewQueueOut(BaseModel):
+    items: list[ReviewItemOut]
+    generated_at: datetime
+    note: str = "Estimated from practice, not a guarantee of recall."
+
+
+class DeferIn(BaseModel):
+    days: int = Field(ge=1, le=30)
+    reason: str | None = Field(default=None, max_length=300)
