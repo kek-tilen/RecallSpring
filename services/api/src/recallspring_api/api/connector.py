@@ -161,7 +161,7 @@ def outline(course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session
 def search(
     q: str = Query(min_length=1, max_length=200),
     course_id: uuid.UUID | None = None,
-    limit: int = Query(default=8, ge=1, le=20),
+    limit: int = Query(default=5, ge=1, le=20),
     ctx: Ctx = Depends(connector_ctx),
     db: Session = Depends(get_db),
 ) -> SearchOut:
@@ -335,7 +335,7 @@ def get_attempt(
             {
                 "section_id": str(s.id),
                 "citation_label": s.citation_label,
-                "text": s.text[:4000],
+                "text": s.text[:2500],
                 "content_kind": UNTRUSTED,
             }
             for s in sections

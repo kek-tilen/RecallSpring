@@ -63,7 +63,8 @@ def set_client(client: RecallSpringClient | None) -> None:
 
 
 def as_json(data: Any) -> str:
-    return json.dumps(data, ensure_ascii=False, indent=1)
+    # Compact JSON: tool output counts against the learner's Claude plan usage.
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
 
 
 def learner_material(text: str, **attrs: Any) -> str:

@@ -49,7 +49,7 @@ class Settings(BaseSettings):
 
     # Claude connector (Mode A): requests per learner-local day at 100 %; the owner scales it 1–100 %.
     connector_daily_requests_default: int = 600
-    connector_note_chars: int = 20_000
+    connector_note_chars: int = 8_000  # per note; keeps tool output (and Claude plan usage) small
 
     # AI (Mode B). "none" disables in-app AI; "mock" is for development/tests and is always labelled Simulated.
     ai_evaluation_provider: Literal["none", "mock"] = "none"
