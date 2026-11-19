@@ -303,7 +303,8 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         grade = payload.get("grade")
         return f"{grade}/4 ({payload.get('status')}) by {who}" if grade is not None else f"ungraded by {who}"
     if event_type == "source.parsed":
-        return f"{payload.get('state')}, {payload.get('sections')} sections"
+        n = payload.get("sections")
+        return f"{payload.get('state')}, {n} section{'' if n == 1 else 's'}"
     if event_type == "attempt.submitted":
         via = {"answer_form": "answer form", "assistant_transcription": "copied by Claude", "app_ui": "web app"}
         return f"{payload.get('kind')} via {via.get(payload.get('captured_via'), payload.get('captured_via'))}"

@@ -877,6 +877,16 @@ tbody tr:hover td {
   padding: 8px 0;
 }
 
+/* Long file names (underscores, no spaces) must wrap instead of running out of their card. */
+.event,
+.list > li,
+.plan-item,
+.page-head h1,
+.card-head h2,
+.crumbs {
+  overflow-wrap: anywhere;
+}
+
 .event .t {
   color: var(--muted);
   font-size: 0.85rem;
