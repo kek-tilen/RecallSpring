@@ -74,6 +74,11 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `submit_chat_answer` | append | Fallback when the form cannot render: `captured_via = assistant_transcription` |
 | `record_assessment` | append | Once per attempt; validated against `assessment.schema.json`; evidence refs that are not real sections of the question's course are dropped and a final grade becomes `provisional`; returns the next review date and reason |
 | `record_session_summary` | append | Once per session |
+| `create_course` | append | New course (`POST /connector/courses`) |
+| `import_file` | append | Local file read by the connector process (allowed folders and types only) and uploaded with the same checks as the web upload; waits for extraction |
+| `add_text_source` | append | Pasted text as a source |
+| `get_source_status` | read | Extraction state and section IDs/labels (no text) |
+| `create_concepts` | append | Up to 30 concepts; existing terms reused; linked sections must belong to the course, otherwise `inferred` |
 
 ## API example: attempt creation
 

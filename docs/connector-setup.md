@@ -42,11 +42,19 @@ cd services/mcp && python -m venv .venv && .venv/Scripts/python -m pip install -
 services/mcp/.venv/Scripts/python services/mcp/scripts/check_connector.py
 ```
 
-Expected: `Connector started with 15 tools.` … `Connector OK.`
+Expected: `Connector started with 20 tools.` … `Connector OK.`
 
 ## 4. Add it to Claude Desktop
 
-Claude Desktop → **Settings → Developer → Edit Config** opens `claude_desktop_config.json`. Add (use your absolute repository path, with doubled backslashes on Windows):
+**Windows (Microsoft Store build):** the running app keeps its settings in memory and rewrites `claude_desktop_config.json` (under `%LOCALAPPDATA%\Claude-Data\claude_<id>\`), so an edit made while it runs is lost. Run
+
+```bash
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-claude-desktop-connector.ps1
+```
+
+then quit Claude Desktop (tray icon → Quit). The script waits until the app has closed, adds only the `recallspring` entry (backup: `claude_desktop_config.json.bak-before-recallspring`) and starts Claude Desktop again. Log: `%LOCALAPPDATA%\RecallSpring\install-connector.log`. To remove the entry later: `python -I scripts/claude_desktop_config.py remove --config <path>` while the app is closed.
+
+**Manually** (other platforms): Claude Desktop → **Settings → Developer → Edit Config** opens `claude_desktop_config.json`. Add (use your absolute repository path, with doubled backslashes on Windows), then fully quit and restart:
 
 ```json
 {
@@ -60,11 +68,15 @@ Claude Desktop → **Settings → Developer → Edit Config** opens `claude_desk
 }
 ```
 
-Fully quit and restart Claude Desktop. RecallSpring appears in the chat's tools menu; Claude asks your permission the first time it uses a tool.
+After the restart, RecallSpring appears in the chat's tools menu; Claude asks your permission the first time it uses a tool.
 
 ## 5. Study
 
-Start a chat, choose your model (Sonnet by default, Opus for demanding material), and say for example *"Let's do today's RecallSpring review"* or *"Quiz me on glycolysis at Bloom 4 using my lecture notes."* Claude will:
+Start a chat and choose your model (Sonnet by default, Opus for demanding material).
+
+**First, build your library** (no web UI yet): *"Create a RecallSpring course 'Biology' and import C:\Users\me\Documents\lecture-1.pdf."* `import_file` sends the file straight from your disk to RecallSpring (it does not pass through the chat, so it does not use your Claude plan) and waits for extraction; only files in your Documents, Downloads or Desktop folders are allowed (`RS_IMPORT_ROOTS` overrides). Then: *"Propose the key concepts and link them to the sections."*
+
+**Then study**, for example *"Let's do today's RecallSpring review"* or *"Quiz me on glycolysis at Bloom 4 using my lecture notes."* Claude will:
 
 1. read your plan and material,
 2. write a question and show the **answer form** in the chat,

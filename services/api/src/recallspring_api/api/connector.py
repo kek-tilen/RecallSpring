@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -38,13 +38,17 @@ from ..models import (
 from ..schemas import (
     ConnectorAssessmentIn,
     ConnectorAttemptIn,
+    ConnectorConceptsIn,
     ConnectorQuestionsIn,
     ConnectorSessionIn,
     ConnectorSummaryIn,
+    CourseIn,
+    CourseOut,
     PlanOut,
     ReviewQueueOut,
     SearchHitOut,
     SearchOut,
+    SourceTextIn,
     StudySessionOut,
 )
 from ..services import attempts as attempt_svc
@@ -56,6 +60,7 @@ from ..services.reviews import concept_ids_for_question, recompute, review_queue
 from .attempts import save_attempt
 from .questions import _add_question, _course_concepts, question_view
 from .reviews import _item as review_item
+from .sources import handle_paste, handle_upload
 
 router = APIRouter(prefix="/connector", tags=["connector"])
 
@@ -432,3 +437,124 @@ def record_assessment(
         ],
     }
     return commit_with_response(db, ctx, payload, 200, body)
+
+
+# ---------------------------------------------------------------- building the library from Claude (append-only)
+
+
+@router.post("/courses", status_code=201, response_model=CourseOut)
+def create_course(
+    payload: CourseIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    course = Course(user_id=ctx.user.id, **payload.model_dump())
+    db.add(course)
+    db.flush()
+    learning_event(
+        db,
+        user_id=ctx.user.id,
+        entity_type="course",
+        entity_id=course.id,
+        event_type="course.created",
+        payload={"origin": "connector"},
+        request_id=ctx.request_id,
+    )
+    db.flush()
+    db.refresh(course)
+    return commit_with_response(db, ctx, payload, 201, CourseOut.model_validate(course).model_dump(mode="json"))
+
+
+@router.post("/courses/{course_id}/concepts", status_code=201)
+def create_concepts(
+    course_id: uuid.UUID,
+    payload: ConnectorConceptsIn,
+    ctx: WriteCtx = Depends(connector_write_ctx),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Concepts proposed by Claude from the learner's material. Each links to real source sections or is marked
+    ``inferred``; an existing term in the course is reused instead of duplicated."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    owned(db, Course, course_id, ctx.user.id)
+    existing = {
+        c.term.casefold(): c
+        for c in db.scalars(select(Concept).where(Concept.course_id == course_id, Concept.deleted_at.is_(None)))
+    }
+    out = []
+    for item in payload.concepts:
+        sections = source_svc.sections_in_course(db, ctx.user.id, course_id, item.source_section_ids)
+        if item.topic_id is not None:
+            topic = db.get(SyllabusItem, item.topic_id)
+            if topic is None or topic.user_id != ctx.user.id or topic.course_id != course_id:
+                raise ApiError(404, "not_found", "Topic not found.")
+        concept = existing.get(item.term.casefold())
+        created = concept is None
+        if concept is None:
+            concept = Concept(
+                user_id=ctx.user.id,
+                course_id=course_id,
+                term=item.term,
+                definition_draft=item.definition_draft,
+                syllabus_item_id=item.topic_id,
+                source_confidence="medium" if sections else "inferred",
+            )
+            db.add(concept)
+            db.flush()
+            existing[item.term.casefold()] = concept
+        linked = set(db.scalars(select(ConceptSource.section_id).where(ConceptSource.concept_id == concept.id)))
+        for section in sections:
+            if section.id not in linked:
+                db.add(ConceptSource(concept_id=concept.id, section_id=section.id))
+        db.flush()
+        out.append(
+            {
+                "id": str(concept.id),
+                "term": concept.term,
+                "created": created,
+                "source_section_ids": [str(s.id) for s in sections],
+            }
+        )
+    return commit_with_response(db, ctx, payload, 201, {"concepts": out})
+
+
+@router.post("/sources/text", status_code=201)
+def add_text_source(
+    payload: SourceTextIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    return handle_paste(payload, ctx, db)
+
+
+@router.post("/sources", status_code=201)
+def import_file(
+    request: Request,
+    course_id: uuid.UUID = Form(...),
+    file: UploadFile = File(...),
+    ctx: WriteCtx = Depends(connector_write_ctx),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """A local file the learner asked the connector to import (same checks as the web upload)."""
+    return handle_upload(request, course_id, file, ctx, db)
+
+
+@router.get("/sources/{source_id}")
+def source_status(
+    source_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Extraction status plus the list of citable sections (IDs and labels only, no text)."""
+    source = owned(db, Source, source_id, ctx.user.id)
+    sections, total = source_svc.current_sections(db, source, 0, 200)
+    return {
+        **source_svc.source_view(db, source),
+        "sections": [
+            {
+                "id": str(s.id),
+                "citation_label": s.citation_label,
+                "heading": s.heading,
+                "page": s.page,
+                "chars": len(s.text),
+            }
+            for s in sections
+        ],
+        "sections_total": total,
+    }

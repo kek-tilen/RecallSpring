@@ -56,6 +56,12 @@ class RecallSpringClient:
         headers = {"Idempotency-Key": idempotency_key or str(uuid.uuid4())}
         return await self._send("POST", path, json=payload, headers=headers)
 
+    async def post_file(
+        self, path: str, fields: dict[str, str], file: tuple[str, bytes], idempotency_key: str | None = None
+    ) -> Any:
+        headers = {"Idempotency-Key": idempotency_key or str(uuid.uuid4())}
+        return await self._send("POST", path, data=fields, files={"file": file}, headers=headers)
+
     async def _send(self, method: str, path: str, **kwargs: Any) -> Any:
         try:
             response = await self._http.request(method, path, **kwargs)

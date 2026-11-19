@@ -36,6 +36,11 @@ def upload_source(
     """Multipart upload of a PDF, Markdown or text file. Extraction runs in the worker; poll GET /sources/{id}.
 
     In production the reverse proxy must also cap the request body (client_max_body_size)."""
+    return handle_upload(request, course_id, file, ctx, db)
+
+
+def handle_upload(request: Request, course_id: uuid.UUID, file: UploadFile, ctx: WriteCtx, db: Session) -> JSONResponse:
+    """Shared by the web app and the connector (local file import)."""
     settings = get_settings()
     declared = int(request.headers.get("content-length") or 0)
     if declared > settings.max_upload_bytes + MULTIPART_OVERHEAD:
@@ -78,6 +83,10 @@ def upload_source(
 def paste_source(
     payload: SourceTextIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
 ) -> JSONResponse:
+    return handle_paste(payload, ctx, db)
+
+
+def handle_paste(payload: SourceTextIn, ctx: WriteCtx, db: Session) -> JSONResponse:
     if replay := replay_if_seen(db, ctx, payload):
         return replay
     owned(db, Course, payload.course_id, ctx.user.id)

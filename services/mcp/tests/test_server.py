@@ -184,3 +184,47 @@ def test_missing_token_file_tells_how_to_create_one(tmp_path: Path, monkeypatch:
     monkeypatch.setenv("RS_CONNECTOR_TOKEN_FILE", str(tmp_path / "missing"))
     with pytest.raises(ConnectorError, match="recallspring connector-token"):
         RecallSpringClient.from_environment()
+
+
+async def test_import_file_is_limited_to_allowed_folders_and_types(
+    api: FakeApi, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    allowed = tmp_path / "Documents"
+    allowed.mkdir()
+    outside = tmp_path / "secret.txt"
+    outside.write_text("private")
+    script = allowed / "notes.exe"
+    script.write_bytes(b"MZ")
+    monkeypatch.setenv("RS_IMPORT_ROOTS", str(allowed))
+    async with Client(mcp) as client:
+        r1 = await client.call_tool("import_file", {"course_id": "c1", "path": str(outside)})
+        r2 = await client.call_tool("import_file", {"course_id": "c1", "path": str(script)})
+        r3 = await client.call_tool("import_file", {"course_id": "c1", "path": str(allowed / "missing.pdf")})
+    assert r1.is_error and "Only files inside these folders" in text_of(r1)
+    assert r2.is_error and "Only PDF, Markdown" in text_of(r2)
+    assert r3.is_error and "File not found" in text_of(r3)
+    assert api.requests == []  # nothing left the computer
+
+
+async def test_import_file_uploads_directly_and_waits_for_extraction(
+    api: FakeApi, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lecture = tmp_path / "lecture.md"
+    lecture.write_text("# Glycolysis\n\nHappens in the cytoplasm.", encoding="utf-8")
+    monkeypatch.setenv("RS_IMPORT_ROOTS", str(tmp_path))
+    api.route("POST", "/sources", 201, {"id": "s1", "parse_state": "pending"})
+    states = iter(["pending", "ready"])
+    api.routes[("GET", "/sources/s1")] = lambda _r: httpx.Response(
+        200,
+        json={"id": "s1", "parse_state": next(states), "sections": [{"id": "sec1", "citation_label": "§ Glycolysis"}]},
+    )
+    async with Client(mcp) as client:
+        result = await client.call_tool("import_file", {"course_id": "c1", "path": str(lecture)})
+    upload = api.requests[0]
+    assert (
+        upload.method == "POST"
+        and b'name="course_id"' in upload.content
+        and b"Happens in the cytoplasm" in upload.content
+    )
+    status = json.loads(text_of(result))
+    assert status["parse_state"] == "ready" and status["sections"][0]["id"] == "sec1"

@@ -6,13 +6,18 @@ which enforces ownership, validation and the read/append-only contract. There ar
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
+import os
 import uuid
 from importlib import resources
+from pathlib import Path
 from typing import Any, Literal
 
 from mcp.server import MCPServer
 from mcp.server.apps import Apps
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, Field
 
@@ -24,6 +29,10 @@ FORM_URI = "ui://recallspring/answer-form"
 INSTRUCTIONS = """\
 RecallSpring is the learner's own study system. It stores their sources, notes, questions, answers, grades and
 review schedule. You are the tutor; RecallSpring keeps the records and decides review dates deterministically.
+
+Building the library (only when the learner asks): create_course; import_file for a PDF/Markdown/text file on
+this computer (the file goes straight to RecallSpring, not through the chat); add_text_source only for short
+pasted text; then read the sections and create_concepts linked to the section IDs that support them.
 
 Typical session:
 1. get_study_plan (or get_due_reviews) to see what is due and why. Start a session with start_study_session.
@@ -298,6 +307,105 @@ async def record_assessment(
 async def record_session_summary(session_id: str, summary: str) -> str:
     """Close a study session with a short summary of what was practised and what to revisit."""
     return as_json(await get_client().post(f"/study-sessions/{session_id}/summary", {"summary": summary}))
+
+
+# ---------------------------------------------------------------- building the library
+
+
+IMPORT_EXTENSIONS = {".pdf", ".md", ".markdown", ".txt"}
+MAX_IMPORT_BYTES = 30 * 1024 * 1024
+
+
+def import_roots() -> list[Path]:
+    configured = os.environ.get("RS_IMPORT_ROOTS")
+    if configured:
+        return [Path(p).expanduser() for p in configured.split(os.pathsep) if p]
+    home = Path.home()
+    return [home / "Documents", home / "Downloads", home / "Desktop"]
+
+
+def _allowed_file(path: str) -> Path:
+    try:
+        resolved = Path(path).expanduser().resolve(strict=True)
+    except OSError as exc:
+        raise ToolError(f"File not found: {path}") from exc
+    roots = [r.resolve() for r in import_roots() if r.exists()]
+    if not any(resolved.is_relative_to(root) for root in roots):
+        raise ToolError("Only files inside these folders can be imported: " + ", ".join(str(r) for r in roots))
+    if not resolved.is_file() or resolved.suffix.lower() not in IMPORT_EXTENSIONS:
+        raise ToolError("Only PDF, Markdown (.md) and plain text (.txt) files can be imported.")
+    if resolved.stat().st_size > MAX_IMPORT_BYTES:
+        raise ToolError("The file is larger than 30 MB.")
+    return resolved
+
+
+async def _wait_for_extraction(source_id: str, timeout_s: float = 20.0) -> dict[str, Any]:
+    deadline = asyncio.get_running_loop().time() + timeout_s
+    while True:
+        status = await get_client().get(f"/sources/{source_id}")
+        if status["parse_state"] not in ("pending", "processing"):
+            return status
+        if asyncio.get_running_loop().time() >= deadline:
+            status["note"] = (
+                "Extraction is still running. Make sure the RecallSpring worker is running, then check "
+                "again with get_source_status."
+            )
+            return status
+        await asyncio.sleep(1.0)
+
+
+@mcp.tool(annotations=APPEND)
+async def create_course(title: str, description: str | None = None) -> str:
+    """Create a course in the learner's library (only when they ask for it)."""
+    return as_json(await get_client().post("/courses", {"title": title, "description": description}))
+
+
+@mcp.tool(annotations=APPEND)
+async def import_file(course_id: str, path: str) -> str:
+    """Import a PDF, Markdown or text file from this computer into a course, then wait for text extraction.
+    The file is sent directly to RecallSpring and does not pass through the chat. Allowed: files in the learner's
+    Documents, Downloads or Desktop folders. Returns the extraction status and the citable section IDs/labels."""
+    file = _allowed_file(path)
+    data = await asyncio.to_thread(file.read_bytes)
+    key = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{course_id}:{hashlib.sha256(data).hexdigest()}"))
+    source = await get_client().post_file("/sources", {"course_id": course_id}, (file.name, data), idempotency_key=key)
+    return as_json(await _wait_for_extraction(source["id"]))
+
+
+@mcp.tool(annotations=APPEND)
+async def add_text_source(
+    course_id: str, title: str, text: str, format: Literal["markdown", "plain"] = "markdown"
+) -> str:
+    """Save text the learner pasted into the chat as a source (prefer import_file for files on this computer)."""
+    source = await get_client().post(
+        "/sources/text", {"course_id": course_id, "title": title, "text": text, "format": format}
+    )
+    return as_json(await _wait_for_extraction(source["id"]))
+
+
+@mcp.tool(annotations=READ)
+async def get_source_status(source_id: str) -> str:
+    """Extraction status of a source and its citable sections (IDs and labels, no text)."""
+    return as_json(await get_client().get(f"/sources/{source_id}"))
+
+
+class ConceptDraft(BaseModel):
+    term: str = Field(min_length=1, max_length=200)
+    definition: str | None = Field(default=None, max_length=5000, description="Short definition from the material")
+    source_section_ids: list[str] = Field(default_factory=list, max_length=20, description="Sections supporting it")
+
+
+@mcp.tool(annotations=APPEND)
+async def create_concepts(course_id: str, concepts: list[ConceptDraft]) -> str:
+    """Add up to 30 key concepts to a course, each linked to the section IDs that support it (concepts without
+    sections are marked inferred). Existing terms are reused, not duplicated. Needed before create_questions."""
+    payload = {
+        "concepts": [
+            {"term": c.term, "definition_draft": c.definition, "source_section_ids": c.source_section_ids}
+            for c in concepts
+        ]
+    }
+    return as_json(await get_client().post(f"/courses/{course_id}/concepts", payload))
 
 
 def main() -> int:

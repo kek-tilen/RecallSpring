@@ -268,3 +268,63 @@ def test_plan_orders_due_strengthen_explore_with_reasons(
     item = conn.get("/plan").json()["items"][0]
     assert item["category"] == "Review due" and item["why_selected"].startswith("Due today.")
     assert owner_api.get("/planner/today").json()["items"][0]["category"] == "Review due"
+
+
+def test_claude_can_build_a_course_from_pasted_material(owner_api: Api, conn: ConnectorApi) -> None:
+    from recallspring_api.ingest.jobs import run_pending
+
+    from .conftest import BIOLOGY_MD
+
+    course = conn.post("/courses", {"title": "Biology (from Claude)"}).json()
+    src = conn.post("/sources/text", {"course_id": course["id"], "title": "Lecture 1", "text": BIOLOGY_MD}).json()
+    assert src["parse_state"] == "pending"
+    run_pending()
+    status = conn.get(f"/sources/{src['id']}").json()
+    assert status["parse_state"] == "ready" and "text" not in status["sections"][0]
+    glycolysis = next(s["id"] for s in status["sections"] if s["citation_label"] == "§ Glycolysis")
+
+    body = {
+        "concepts": [
+            {"term": "Glycolysis", "definition_draft": "Glucose → pyruvate", "source_section_ids": [glycolysis]},
+            {"term": "Metabolism"},
+        ]
+    }
+    first = conn.post(f"/courses/{course['id']}/concepts", body).json()["concepts"]
+    assert [c["created"] for c in first] == [True, True]
+    again = conn.post(f"/courses/{course['id']}/concepts", {"concepts": [{"term": "glycolysis"}]}).json()
+    assert again["concepts"][0] == {
+        "id": first[0]["id"],
+        "term": "Glycolysis",
+        "created": False,
+        "source_section_ids": [],
+    }
+    concepts = {c["term"]: c for c in owner_api.get(f"/courses/{course['id']}/concepts").json()}
+    assert concepts["Glycolysis"]["source_confidence"] == "medium"
+    assert concepts["Glycolysis"]["source_section_ids"] == [glycolysis]
+    assert concepts["Metabolism"]["source_confidence"] == "inferred"
+    bad = conn.post(
+        f"/courses/{course['id']}/concepts", {"concepts": [{"term": "X", "source_section_ids": [str(uuid.uuid4())]}]}
+    )
+    assert bad.status_code == 422
+
+
+def test_connector_file_import_applies_the_same_upload_checks(conn: ConnectorApi) -> None:
+    from .pdfs import make_pdf
+
+    course = conn.post("/courses", {"title": "Imports"}).json()
+    headers = {**conn.auth, "Idempotency-Key": str(uuid.uuid4())}
+    bad = conn.client.post(
+        "/api/v1/connector/sources",
+        data={"course_id": course["id"]},
+        files={"file": ("tool.exe", b"MZ")},
+        headers=headers,
+    )
+    assert bad.status_code == 415
+    headers = {**conn.auth, "Idempotency-Key": str(uuid.uuid4())}
+    ok = conn.client.post(
+        "/api/v1/connector/sources",
+        data={"course_id": course["id"]},
+        files={"file": ("lecture.pdf", make_pdf(["Imported through the connector."]))},
+        headers=headers,
+    )
+    assert ok.status_code == 201 and ok.json()["kind"] == "pdf"

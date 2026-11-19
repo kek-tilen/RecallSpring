@@ -434,3 +434,14 @@ class ConnectorSessionIn(BaseModel):
 
 class ConnectorSummaryIn(BaseModel):
     summary: str = Field(min_length=1, max_length=4000)
+
+
+class ConnectorConceptItem(BaseModel):
+    term: str = Field(min_length=1, max_length=200)
+    definition_draft: str | None = Field(default=None, max_length=5000)
+    source_section_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+    topic_id: uuid.UUID | None = None
+
+
+class ConnectorConceptsIn(BaseModel):
+    concepts: list[ConnectorConceptItem] = Field(min_length=1, max_length=30)
