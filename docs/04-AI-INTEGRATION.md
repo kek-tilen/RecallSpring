@@ -23,7 +23,7 @@ Anthropic's terms state that developers building their own products should use A
 
 ### Transport and authentication
 
-- **Local (now, desktop-first):** Claude Desktop launches the RecallSpring connector as a local **stdio** MCP server. The connector is a thin client of the RecallSpring API (`services/mcp`), authenticated with a **scoped connector token** created in RecallSpring Settings (shown once, stored hashed server-side, revocable, `last_used_at` tracked). Scope `connector` cannot reach deletion, export, budget, consent or account routes.
+- **Local (now, desktop-first):** Claude Desktop launches the RecallSpring connector as a local **stdio** MCP server. The connector is a thin client of the RecallSpring API (`services/mcp`), authenticated with a **connector token** (created with `recallspring connector-token` or in Settings; shown once or written to a private file, stored hashed server-side, revocable, `last_used_at` tracked). The token is accepted only on `/api/v1/connector/*`, so it cannot reach deletion, export, budget, consent or account routes. Setup: `docs/connector-setup.md`.
 - **Remote (deferred):** Claude web/mobile connect to custom connectors **from Anthropic's cloud**, so a remote connector needs a public HTTPS endpoint (Streamable HTTP) protected by OAuth. Deferred until the owner approves a domain and HTTPS (Gate 4); the owner studies on one computer.
 
 ### Tool catalogue (read + append only)
@@ -47,7 +47,7 @@ The authoritative list lives in `docs/07-API-AND-VISUAL-CONTRACT.md` → Claude 
 `record_assessment` accepts the `packages/contracts/schemas/assessment.schema.json` shape plus provider/model metadata. The server:
 
 - validates the schema, grade/status consistency and size bounds;
-- accepts `evidence_refs` only if they are source-section IDs that RecallSpring returned in this study session; unknown refs are dropped and the assessment is downgraded to `provisional` with a factuality flag;
+- accepts `evidence_refs` only if they are existing source sections of the question's course; unknown refs are dropped and the assessment is downgraded to `provisional` with a factuality flag;
 - never lets an uncertain (`provisional`, `ungraded`, low-confidence) assessment promote mastery or lengthen an interval (see `docs/05-LEARNING-ENGINE.md`);
 - appends; never overwrites earlier assessments. Learner corrections (`Challenge evaluation`) are separate appended records.
 

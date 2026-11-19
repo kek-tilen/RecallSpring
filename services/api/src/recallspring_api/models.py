@@ -7,7 +7,7 @@ Learning evidence (attempts, assessments, learning events, deferrals) is append-
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -15,6 +15,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Computed,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -73,8 +74,13 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, server_default="Europe/Ljubljana")
+    connector_limit_percent: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default="100", default=100
+    )
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
+
+    __table_args__ = (CheckConstraint("connector_limit_percent BETWEEN 1 AND 100", name="connector_limit_percent"),)
 
 
 class AuthSession(Base):
@@ -161,10 +167,15 @@ class StudySession(Base):
     user_id: Mapped[uuid.UUID] = _owner()
     course_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courses.id"))
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    origin: Mapped[str] = mapped_column(String(20), nullable=False, server_default="app", default="app")
     started_at: Mapped[datetime] = _created()
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    summary: Mapped[str | None] = mapped_column(Text)
 
-    __table_args__ = (CheckConstraint("mode IN ('new_learning','review')", name="mode"),)
+    __table_args__ = (
+        CheckConstraint("mode IN ('new_learning','review')", name="mode"),
+        CheckConstraint("origin IN ('app','connector')", name="origin"),
+    )
 
 
 class Question(Base):
@@ -487,3 +498,33 @@ class Job(Base):
         Index("ix_jobs_claim", "state", "run_after"),
         CheckConstraint("state IN ('queued','running','succeeded','failed')", name="state"),
     )
+
+
+# --------------------------------------------------------------------------- Claude connector (Mode A)
+
+
+class ConnectorToken(Base):
+    """Bearer token for the local Claude connector. Only accepted on /api/v1/connector/* (read + append)."""
+
+    __tablename__ = "connector_tokens"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    scope: Mapped[str] = mapped_column(String(20), nullable=False, server_default="connector", default="connector")
+    created_at: Mapped[datetime] = _created()
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (CheckConstraint("scope IN ('connector')", name="scope"),)
+
+
+class ConnectorUsage(Base):
+    """Requests per learner-local day, for the owner's daily connector limit (1–100 % of the default)."""
+
+    __tablename__ = "connector_usage"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    requests: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)

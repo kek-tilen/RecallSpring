@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RecallSpring answer</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #FFFFFF; --surface: #EDF7F4; --ink: #24332F; --muted: #52645C; --border: #CBDDD6;
+    --primary: #0F766E; --primary-hover: #115E59; --on-primary: #FFFFFF; --danger: #B42318; --focus: #0F766E;
+    --radius-card: 16px; --radius-control: 10px;
+    font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #14201D; --surface: #1C2B27; --ink: #E3EEEA; --muted: #A7BAB2; --border: #33463F;
+    --primary: #5EC4B6; --primary-hover: #7FD3C7; --on-primary: #0B1A17; --danger: #F59A8F; --focus: #5EC4B6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; line-height: 1.5; }
+  main { padding: 16px; max-width: 720px; }
+  .eyebrow { margin: 0 0 4px; color: var(--muted); font-size: 13px; letter-spacing: .02em; }
+  h1 { margin: 0 0 12px; font-size: 18px; line-height: 1.4; font-weight: 600; white-space: pre-wrap; }
+  label { display: block; font-weight: 600; margin: 12px 0 6px; }
+  textarea { width: 100%; min-height: 160px; resize: vertical; padding: 10px 12px; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-control); }
+  textarea[readonly] { background: var(--surface); }
+  fieldset { border: 0; padding: 0; margin: 10px 0 0; display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); }
+  legend { font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  button { min-height: 44px; padding: 0 16px; font: inherit; border-radius: var(--radius-control); cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg); color: var(--ink); }
+  button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+  button.primary:hover { background: var(--primary-hover); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  #status { min-height: 1.5em; margin: 12px 0 0; }
+  #status.error { color: var(--danger); }
+  .hint { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow" id="eyebrow">RecallSpring</p>
+  <h1 id="prompt">Loading the question…</h1>
+  <label for="answer">Your answer</label>
+  <textarea id="answer" aria-describedby="hint" disabled></textarea>
+  <p class="hint" id="hint">Answer from memory in your own words. Your exact text is saved in RecallSpring before Claude sees it.</p>
+  <fieldset>
+    <legend>Answer mode</legend>
+    <label><input type="radio" name="mode" value="closed_notes" checked> Closed notes</label>
+    <label><input type="radio" name="mode" value="open_notes"> Open notes</label>
+  </fieldset>
+  <div class="actions">
+    <button type="button" class="primary" id="submit" disabled>Submit answer</button>
+    <button type="button" id="dontknow" disabled>I don't know</button>
+    <button type="button" id="skip" disabled>Skip</button>
+  </div>
+  <p id="status" role="status" aria-live="polite"></p>
+</main>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const ui = { prompt: $("prompt"), eyebrow: $("eyebrow"), answer: $("answer"), status: $("status"),
+               buttons: [$("submit"), $("dontknow"), $("skip")] };
+  const clientRequestId = (crypto.randomUUID && crypto.randomUUID()) ||
+    "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) =>
+      (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
+  let question = null, sessionId = null, saved = false, nextId = 1;
+  const pending = new Map();
+
+  const send = (msg) => window.parent.postMessage(msg, "*");
+  const notify = (method, params) => send({ jsonrpc: "2.0", method, params: params || {} });
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    send({ jsonrpc: "2.0", id, method, params: params || {} });
+  });
+
+  function setStatus(text, isError) {
+    ui.status.textContent = text;            // textContent only: model or learner text is never parsed as HTML
+    ui.status.className = isError ? "error" : "";
+  }
+  function setBusy(busy) {
+    const locked = busy || saved || !question;
+    ui.buttons.forEach((b) => { b.disabled = locked; });
+    ui.answer.disabled = !question;
+    ui.answer.readOnly = busy || saved;
+  }
+  function applyContext(ctx) {
+    if (ctx && (ctx.theme === "dark" || ctx.theme === "light")) document.documentElement.dataset.theme = ctx.theme;
+    const vars = ctx && ctx.styles && ctx.styles.variables;
+    if (vars && vars["--font-sans"]) document.documentElement.style.setProperty("--font-sans", vars["--font-sans"]);
+  }
+  function showQuestion(q) {
+    if (!q || !q.question_id) return;
+    question = q;
+    sessionId = q.session_id || null;
+    ui.prompt.textContent = q.prompt || "Question";
+    ui.eyebrow.textContent = "RecallSpring · Bloom level " + (q.bloom_level || "?");
+    if (q.already_answered) {
+      saved = true;
+      setStatus("You already answered this question. Ask Claude for feedback or a new question.");
+    }
+    setBusy(false);
+    if (!saved) ui.answer.focus();
+  }
+  function resultData(result) {
+    if (result && result.structuredContent) return result.structuredContent;
+    try { return JSON.parse(result.content[0].text); } catch (e) { return null; }
+  }
+
+  async function submit(kind) {
+    if (!question || saved) return;
+    const text = ui.answer.value;
+    if (kind === "answer" && !text.trim()) { setStatus("Write an answer first, or choose “I don't know” or “Skip”.", true); return; }
+    setBusy(true);
+    setStatus("Saving…");
+    try {
+      const mode = document.querySelector('input[name="mode"]:checked').value;
+      const result = await request("tools/call", { name: "submit_answer_from_form", arguments: {
+        question_id: question.question_id, client_request_id: clientRequestId, kind,
+        answer_text: kind === "answer" ? text : "", answer_mode: mode, session_id: sessionId } });
+      const data = resultData(result);
+      if (result.isError || !data || !data.attempt_id) throw new Error((result.content && result.content[0] && result.content[0].text) || "Not saved.");
+      saved = true;
+      const when = new Date(data.saved_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      setStatus(kind === "skip" ? "Skipped at " + when + ". The review stays due." : "Answer saved at " + when + ". Claude will give feedback next.");
+      setBusy(false);
+      const label = kind === "answer" ? "I submitted my answer" : (kind === "dont_know" ? "I chose “I don't know”" : "I skipped this question");
+      request("ui/message", { role: "user", content: { type: "text",
+        text: label + " in the RecallSpring form (attempt " + data.attempt_id + ")." +
+              (kind === "skip" ? "" : " Please read it with get_attempt and give feedback.") } }).catch(() => {});
+    } catch (err) {
+      setBusy(false);
+      setStatus("Not saved: " + (err && err.message ? err.message : "unknown error") + " Your text is still here; try again.", true);
+    }
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const msg = event.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id !== undefined && !msg.method) {
+      const entry = pending.get(msg.id);
+      if (!entry) return;
+      pending.delete(msg.id);
+      if (msg.error) entry.reject(new Error(msg.error.message || "Request failed")); else entry.resolve(msg.result);
+      return;
+    }
+    switch (msg.method) {
+      case "ui/notifications/tool-input":
+        if (msg.params && msg.params.arguments) sessionId = msg.params.arguments.session_id || sessionId;
+        break;
+      case "ui/notifications/tool-result": showQuestion(resultData(msg.params)); break;
+      case "ui/notifications/host-context-changed": applyContext(msg.params); break;
+      case "ui/notifications/tool-cancelled": setStatus("The question was cancelled."); break;
+      case "ui/resource-teardown": if (msg.id !== undefined) send({ jsonrpc: "2.0", id: msg.id, result: {} }); break;
+      default: break;
+    }
+  });
+
+  $("submit").addEventListener("click", () => submit("answer"));
+  $("dontknow").addEventListener("click", () => submit("dont_know"));
+  $("skip").addEventListener("click", () => submit("skip"));
+  ui.answer.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") submit("answer"); });
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => notify("ui/notifications/size-changed",
+      { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })).observe(document.body);
+  }
+
+  request("ui/initialize", { protocolVersion: "2026-01-26",
+    appInfo: { name: "recallspring-answer-form", version: "1" }, appCapabilities: {} })
+    .then((res) => { applyContext(res && res.hostContext); notify("ui/notifications/initialized"); })
+    .catch(() => setStatus("This chat could not open the answer form. Answer in the chat instead.", true));
+})();
+</script>
+</body>
+</html>

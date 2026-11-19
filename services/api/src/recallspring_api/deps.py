@@ -24,7 +24,7 @@ from .security import CSRF_HEADER, SESSION_COOKIE, constant_time_equal, find_act
 @dataclass
 class Ctx:
     user: User
-    session: AuthSession
+    session: AuthSession | None  # None for connector-token requests
     request_id: str
 
 
@@ -50,7 +50,7 @@ def csrf_ctx(
     ctx: Ctx = Depends(current_ctx),
     csrf_token: str | None = Header(default=None, alias=CSRF_HEADER),
 ) -> Ctx:
-    if not csrf_token or not constant_time_equal(sha256_hex(csrf_token), ctx.session.csrf_hash):
+    if ctx.session is None or not csrf_token or not constant_time_equal(sha256_hex(csrf_token), ctx.session.csrf_hash):
         raise ApiError(403, "csrf_failed", "The request could not be verified. Reload the page and retry.")
     return ctx
 
@@ -60,6 +60,10 @@ def write_ctx(
     ctx: Ctx = Depends(csrf_ctx),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> WriteCtx:
+    return to_write_ctx(request, ctx, idempotency_key)
+
+
+def to_write_ctx(request: Request, ctx: Ctx, idempotency_key: str | None) -> WriteCtx:
     if not idempotency_key:
         raise ApiError(400, "idempotency_key_required", "Write requests need an Idempotency-Key header (UUID).")
     try:
@@ -101,9 +105,18 @@ def replay_if_seen(db: Session, ctx: WriteCtx, payload: BaseModel | dict[str, An
 
 
 def commit_with_response(
-    db: Session, ctx: WriteCtx, payload: BaseModel | dict[str, Any] | None, status: int, body: Any
+    db: Session,
+    ctx: WriteCtx,
+    payload: BaseModel | dict[str, Any] | None,
+    status: int,
+    body: Any,
+    *,
+    stored_body: Any = None,
 ) -> JSONResponse:
-    """Store the response under the idempotency key and commit it together with the write."""
+    """Store the response under the idempotency key and commit it together with the write.
+
+    ``stored_body`` replaces what is persisted for replays (e.g. to keep a one-time secret out of the database).
+    """
     req_hash = request_hash(payload)
     db.add(
         IdempotencyRecord(
@@ -113,7 +126,7 @@ def commit_with_response(
             path=ctx.path,
             request_hash=req_hash,
             response_status=status,
-            response_body=body,
+            response_body=body if stored_body is None else stored_body,
         )
     )
     try:

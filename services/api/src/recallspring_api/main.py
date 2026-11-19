@@ -7,7 +7,7 @@ import logging
 from fastapi import FastAPI
 
 from . import __version__, errors
-from .api import attempts, auth, courses, health, notes, questions, reviews, sources, study
+from .api import attempts, auth, connector, courses, health, notes, questions, reviews, settings, sources, study
 from .config import get_settings
 from .security import LoginRateLimiter
 
@@ -15,9 +15,9 @@ API_PREFIX = "/api/v1"
 
 
 def create_app() -> FastAPI:
-    settings = get_settings()
+    config = get_settings()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    dev = settings.environment != "production"
+    dev = config.environment != "production"
     app = FastAPI(
         title="RecallSpring API",
         version=__version__,
@@ -25,9 +25,9 @@ def create_app() -> FastAPI:
         docs_url=f"{API_PREFIX}/docs" if dev else None,
         redoc_url=None,
     )
-    app.state.login_limiter = LoginRateLimiter(settings.login_max_failures, settings.login_failure_window_seconds)
+    app.state.login_limiter = LoginRateLimiter(config.login_max_failures, config.login_failure_window_seconds)
     errors.install(app)
-    for module in (health, auth, courses, sources, notes, study, questions, attempts, reviews):
+    for module in (health, auth, courses, sources, notes, study, questions, attempts, reviews, settings, connector):
         app.include_router(module.router, prefix=API_PREFIX)
     return app
 

@@ -16,8 +16,10 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/ai/providers/{provider}/disconnect` | Revoke/forget credentials as supported |
 | GET | `/ai/models` | Models actually available per provider (discovered, not hardcoded) |
 | GET/PUT | `/ai/routing` | Per-task model routing and course/session overrides |
-| GET/POST | `/connector/tokens` | List/create scoped Claude connector tokens (secret shown once) |
-| POST | `/connector/tokens/{id}/revoke` | Revoke a connector token |
+| GET/PUT | `/settings/connector` | Connector daily limit (1–100 % of default), usage today, tokens |
+| POST | `/settings/connector/tokens` | Create a connector token (shown once; stored as a hash) |
+| POST | `/settings/connector/tokens/{id}/revoke` | Revoke a connector token |
+| GET | `/connector/*` | Connector surface: **bearer connector token only**, read + append, see tool contract below |
 | GET/POST | `/courses` | List/create courses |
 | GET/PATCH | `/courses/{id}` | Course detail and goals |
 | GET/POST | `/courses/{id}/syllabus` | Syllabus objectives and coverage |
@@ -55,7 +57,7 @@ For streaming, use SSE or chunked fetch response with typed events (`turn.starte
 
 ## Claude connector (MCP) tool contract
 
-Tools call the same service layer as the HTTP API with a `connector`-scoped token. All writes are append-only and idempotent; there are **no** delete, restore, export, budget, consent or routing tools.
+Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhere else (owner routes need the session cookie and CSRF token). Every request counts towards the owner's daily connector limit. All writes are append-only; there are **no** delete, restore, export, budget, consent or routing tools.
 
 | Tool | Kind | Contract |
 |---|---|---|
@@ -64,12 +66,14 @@ Tools call the same service layer as the HTTP API with a `connector`-scoped toke
 | `search_sources`, `get_source_section` | read | Section text wrapped as untrusted document content, with section ID and citation label; IDs are remembered for the session |
 | `get_notes` | read | Learner notes for a topic (read-only; the tutor may comment in chat but never rewrites notes) |
 | `get_due_reviews` | read | Due concepts with due reason and last evidence |
-| `create_questions` | append | Generated questions (Bloom level, prompt, hidden rubric, source refs validated against returned section IDs) |
-| `open_answer_form` | UI | MCP App answer form for a question; the form submits the learner's typed text to `submit_attempt` |
-| `submit_attempt` | append | Persist-first, idempotent by `client_request_id`; records `captured_via` |
-| `get_attempt` | read | Exact stored answer, status, existing assessments |
-| `record_assessment` | append | Validated against `assessment.schema.json`; unknown evidence refs dropped and grade downgraded to `provisional`; records reported model |
-| `record_session_summary` | append | Optional short summary linked to the study session |
+| `get_attempt` | read | Exact stored answer, question with rubric (an attempt exists), cited sections |
+| `start_study_session` | append | Connector study session (`origin = connector`) |
+| `create_questions` | append | Up to 10 questions (Bloom level, prompt, hidden rubric); `source_refs` must be sections of the course |
+| `open_answer_form` | UI | MCP App `ui://recallspring/answer-form` showing the question (no rubric) |
+| `submit_answer_from_form` | append, app-only | Called by the form (`visibility: ["app"]`): exact typed text, `captured_via = answer_form`, idempotent by `client_request_id` |
+| `submit_chat_answer` | append | Fallback when the form cannot render: `captured_via = assistant_transcription` |
+| `record_assessment` | append | Once per attempt; validated against `assessment.schema.json`; evidence refs that are not real sections of the question's course are dropped and a final grade becomes `provisional`; returns the next review date and reason |
+| `record_session_summary` | append | Once per session |
 
 ## API example: attempt creation
 

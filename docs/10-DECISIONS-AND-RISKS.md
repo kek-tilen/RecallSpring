@@ -80,7 +80,10 @@
 
 **OpenAI SIWC (open-source token sharing):** facts summarized in `docs/04` → Adapter `siwc`. Additional notes: open-source path available to all open-source partners with dynamic registration (no client secret); the docs scope it to open-source and locally hosted apps; Plus 5-hour usage limit is shared across all apps; the terms page returned HTTP 403 to automated fetch and must be read manually.
 
-**Gate status:** Mode A — not yet tested (build first). SIWC — research done, proof pending (after Mode A). Anthropic API — not planned until the owner adds a key.
+**Gate status:**
+- Mode A: automated end-to-end run **PASS** on 2026-11-19. The real API and the real MCP server over stdio completed the full loop: plan → question → form submission (exact text saved) → assessment → next review; a second grade was rejected. The run used an in-process MCP client, not Claude Desktop. **Pending: the owner's test in Claude Desktop**, which must show that the answer form renders.
+- SIWC: research done, proof pending (after Mode A).
+- Anthropic API: not planned until the owner adds a key.
 
 ## Decision process for changes
 

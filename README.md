@@ -13,7 +13,8 @@ docs/adr/                 Architecture decision records
 docs/agent-briefs/        Briefs for the implementing agents
 packages/contracts/       Shared JSON schemas (assessment, visual blocks)
 services/api/             FastAPI backend, migrations, tests, AI provider adapters
-services/mcp/             Claude connector (MCP server) — planned
+services/mcp/             Claude connector (MCP server) for Claude Desktop — see docs/connector-setup.md
+scripts/start-local.ps1   Start the local database, API and worker
 infra/compose.dev.yml     Local development database (loopback only)
 ```
 

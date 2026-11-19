@@ -3,13 +3,16 @@
 recallspring create-owner --username <name>      (password is prompted, never passed as an argument)
 recallspring seed-demo --username <name>         (adds a clearly labelled demo course)
 recallspring worker [--once]                     (processes source extraction jobs; no model calls)
+recallspring connector-token --username <name>   (writes a Claude connector token to a private file)
 """
 
 from __future__ import annotations
 
 import argparse
 import getpass
+import os
 import sys
+from pathlib import Path
 
 from sqlalchemy import select
 
@@ -106,17 +109,51 @@ def seed_demo(username: str) -> int:
     return 0
 
 
+def default_token_file() -> Path:
+    base = os.environ.get("LOCALAPPDATA")
+    root = Path(base) / "RecallSpring" if base else Path.home() / ".config" / "recallspring"
+    return root / "connector-token"
+
+
+def connector_token(username: str, label: str, path: Path) -> int:
+    """Create a connector token and write it to a private file; the token is never printed."""
+    from .api.settings import issue_token
+
+    with new_session() as db:
+        user = db.scalar(select(User).where(User.username == username))
+        if user is None:
+            print(f"User {username!r} not found. Run create-owner first.", file=sys.stderr)
+            return 1
+        _, token = issue_token(db, user.id, label)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(token)
+        os.replace(tmp, path)
+        db.commit()
+    print(f"Connector token '{label}' written to {path}")
+    print("Revoke it any time in RecallSpring settings (or create a new one with this command).")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="recallspring")
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("create-owner", "seed-demo"):
         p = sub.add_parser(name)
         p.add_argument("--username", required=True)
+    token = sub.add_parser("connector-token")
+    token.add_argument("--username", required=True)
+    token.add_argument("--label", default="Claude Desktop")
+    token.add_argument("--file", type=Path, default=default_token_file(), help="where the token is written")
     worker = sub.add_parser("worker")
     worker.add_argument("--once", action="store_true", help="process queued jobs, then exit")
     args = parser.parse_args(argv)
     if args.command == "create-owner":
         return create_owner(args.username)
+    if args.command == "connector-token":
+        return connector_token(args.username, args.label, args.file)
     if args.command == "worker":
         import logging
 

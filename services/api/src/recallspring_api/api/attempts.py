@@ -52,6 +52,11 @@ def create_attempt(
     payload: AttemptIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
 ) -> JSONResponse:
     """Durably save the learner's exact answer. The 201 is sent only after the database commit (FR-09)."""
+    return save_attempt(db, ctx, payload, captured_via="app_ui")
+
+
+def save_attempt(db: Session, ctx: WriteCtx, payload: AttemptIn, *, captured_via: str) -> JSONResponse:
+    """Shared by the web app (``app_ui``) and the Claude connector (``answer_form``/``assistant_transcription``)."""
     if replay := replay_if_seen(db, ctx, payload):
         return replay
     if svc.find_by_client_request(db, ctx.user.id, payload.client_request_id) is not None:
@@ -71,7 +76,7 @@ def create_attempt(
             kind=payload.kind,
             answer_text=payload.answer_text,
             answer_mode=payload.answer_mode,
-            captured_via="app_ui",
+            captured_via=captured_via,
             request_id=ctx.request_id,
         )
     except IntegrityError:

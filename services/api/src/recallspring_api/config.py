@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     job_lease_seconds: int = 300
     job_max_attempts: int = 3
 
+    # Claude connector (Mode A): requests per learner-local day at 100 %; the owner scales it 1–100 %.
+    connector_daily_requests_default: int = 600
+    connector_note_chars: int = 20_000
+
     # AI (Mode B). "none" disables in-app AI; "mock" is for development/tests and is always labelled Simulated.
     ai_evaluation_provider: Literal["none", "mock"] = "none"
     ai_question_provider: Literal["none", "mock"] = "none"

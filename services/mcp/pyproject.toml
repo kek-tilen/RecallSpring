@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recallspring-mcp"
+version = "0.1.0"
+description = "RecallSpring connector for the Claude app (MCP server, thin client of the RecallSpring API)"
+requires-python = ">=3.12"
+# Runtime dependencies are pinned with hashes in requirements.lock (source: requirements.in).
+dependencies = []
+
+[project.scripts]
+recallspring-mcp = "recallspring_mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+recallspring_mcp = ["answer_form.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

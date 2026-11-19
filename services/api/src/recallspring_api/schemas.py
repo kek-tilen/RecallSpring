@@ -335,3 +335,102 @@ class NoteRevisionOut(BaseModel):
     title: str
     body: str
     saved_at: datetime
+
+
+# ---------------------------------------------------------------- planner
+
+
+class PlanItemOut(BaseModel):
+    category: Literal["Review due", "Strengthen", "Explore next"]
+    concept_id: uuid.UUID
+    term: str
+    course_id: uuid.UUID
+    course_title: str
+    why_selected: str
+    estimated_minutes: int
+
+
+class PlanOut(BaseModel):
+    policy_version: str
+    generated_at: datetime
+    available_minutes: int
+    planned_minutes: int
+    items: list[PlanItemOut]
+    message: str | None
+    note: str
+
+
+# ---------------------------------------------------------------- connector settings (owner session)
+
+
+class ConnectorTokenIn(BaseModel):
+    label: str = Field(default="Claude Desktop", min_length=1, max_length=100)
+
+
+class ConnectorTokenOut(BaseModel):
+    id: uuid.UUID
+    label: str
+    created_at: datetime
+    last_used_at: datetime | None
+    revoked_at: datetime | None
+
+
+class ConnectorTokenCreatedOut(ConnectorTokenOut):
+    token: str | None = Field(description="Shown once. Replays of the same request return null.")
+
+
+class ConnectorSettingsIn(BaseModel):
+    limit_percent: int = Field(ge=1, le=100)
+
+
+class ConnectorSettingsOut(BaseModel):
+    limit_percent: int
+    daily_default: int
+    daily_limit: int
+    used_today: int
+    tokens: list[ConnectorTokenOut]
+
+
+# ---------------------------------------------------------------- connector (Mode A) requests
+
+
+class ConnectorQuestionItem(BaseModel):
+    concept_ids: list[uuid.UUID] = Field(min_length=1, max_length=10)
+    bloom_level: int = Field(ge=1, le=6)
+    prompt: str = Field(min_length=1, max_length=4000)
+    expected_points: list[str] = Field(default_factory=list, max_length=12)
+    source_refs: list[str] = Field(default_factory=list, max_length=20)
+    difficulty: int | None = Field(default=None, ge=1, le=5)
+
+
+class ConnectorQuestionsIn(BaseModel):
+    course_id: uuid.UUID
+    questions: list[ConnectorQuestionItem] = Field(min_length=1, max_length=10)
+    model_name: str | None = Field(default=None, max_length=120)
+
+
+class ConnectorAttemptIn(AttemptIn):
+    captured_via: Literal["answer_form", "assistant_transcription"]
+
+
+class ConnectorAssessmentIn(BaseModel):
+    status: Literal["final", "provisional", "ungraded"]
+    grade: int | None = Field(default=None, ge=0, le=4)
+    confidence: Literal["low", "medium", "high"]
+    feedback: str = Field(min_length=1, max_length=3000)
+    evidence_refs: list[str] = Field(default_factory=list, max_length=20)
+    strengths: list[str] = Field(default_factory=list, max_length=8)
+    gaps: list[str] = Field(default_factory=list, max_length=8)
+    remediation: str | None = Field(default=None, max_length=700)
+    rubric_scores: dict[str, int] | None = None
+    rubric_version: str = Field(default="claude-connector-v1", min_length=1, max_length=60)
+    model_name: str | None = Field(default=None, max_length=120)
+
+
+class ConnectorSessionIn(BaseModel):
+    course_id: uuid.UUID | None = None
+    mode: Literal["new_learning", "review"] = "review"
+
+
+class ConnectorSummaryIn(BaseModel):
+    summary: str = Field(min_length=1, max_length=4000)

@@ -1,0 +1,7 @@
+# Development and test dependencies, constrained to the runtime lock. Compile with:
+#   pip-compile --generate-hashes --allow-unsafe --strip-extras -o requirements-dev.lock requirements-dev.in
+-c requirements.lock
+-r requirements.in
+pytest
+ruff
+pip-tools
