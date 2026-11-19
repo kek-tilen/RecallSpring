@@ -26,6 +26,12 @@
 | Code repository: separate `recallspring/` repo; private build pack stays outside it | Approved |
 | Tutor replies in the language of the learner's question/material by default (UI stays English) | Approved |
 | Test material: synthetic fixtures (biology, programming); real material optional and never committed | Approved |
+| Study targets: a session first asks what the learner prepares for (1st/2nd kolokvij or exam, whole or part), from which material to which, old kolokvij, specifics | Approved 2026-11-19 (ADR-005) |
+| Passed kolokvij material → maintenance (reviews kept, lower priority); new material first, especially in the exam period | Approved 2026-11-19 |
+| Old kolokvij papers (text or scans) shape question style and topic priority; 75 % past-paper style / 25 % deeper | Approved 2026-11-19 |
+| Default study time 60 min weekdays / 90 min weekends; maintenance share 15 % | Approved 2026-11-19 |
+| Kolokvij simulations in a RecallSpring form (MCQ + open), stored in RecallSpring; Claude's own chat widgets do not count as evidence | Approved 2026-11-19 |
+| Claude Projects: one per course + one Overview project (templates in `docs/claude-projects.md`) | Approved 2026-11-19 |
 
 ## Working assumptions (do not mistake for owner approval)
 

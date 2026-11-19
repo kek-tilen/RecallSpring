@@ -239,3 +239,29 @@ def owner_api(client: TestClient) -> Api:
     api = Api(client)
     assert api.login("owner").status_code == 200
     return api
+
+
+class ConnectorApi:
+    def __init__(self, client: TestClient, token: str) -> None:
+        self.client = client
+        self.auth = {"Authorization": f"Bearer {token}"}
+
+    def get(self, path: str, **params: Any) -> Any:
+        return self.client.get(f"/api/v1/connector{path}", params=params, headers=self.auth)
+
+    def post(self, path: str, json: Any = None, key: str | None = None) -> Any:
+        headers = {**self.auth, "Idempotency-Key": key or str(uuid.uuid4())}
+        return self.client.post(f"/api/v1/connector{path}", json=json, headers=headers)
+
+
+@pytest.fixture
+def token(owner_api: Api) -> str:
+    r = owner_api.post("/settings/connector/tokens", {"label": "Claude Desktop"})
+    assert r.status_code == 201
+    return r.json()["token"]
+
+
+@pytest.fixture
+def conn(token: str) -> Any:
+    with TestClient(create_app()) as c:  # no session cookie: bearer token only
+        yield ConnectorApi(c, token)

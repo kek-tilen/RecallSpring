@@ -85,6 +85,10 @@ Start a chat and choose your model (Sonnet by default, Opus for demanding materi
 
 If the form cannot be shown, Claude asks in chat and saves your answer marked *transcribed*, so you can check the stored text in RecallSpring.
 
+**Kolokvij simulations:** ask for *"a simulation of the 2nd kolokvij"*. Claude creates it in the style of your old papers and shows it as a form (multiple choice + open questions, optional time limit). Drafts are saved while you work; *Submit for grading* stores every answer in RecallSpring, multiple choice is graded immediately and Claude grades the open answers. Use the **Start studying** and **Exam overview** prompts from the **+** menu, and see `docs/claude-projects.md` for project instructions.
+
+After updating RecallSpring, quit and restart Claude Desktop so it starts the new connector version.
+
 ## Limits and privacy
 
 - Usage counts against your Claude plan's limits, which RecallSpring cannot see. RecallSpring's own daily connector limit (default 600 requests/day) can be scaled 1–100 % with `PUT /api/v1/settings/connector`.

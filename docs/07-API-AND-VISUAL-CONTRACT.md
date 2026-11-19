@@ -45,7 +45,8 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/assessments/{id}/challenge` | Record disagreement/correction request |
 | GET | `/reviews/due` | Due queue and reasons |
 | POST | `/reviews/{id}/defer` | Record explicit defer |
-| GET | `/planner/today` | Small deterministic ranked daily plan |
+| GET | `/planner/today` | Deterministic ranked daily plan (`plan-v1`), optional `course_id` and `minutes` |
+| GET/PUT | `/settings/study` | Weekly minutes, maintenance share (0–50 %), past-paper style share (0–100 %) |
 | POST | `/sync/push` | Idempotent offline outbox replay |
 | GET | `/sync/changes?cursor=` | Incremental account-scoped updates |
 | POST | `/exports` | Export job, user initiated |
@@ -79,6 +80,17 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `add_text_source` | append | Pasted text as a source |
 | `get_source_status` | read | Extraction state and section IDs/labels (no text) |
 | `create_concepts` | append | Up to 30 concepts; existing terms reused; linked sections must belong to the course, otherwise `inferred` |
+| `get_study_context` | read | Active target, scope, exam profile, passed targets, recent simulations; `needs_setup` + questions to ask |
+| `set_study_target`, `update_study_target` | append / audited update | Kolokvij or exam with verbatim scope description, resolved scope, specifics; status passed/failed, moved date |
+| `record_exam_profile` | append | Item types, Bloom mix, topic weights (0.5–2.0) and short examples from past papers |
+| `set_concept_difficulty` | audited update | Difficulty 1–5; Claude's estimate never overrides a learner rating |
+| `set_availability` | audited update | Weekly minutes or a one-day override |
+| `create_quiz` | append | Simulation of 1–30 items: `mcq` (options A–H, hidden key) or `open` (hidden rubric), style `past_paper`/`deeper` |
+| `open_quiz` | UI | MCP App `ui://recallspring/quiz` (no keys or rubrics before submission; time limit starts on first open) |
+| `save_quiz_draft`, `submit_quiz` | append, app-only | Draft autosave; one-transaction submission idempotent by `client_request_id`; MCQ graded from the key |
+| `get_quiz_results` | read | Answers (as learner material), keys, rubrics, pending open answers, points |
+| `record_assessments` | append | Batch grading, all or nothing |
+| `get_study_plan` | read | `plan-v1`, optional `course_id` (course) or none (overview), capacity per active target |
 
 ## API example: attempt creation
 

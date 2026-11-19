@@ -72,6 +72,14 @@ Inputs: available study minutes (default 20, adjustable), due reviews, weak conc
 
 Suggested baseline weighted priority: overdue duration capped, low recent evidence, course exam proximity, prerequisite importance, last practiced timestamp and learner goals. Store version, input timestamps and a `why_selected` explanation. Avoid manipulative streaks and overloaded plans. Provide graceful `Not enough evidence` states.
 
+### Implemented: study targets and `plan-v1` (ADR-005)
+
+- Each course can have study targets (kolokvij / izpit) with the learner's verbatim scope description, resolved scope (sources, page ranges, topics, concepts), specifics and an exam profile from past papers. A session starts with the study context; if nothing is set, Claude asks what the learner prepares for, from which material to which, whether an old paper exists, and any specifics.
+- The nearest upcoming target is active. Passed targets' material is in maintenance (due reviews only, 15 % of the day by default, at least one item). Material outside the active target keeps only its due reviews at lower priority.
+- Ranking: urgency (days left) × need (due / unstarted / weak) × exam-profile weight × difficulty; filled into the day's available minutes (60 min weekdays, 90 min weekends by default, per-day overrides). Each item explains why it was chosen; each active target gets a capacity check (`ok` / `tight` / `at_risk`).
+- Knowledge bands (`not_started`, `emerging`, `developing`, `reliable`) and difficulty (observed after 3+ answers, else learner rating, else Claude's estimate) are explainable estimates.
+- Kolokvij simulations (multiple choice + open questions) are answered in a RecallSpring form: drafts autosave, submission stores every answer exactly in one transaction, multiple choice is graded from the key, open answers by Claude. About 75 % of practice questions follow the past-paper style, 25 % are deeper Bloom 4–5 questions.
+
 ## Long-term learning
 
 Review should persist after exams to address owner's reported forgetting. Long-term targets prioritize fundamentals and inter-topic transfer. Default schedule and concept importance can be adjusted by user with natural-language commands, but modifications always pass through typed server actions and audit.

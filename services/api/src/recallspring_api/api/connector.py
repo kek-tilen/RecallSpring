@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -24,18 +25,26 @@ from ..errors import ApiError
 from ..models import (
     Assessment,
     Attempt,
+    AvailabilityOverride,
     Concept,
     ConceptSource,
     Course,
     Note,
     Question,
+    Quiz,
     ReviewState,
     Source,
     SourceSection,
     StudySession,
+    StudyTarget,
+    StudyTargetScope,
     SyllabusItem,
+    TargetProfile,
+    User,
 )
 from ..schemas import (
+    AssessmentBatchIn,
+    AvailabilityIn,
     ConnectorAssessmentIn,
     ConnectorAttemptIn,
     ConnectorConceptsIn,
@@ -44,22 +53,33 @@ from ..schemas import (
     ConnectorSummaryIn,
     CourseIn,
     CourseOut,
+    DifficultyIn,
     PlanOut,
+    QuizDraftIn,
+    QuizIn,
+    QuizSubmitIn,
     ReviewQueueOut,
     SearchHitOut,
     SearchOut,
     SourceTextIn,
     StudySessionOut,
+    TargetIn,
+    TargetProfileIn,
+    TargetScopeItem,
+    TargetUpdateIn,
 )
 from ..services import attempts as attempt_svc
+from ..services import quizzes as quiz_svc
 from ..services import sources as source_svc
-from ..services.events import learning_event
+from ..services.events import audit, learning_event
 from ..services.ownership import owned
 from ..services.planner import today_plan
 from ..services.reviews import concept_ids_for_question, recompute, review_queue
+from ..services.targets import study_context, target_view
 from .attempts import save_attempt
 from .questions import _add_question, _course_concepts, question_view
 from .reviews import _item as review_item
+from .settings import apply_study_settings
 from .sources import handle_paste, handle_upload
 
 router = APIRouter(prefix="/connector", tags=["connector"])
@@ -69,9 +89,15 @@ UNTRUSTED = "learner_material"  # marker the MCP server turns into an untrusted-
 
 @router.get("/plan", response_model=PlanOut)
 def plan(
-    minutes: int = Query(default=20, ge=5, le=240), ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
+    minutes: int | None = Query(default=None, ge=0, le=720, description="Default: today's availability"),
+    course_id: uuid.UUID | None = None,
+    ctx: Ctx = Depends(connector_ctx),
+    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    return today_plan(db, ctx.user, clock.now(), minutes)
+    """All courses (overview) or one course; respects study targets, maintenance share and availability."""
+    if course_id is not None:
+        owned(db, Course, course_id, ctx.user.id)
+    return today_plan(db, ctx.user, clock.now(), minutes, course_id)
 
 
 @router.get("/courses")
@@ -217,12 +243,18 @@ def notes(
 
 @router.get("/reviews/due", response_model=ReviewQueueOut)
 def due(
-    horizon_days: int = Query(default=0, ge=0, le=60), ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
+    horizon_days: int = Query(default=0, ge=0, le=60),
+    course_id: uuid.UUID | None = None,
+    ctx: Ctx = Depends(connector_ctx),
+    db: Session = Depends(get_db),
 ) -> ReviewQueueOut:
     now = clock.now()
-    return ReviewQueueOut(
-        items=[review_item(s, c, now) for s, c in review_queue(db, ctx.user, now, horizon_days)], generated_at=now
-    )
+    rows = [
+        (s, c)
+        for s, c in review_queue(db, ctx.user, now, horizon_days)
+        if course_id is None or c.course_id == course_id
+    ]
+    return ReviewQueueOut(items=[review_item(s, c, now) for s, c in rows], generated_at=now)
 
 
 @router.post("/study-sessions", status_code=201, response_model=StudySessionOut)
@@ -359,6 +391,14 @@ def record_assessment(
     unknown references are dropped and a final grade becomes provisional. Appends, never overwrites."""
     if replay := replay_if_seen(db, ctx, payload):
         return replay
+    body = record_one_assessment(db, ctx, attempt_id, payload)
+    return commit_with_response(db, ctx, payload, 200, body)
+
+
+def record_one_assessment(
+    db: Session, ctx: WriteCtx, attempt_id: uuid.UUID, payload: ConnectorAssessmentIn
+) -> dict[str, Any]:
+    """Validate and append one assessment written by Claude; the caller commits."""
     attempt = owned(db, Attempt, attempt_id, ctx.user.id, for_update=True)
     if attempt.kind != "answer":
         raise ApiError(409, "not_evaluable", "Only written answers can be assessed.")
@@ -436,7 +476,7 @@ def record_assessment(
             if s is not None
         ],
     }
-    return commit_with_response(db, ctx, payload, 200, body)
+    return body
 
 
 # ---------------------------------------------------------------- building the library from Claude (append-only)
@@ -558,3 +598,333 @@ def source_status(
         ],
         "sections_total": total,
     }
+
+
+# ---------------------------------------------------------------- study targets (kolokvij / izpit) and planning input
+
+
+def _today(ctx: Ctx):  # type: ignore[no-untyped-def]
+    return clock.now().astimezone(ZoneInfo(ctx.user.timezone)).date()
+
+
+@router.get("/courses/{course_id}/context")
+def course_context(
+    course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Start of every study session: active target, scope, exam profile, and what to ask the learner if unset."""
+    course = owned(db, Course, course_id, ctx.user.id)
+    return study_context(db, course, _today(ctx), ctx.user.style_percent)
+
+
+def _scope_rows(db: Session, ctx: Ctx, course_id: uuid.UUID, items: list[TargetScopeItem]) -> list[StudyTargetScope]:
+    rows = []
+    for item in items:
+        if item.kind in ("source", "pages"):
+            src = db.get(Source, item.source_id) if item.source_id else None
+            if src is None or src.user_id != ctx.user.id or src.course_id != course_id or src.deleted_at:
+                raise ApiError(422, "invalid_scope", "A scope entry refers to a source that is not in this course.")
+            if item.kind == "pages" and (
+                item.page_from is None or item.page_to is None or item.page_from > item.page_to
+            ):
+                raise ApiError(422, "invalid_scope", "A page range needs page_from <= page_to.")
+        elif item.kind == "topic":
+            topic = db.get(SyllabusItem, item.topic_id) if item.topic_id else None
+            if topic is None or topic.user_id != ctx.user.id or topic.course_id != course_id:
+                raise ApiError(422, "invalid_scope", "A scope entry refers to a topic that is not in this course.")
+        else:
+            concept = db.get(Concept, item.concept_id) if item.concept_id else None
+            if concept is None or concept.user_id != ctx.user.id or concept.course_id != course_id:
+                raise ApiError(422, "invalid_scope", "A scope entry refers to a concept that is not in this course.")
+        rows.append(
+            StudyTargetScope(
+                kind=item.kind,
+                source_id=item.source_id,
+                page_from=item.page_from,
+                page_to=item.page_to,
+                syllabus_item_id=item.topic_id,
+                concept_id=item.concept_id,
+            )
+        )
+    return rows
+
+
+@router.post("/targets", status_code=201)
+def create_target(
+    payload: TargetIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Record what the learner prepares for, with their own scope description kept verbatim."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    owned(db, Course, payload.course_id, ctx.user.id)
+    target = StudyTarget(
+        user_id=ctx.user.id,
+        course_id=payload.course_id,
+        kind=payload.kind,
+        name=payload.name,
+        due_date=payload.due_date,
+        scope_description=payload.scope_description,
+        notes=payload.notes,
+        goal=payload.goal,
+    )
+    db.add(target)
+    db.flush()
+    for row in _scope_rows(db, ctx, payload.course_id, payload.scope):
+        row.target_id = target.id
+        db.add(row)
+    db.flush()
+    audit(
+        db,
+        actor_id=ctx.user.id,
+        action="target.created",
+        target_type="study_target",
+        target_id=target.id,
+        details={"name": payload.name, "due_date": payload.due_date.isoformat(), "origin": "connector"},
+        request_id=ctx.request_id,
+    )
+    return commit_with_response(db, ctx, payload, 201, target_view(db, target, _today(ctx)))
+
+
+@router.post("/targets/{target_id}/update")
+def update_target(
+    target_id: uuid.UUID,
+    payload: TargetUpdateIn,
+    ctx: WriteCtx = Depends(connector_write_ctx),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Move a date, mark a kolokvij passed/failed, or refine the scope. Audited; nothing is deleted."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    target = db.get(StudyTarget, target_id, with_for_update=True)
+    if target is None or target.user_id != ctx.user.id or target.deleted_at is not None:
+        raise ApiError(404, "not_found", "Study target not found.")
+    changes: dict[str, Any] = {}
+    for key in ("due_date", "status", "result", "scope_description", "notes"):
+        value = getattr(payload, key)
+        if value is not None and value != getattr(target, key):
+            changes[key] = {"from": str(getattr(target, key)), "to": str(value)}
+            setattr(target, key, value)
+    if payload.scope is not None:
+        new_rows = _scope_rows(db, ctx, target.course_id, payload.scope)
+        for old in db.scalars(select(StudyTargetScope).where(StudyTargetScope.target_id == target.id)):
+            db.delete(old)  # scope rows are a derived index of the learner's description, not learning evidence
+        for row in new_rows:
+            row.target_id = target.id
+            db.add(row)
+        changes["scope"] = {"entries": len(new_rows)}
+    target.revision += 1
+    db.flush()
+    audit(
+        db,
+        actor_id=ctx.user.id,
+        action="target.updated",
+        target_type="study_target",
+        target_id=target.id,
+        details=changes,
+        request_id=ctx.request_id,
+    )
+    return commit_with_response(db, ctx, payload, 200, target_view(db, target, _today(ctx)))
+
+
+@router.post("/targets/{target_id}/profile", status_code=201)
+def record_profile(
+    target_id: uuid.UUID,
+    payload: TargetProfileIn,
+    ctx: WriteCtx = Depends(connector_write_ctx),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Exam profile derived by Claude from past papers. Topic weights may point to concepts of the course."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    target = db.get(StudyTarget, target_id)
+    if target is None or target.user_id != ctx.user.id or target.deleted_at is not None:
+        raise ApiError(404, "not_found", "Study target not found.")
+    if payload.source_id is not None:
+        owned(db, Source, payload.source_id, ctx.user.id)
+    for w in payload.topic_weights:
+        if w.concept_id is not None:
+            concept = db.get(Concept, w.concept_id)
+            if concept is None or concept.user_id != ctx.user.id or concept.course_id != target.course_id:
+                raise ApiError(422, "invalid_weight", "A topic weight refers to a concept outside this course.")
+    profile = TargetProfile(
+        user_id=ctx.user.id,
+        target_id=target.id,
+        source_id=payload.source_id,
+        item_types=[t.model_dump() for t in payload.item_types],
+        bloom_mix=payload.bloom_mix,
+        topic_weights=[w.model_dump(mode="json") for w in payload.topic_weights],
+        example_items=payload.example_items,
+        notes=payload.notes,
+        model=payload.model_name,
+        created_at=clock.now(),
+    )
+    db.add(profile)
+    db.flush()
+    learning_event(
+        db,
+        user_id=ctx.user.id,
+        entity_type="study_target",
+        entity_id=target.id,
+        event_type="target.profile_recorded",
+        payload={"model": payload.model_name},
+        request_id=ctx.request_id,
+    )
+    return commit_with_response(db, ctx, payload, 201, target_view(db, target, _today(ctx)))
+
+
+@router.post("/concepts/difficulty")
+def set_difficulty(
+    payload: DifficultyIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Difficulty prior (1-5). A learner rating is never overwritten by Claude's estimate; observed results win
+    over both once there is enough evidence."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    out = []
+    for item in payload.items:
+        concept = owned(db, Concept, item.concept_id, ctx.user.id, for_update=True)
+        if payload.rated_by == "claude" and concept.difficulty_source == "learner":
+            out.append({"concept_id": str(concept.id), "difficulty": concept.difficulty_estimate, "kept": "learner"})
+            continue
+        concept.difficulty_estimate = item.difficulty
+        concept.difficulty_source = payload.rated_by
+        out.append({"concept_id": str(concept.id), "difficulty": item.difficulty, "kept": payload.rated_by})
+    db.flush()
+    return commit_with_response(db, ctx, payload, 200, {"concepts": out})
+
+
+@router.post("/availability")
+def set_availability(
+    payload: AvailabilityIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Weekly study minutes (Monday first) and/or one day's override. Audited."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    user = db.get(User, ctx.user.id, with_for_update=True)
+    assert user is not None
+    details: dict[str, Any] = {}
+    if payload.weekly_minutes is not None:
+        details.update(apply_study_settings(user, {"weekly_minutes": payload.weekly_minutes}))
+    if payload.day is not None:
+        if payload.minutes is None:
+            raise ApiError(422, "minutes_required", "Give the minutes available on that day.")
+        row = db.get(AvailabilityOverride, (user.id, payload.day))
+        if row is None:
+            db.add(AvailabilityOverride(user_id=user.id, day=payload.day, minutes=payload.minutes, note=payload.note))
+        else:
+            row.minutes, row.note = payload.minutes, payload.note
+        details["day"] = {"day": payload.day.isoformat(), "minutes": payload.minutes}
+    audit(db, actor_id=user.id, action="study.availability_changed", details=details, request_id=ctx.request_id)
+    db.flush()
+    return commit_with_response(db, ctx, payload, 200, {"weekly_minutes": user.weekly_minutes, **details})
+
+
+# ---------------------------------------------------------------- exam simulations
+
+
+def _quiz(db: Session, ctx: Ctx, quiz_id: uuid.UUID, lock: bool = False) -> Quiz:
+    quiz = db.get(Quiz, quiz_id, with_for_update=lock)
+    if quiz is None or quiz.user_id != ctx.user.id:
+        raise ApiError(404, "not_found", "Simulation not found.")
+    return quiz
+
+
+@router.post("/quizzes", status_code=201)
+def create_quiz(
+    payload: QuizIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    provenance = {"origin": "claude_connector", "model": payload.model_name, "model_reported_by": "assistant"}
+    quiz = quiz_svc.create_quiz(db, ctx.user, payload, provenance)
+    body = {
+        "quiz_id": str(quiz.id),
+        "title": quiz.title,
+        "items": len(payload.items),
+        "time_limit_minutes": quiz.time_limit_minutes,
+    }
+    return commit_with_response(db, ctx, payload, 201, body)
+
+
+@router.get("/quizzes/{quiz_id}")
+def quiz_form(quiz_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return quiz_svc.form_view(db, _quiz(db, ctx, quiz_id))
+
+
+@router.post("/quizzes/{quiz_id}/open")
+def open_quiz(
+    quiz_id: uuid.UUID, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Form data without answer keys; starts the clock on first open."""
+    quiz = _quiz(db, ctx, quiz_id, lock=True)
+    quiz_svc.mark_opened(quiz)
+    db.flush()
+    body = quiz_svc.form_view(db, quiz)
+    db.commit()
+    return JSONResponse(body)
+
+
+@router.post("/quizzes/{quiz_id}/draft")
+def save_quiz_draft(
+    quiz_id: uuid.UUID,
+    payload: QuizDraftIn,
+    ctx: WriteCtx = Depends(connector_write_ctx),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    quiz = _quiz(db, ctx, quiz_id, lock=True)
+    quiz_svc.save_draft(quiz, payload.answers)
+    db.commit()
+    return JSONResponse(
+        {
+            "saved_at": quiz.draft_saved_at.isoformat() if quiz.draft_saved_at else None,
+            "revision": quiz.draft_revision,
+        }
+    )
+
+
+@router.post("/quizzes/{quiz_id}/submit")
+def submit_quiz(
+    quiz_id: uuid.UUID,
+    payload: QuizSubmitIn,
+    ctx: WriteCtx = Depends(connector_write_ctx),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Persist all answers exactly in one transaction, grade multiple-choice items, return the learner view."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    quiz = _quiz(db, ctx, quiz_id, lock=True)
+    quiz_svc.submit(db, ctx.user, quiz, payload.client_request_id, payload.answers, ctx.request_id)
+    db.flush()
+    return commit_with_response(db, ctx, payload, 200, quiz_svc.results_view(db, quiz, for_learner=True))
+
+
+@router.get("/quizzes/{quiz_id}/results")
+def quiz_results(
+    quiz_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Grading view for Claude: answers, keys, rubrics and which open answers still need a grade."""
+    return quiz_svc.results_view(db, _quiz(db, ctx, quiz_id))
+
+
+@router.post("/assessments/batch")
+def record_assessments_batch(
+    payload: AssessmentBatchIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Grade several attempts (e.g. a simulation's open answers) in one call; all or nothing."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    results = []
+    for index, item in enumerate(payload.items):
+        try:
+            body = record_one_assessment(db, ctx, item.attempt_id, item)
+        except ApiError as exc:
+            raise ApiError(exc.status, exc.code, exc.message, {"index": index, **(exc.details or {})}) from exc
+        latest = body["assessments"][-1]
+        results.append(
+            {
+                "attempt_id": str(item.attempt_id),
+                "grade": latest["grade"],
+                "status": latest["status"],
+                "schedule": body["schedule"],
+            }
+        )
+    return commit_with_response(db, ctx, payload, 200, {"results": results})

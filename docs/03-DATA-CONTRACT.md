@@ -20,7 +20,11 @@
 | `connector_tokens` | owner, label, token hash, scopes (`connector`), created/last_used/revoked timestamps |
 | `courses` | `id`, owner, title, description, `long_term_retention` bool, status |
 | `syllabus_items` | `id`, course, title, parent, position, expected coverage, optional exam weighting |
-| `exams` | `id`, course, date/timezone, title, status, goal priority |
+| `study_targets` (implements `exams`) | `id`, course, kind (`kolokvij/izpit/other`), name, due date, status (`upcoming/passed/failed/cancelled`), result, goal, learner's scope description (verbatim), specifics, revision |
+| `study_target_scope` | target, kind (`source/pages/topic/concept`) with the referenced source, page range, topic or concept; none = whole course |
+| `target_profiles` | target, past-paper source, item types/shares, Bloom mix, topic weights, example items, model (AI-derived, labelled) |
+| `availability_overrides` | user, day, minutes, note (weekly defaults live on `users.weekly_minutes`, with `maintenance_percent` and `style_percent`) |
+| `quizzes`, `quiz_items` | Simulation: course, target, time limit, status, draft answers, opened/submitted times; ordered questions with points. Attempts carry `quiz_id` and `selected_option`; questions carry `question_type` (`open/mcq`) and `options` |
 | `sources` | `id`, course, filename, kind, mime, bytes, SHA256, private content-addressed storage key, origin (`upload/paste`), `duplicate_of`, parse state/error/notes, parser version, version, uploaded/parsed time |
 | `source_sections` | `id`, source, source version, order, page/heading, extracted text, text offsets, citation label, parser version, `tsvector` (language-neutral `simple` config) |
 | `concepts` | `id`, course, canonical term, definition draft, syllabus item link, state (`new/learning/learned/...`), `source_confidence` |

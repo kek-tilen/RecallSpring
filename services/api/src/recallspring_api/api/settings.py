@@ -24,6 +24,7 @@ from ..schemas import (
     ConnectorTokenIn,
     ConnectorTokenOut,
     PlanOut,
+    StudySettingsIn,
 )
 from ..security import sha256_hex
 from ..services.events import audit
@@ -47,9 +48,51 @@ def _settings_view(db: Session, user: User) -> dict[str, Any]:
 
 @router.get("/planner/today", response_model=PlanOut)
 def planner_today(
-    minutes: int = Query(default=20, ge=5, le=240), ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
+    minutes: int | None = Query(default=None, ge=0, le=720),
+    course_id: uuid.UUID | None = None,
+    ctx: Ctx = Depends(current_ctx),
+    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    return today_plan(db, ctx.user, clock.now(), minutes)
+    return today_plan(db, ctx.user, clock.now(), minutes, course_id)
+
+
+@router.get("/settings/study")
+def study_settings(ctx: Ctx = Depends(current_ctx)) -> dict[str, Any]:
+    u = ctx.user
+    return {
+        "weekly_minutes": u.weekly_minutes,
+        "maintenance_percent": u.maintenance_percent,
+        "style_percent": u.style_percent,
+    }
+
+
+@router.put("/settings/study")
+def update_study_settings(
+    payload: StudySettingsIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    user = db.get(User, ctx.user.id, with_for_update=True)
+    assert user is not None
+    changes = apply_study_settings(user, payload.model_dump(exclude_none=True))
+    audit(db, actor_id=user.id, action="study.settings_changed", details=changes, request_id=ctx.request_id)
+    db.flush()
+    body = {
+        "weekly_minutes": user.weekly_minutes,
+        "maintenance_percent": user.maintenance_percent,
+        "style_percent": user.style_percent,
+    }
+    return commit_with_response(db, ctx, payload, 200, body)
+
+
+def apply_study_settings(user: User, values: dict[str, Any]) -> dict[str, Any]:
+    if any(m < 0 or m > 720 for m in values.get("weekly_minutes", [])):
+        raise ApiError(422, "invalid_minutes", "Minutes per day must be between 0 and 720.")
+    changes = {}
+    for key, value in values.items():
+        changes[key] = {"from": getattr(user, key), "to": value}
+        setattr(user, key, value)
+    return changes
 
 
 @router.get("/settings/connector", response_model=ConnectorSettingsOut)

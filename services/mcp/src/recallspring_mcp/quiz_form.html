@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RecallSpring simulation</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #FFFFFF; --surface: #EDF7F4; --ink: #24332F; --muted: #52645C; --border: #CBDDD6;
+    --primary: #0F766E; --primary-hover: #115E59; --on-primary: #FFFFFF; --danger: #B42318; --ok: #146C43;
+    --focus: #0F766E; --radius-card: 16px; --radius-control: 10px;
+    font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #14201D; --surface: #1C2B27; --ink: #E3EEEA; --muted: #A7BAB2; --border: #33463F;
+    --primary: #5EC4B6; --primary-hover: #7FD3C7; --on-primary: #0B1A17; --danger: #F59A8F; --ok: #7DD3A8;
+    --focus: #5EC4B6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; line-height: 1.5; }
+  main { padding: 16px; max-width: 760px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 19px; }
+  .meta { color: var(--muted); font-size: 14px; }
+  .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .timer.low { color: var(--danger); }
+  h2 { font-size: 15px; color: var(--muted); font-weight: 600; margin: 20px 0 8px; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; margin: 10px 0; }
+  .q { margin: 0 0 10px; white-space: pre-wrap; }
+  .num { font-weight: 700; color: var(--primary); margin-right: 4px; }
+  .pts { color: var(--muted); font-size: 13px; }
+  label.opt { display: flex; gap: 8px; align-items: flex-start; padding: 6px 4px; border-radius: 8px; cursor: pointer; }
+  label.opt:hover { background: var(--surface); }
+  textarea { width: 100%; min-height: 96px; resize: vertical; padding: 10px 12px; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-control); }
+  .dk { display: inline-flex; gap: 6px; align-items: center; margin-top: 8px; color: var(--muted); font-size: 14px; }
+  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+  button { min-height: 44px; padding: 0 18px; font: inherit; border-radius: var(--radius-control); cursor: pointer;
+    border: 1px solid var(--primary); background: var(--primary); color: var(--on-primary); font-weight: 600; }
+  button:hover { background: var(--primary-hover); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .status { color: var(--muted); font-size: 14px; }
+  .status.error { color: var(--danger); }
+  .result { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--surface); font-size: 14px; }
+  .result.right { border-left: 4px solid var(--ok); }
+  .result.wrong { border-left: 4px solid var(--danger); }
+  .score { font-size: 17px; font-weight: 700; margin: 12px 0 0; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title">Loading the simulation…</h1>
+    <span class="meta"><span id="timer" class="timer" aria-live="off"></span></span>
+  </header>
+  <p class="meta" id="intro">Answer from memory. Your answers are saved in RecallSpring as drafts while you work and
+    stored exactly when you submit, before Claude sees them.</p>
+  <form id="quiz" novalidate></form>
+  <p class="score" id="score" hidden></p>
+  <div class="actions">
+    <button type="button" id="submit" disabled>Submit for grading</button>
+    <span id="status" class="status" role="status" aria-live="polite"></span>
+  </div>
+</main>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const ui = { title: $("title"), timer: $("timer"), form: $("quiz"), submit: $("submit"), status: $("status"),
+               score: $("score") };
+  const clientRequestId = (crypto.randomUUID && crypto.randomUUID()) ||
+    "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) =>
+      (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
+  let quiz = null, nextId = 1, saveTimer = null, tick = null, confirmArmed = false, locked = false;
+  const pending = new Map();
+
+  const send = (msg) => window.parent.postMessage(msg, "*");
+  const notify = (method, params) => send({ jsonrpc: "2.0", method, params: params || {} });
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    send({ jsonrpc: "2.0", id, method, params: params || {} });
+  });
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text; return n; };   // textContent only: content is never parsed as HTML
+
+  function setStatus(text, isError) { ui.status.textContent = text; ui.status.className = "status" + (isError ? " error" : ""); }
+  function resultData(result) {
+    if (result && result.structuredContent) return result.structuredContent;
+    try { return JSON.parse(result.content[0].text); } catch (e) { return null; }
+  }
+  function applyContext(ctx) {
+    if (ctx && (ctx.theme === "dark" || ctx.theme === "light")) document.documentElement.dataset.theme = ctx.theme;
+    const vars = ctx && ctx.styles && ctx.styles.variables;
+    if (vars && vars["--font-sans"]) document.documentElement.style.setProperty("--font-sans", vars["--font-sans"]);
+  }
+
+  function collect() {
+    return quiz.items.map((item) => {
+      const dk = ui.form.querySelector(`[data-dk="${item.question_id}"]`);
+      const answer = { question_id: item.question_id, dont_know: !!(dk && dk.checked) };
+      if (item.type === "mcq") {
+        const sel = ui.form.querySelector(`input[name="q-${item.question_id}"]:checked`);
+        answer.option = sel ? sel.value : null;
+      } else {
+        const ta = ui.form.querySelector(`[data-text="${item.question_id}"]`);
+        answer.text = ta ? ta.value : "";
+      }
+      return answer;
+    });
+  }
+  function unanswered(answers) {
+    return answers.filter((a) => !a.dont_know && !(a.option || (a.text && a.text.trim()))).length;
+  }
+
+  function render(data) {
+    quiz = data;
+    ui.title.textContent = data.title;
+    ui.form.replaceChildren();
+    let part = 0, lastType = null;
+    data.items.forEach((item, idx) => {
+      if (item.type !== lastType) {
+        part += 1; lastType = item.type;
+        ui.form.appendChild(el("h2", "", `Part ${part}: ${item.type === "mcq" ? "multiple choice" : "open questions"}`));
+      }
+      const card = el("div", "card");
+      card.dataset.qid = item.question_id;
+      const q = el("p", "q");
+      q.appendChild(el("span", "num", `${idx + 1}.`));
+      q.appendChild(document.createTextNode(item.prompt + " "));
+      q.appendChild(el("span", "pts", `(${item.points} pt${item.points === 1 ? "" : "s"})`));
+      q.id = `prompt-${item.question_id}`;
+      card.appendChild(q);
+      const saved = (data.draft || {})[item.question_id] || {};
+      if (item.type === "mcq") {
+        const group = el("div"); group.setAttribute("role", "radiogroup"); group.setAttribute("aria-labelledby", q.id);
+        (item.options || []).forEach((opt) => {
+          const label = el("label", "opt");
+          const input = document.createElement("input");
+          input.type = "radio"; input.name = `q-${item.question_id}`; input.value = opt.key;
+          input.checked = saved.option === opt.key;
+          label.appendChild(input);
+          label.appendChild(el("span", "", `${opt.key}) ${opt.text}`));
+          group.appendChild(label);
+        });
+        card.appendChild(group);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.dataset.text = item.question_id; ta.value = saved.text || "";
+        ta.setAttribute("aria-labelledby", q.id); ta.placeholder = "Your answer";
+        card.appendChild(ta);
+      }
+      const dkLabel = el("label", "dk");
+      const dk = document.createElement("input"); dk.type = "checkbox"; dk.dataset.dk = item.question_id;
+      dk.checked = !!saved.dont_know;
+      dkLabel.appendChild(dk); dkLabel.appendChild(document.createTextNode("I don't know"));
+      card.appendChild(dkLabel);
+      ui.form.appendChild(card);
+    });
+    if (data.status === "submitted" && data.results) { showResults(data.results); return; }
+    ui.submit.disabled = false;
+    startTimer();
+  }
+
+  function lock() {
+    locked = true;
+    ui.form.querySelectorAll("input, textarea").forEach((n) => { n.disabled = true; });
+    ui.submit.disabled = true;
+    if (tick) clearInterval(tick);
+  }
+
+  function showResults(results) {
+    lock();
+    results.items.forEach((r) => {
+      const card = ui.form.querySelector(`[data-qid="${r.question_id}"]`);
+      if (!card) return;
+      let text, cls = "result";
+      if (r.type === "mcq") {
+        const right = r.earned !== null && r.earned > 0;
+        cls += right ? " right" : " wrong";
+        text = right ? `Correct (${r.earned} pt).` : `Correct answer: ${r.correct_option}).`;
+      } else if (r.earned === null) {
+        text = "Saved. Waiting for Claude's grading.";
+      } else {
+        text = `${r.earned} / ${r.points} pts${r.feedback ? " – " + r.feedback : ""}`;
+      }
+      card.appendChild(el("div", cls, text));
+    });
+    ui.score.hidden = false;
+    ui.score.textContent = `${results.earned_points} / ${results.max_points} points` +
+      (results.pending_items ? ` so far (${results.pending_items} open answer${results.pending_items === 1 ? "" : "s"} still being graded)` : "");
+  }
+
+  function scheduleSave() {
+    if (locked || !quiz) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      try {
+        const res = await request("tools/call", { name: "save_quiz_draft",
+          arguments: { quiz_id: quiz.quiz_id, answers: collect() } });
+        const data = resultData(res);
+        if (res.isError || !data) throw new Error("Draft not saved");
+        setStatus("Draft saved " + new Date(data.saved_at).toLocaleTimeString());
+      } catch (e) { setStatus("Draft not saved yet – your answers are still here.", true); }
+    }, 1500);
+  }
+
+  function startTimer() {
+    if (!quiz.deadline) return;
+    const end = new Date(quiz.deadline).getTime();
+    const update = () => {
+      const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+      ui.timer.textContent = `Time left ${String(Math.floor(left / 60)).padStart(2, "0")}:${String(left % 60).padStart(2, "0")}`;
+      ui.timer.className = "timer" + (left < 300 ? " low" : "");
+      if (left === 0 && !locked) { setStatus("Time is up – submitting your answers."); submit(true); }
+    };
+    update(); tick = setInterval(update, 1000);
+  }
+
+  async function submit(force) {
+    if (locked || !quiz) return;
+    const answers = collect();
+    const missing = unanswered(answers);
+    if (missing && !force && !confirmArmed) {
+      confirmArmed = true;
+      setStatus(`${missing} question${missing === 1 ? " is" : "s are"} unanswered and will count as "I don't know". Click Submit again to confirm.`, true);
+      return;
+    }
+    ui.submit.disabled = true;
+    if (saveTimer) clearTimeout(saveTimer);
+    setStatus("Saving your answers…");
+    try {
+      const res = await request("tools/call", { name: "submit_quiz",
+        arguments: { quiz_id: quiz.quiz_id, client_request_id: clientRequestId, answers } });
+      const data = resultData(res);
+      if (res.isError || !data || !data.items) throw new Error((res.content && res.content[0] && res.content[0].text) || "Not saved.");
+      showResults(data);
+      setStatus("Answers saved at " + new Date(data.submitted_at).toLocaleTimeString() + ".");
+      request("ui/message", { role: "user", content: { type: "text",
+        text: `I submitted the simulation "${quiz.title}" (quiz ${quiz.quiz_id}). Please grade my open answers ` +
+              "with get_quiz_results and record_assessments, then give me feedback and what to review." } }).catch(() => {});
+    } catch (err) {
+      ui.submit.disabled = false;
+      setStatus("Not saved: " + (err && err.message ? err.message : "unknown error") + " Your answers are still here; try again.", true);
+    }
+  }
+
+  ui.form.addEventListener("input", () => { confirmArmed = false; scheduleSave(); });
+  ui.form.addEventListener("change", () => { confirmArmed = false; scheduleSave(); });
+  ui.submit.addEventListener("click", () => submit(false));
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const msg = event.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id !== undefined && !msg.method) {
+      const entry = pending.get(msg.id);
+      if (!entry) return;
+      pending.delete(msg.id);
+      if (msg.error) entry.reject(new Error(msg.error.message || "Request failed")); else entry.resolve(msg.result);
+      return;
+    }
+    switch (msg.method) {
+      case "ui/notifications/tool-result": { const d = resultData(msg.params); if (d && d.items) render(d); break; }
+      case "ui/notifications/host-context-changed": applyContext(msg.params); break;
+      case "ui/notifications/tool-cancelled": setStatus("The simulation was cancelled."); break;
+      case "ui/resource-teardown": if (msg.id !== undefined) send({ jsonrpc: "2.0", id: msg.id, result: {} }); break;
+      default: break;
+    }
+  });
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => notify("ui/notifications/size-changed",
+      { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })).observe(document.body);
+  }
+  request("ui/initialize", { protocolVersion: "2026-01-26",
+    appInfo: { name: "recallspring-quiz", version: "1" }, appCapabilities: {} })
+    .then((res) => { applyContext(res && res.hostContext); notify("ui/notifications/initialized"); })
+    .catch(() => setStatus("This chat could not open the simulation form. Ask Claude to ask the questions in chat.", true));
+})();
+</script>
+</body>
+</html>

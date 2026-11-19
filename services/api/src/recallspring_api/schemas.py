@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -341,13 +341,32 @@ class NoteRevisionOut(BaseModel):
 
 
 class PlanItemOut(BaseModel):
-    category: Literal["Review due", "Strengthen", "Explore next"]
+    category: Literal["Review due", "Strengthen", "Explore next", "Maintain"]
     concept_id: uuid.UUID
     term: str
     course_id: uuid.UUID
     course_title: str
     why_selected: str
     estimated_minutes: int
+    target: str | None = None
+    band: Literal["not_started", "emerging", "developing", "reliable"]
+    difficulty: int
+    difficulty_source: str
+
+
+class TargetCapacityOut(BaseModel):
+    course_id: uuid.UUID
+    course_title: str
+    target_id: uuid.UUID
+    target: str
+    due_date: str
+    days_left: int
+    concepts_in_scope: int
+    bands: dict[str, int]
+    remaining_minutes: int
+    available_minutes: int
+    status: Literal["ok", "tight", "at_risk"]
+    message: str
 
 
 class PlanOut(BaseModel):
@@ -355,7 +374,9 @@ class PlanOut(BaseModel):
     generated_at: datetime
     available_minutes: int
     planned_minutes: int
+    maintenance_percent: int
     items: list[PlanItemOut]
+    targets: list[TargetCapacityOut]
     message: str | None
     note: str
 
@@ -445,3 +466,134 @@ class ConnectorConceptItem(BaseModel):
 
 class ConnectorConceptsIn(BaseModel):
     concepts: list[ConnectorConceptItem] = Field(min_length=1, max_length=30)
+
+
+# ---------------------------------------------------------------- study targets, profiles, availability
+
+
+class TargetScopeItem(BaseModel):
+    kind: Literal["source", "pages", "topic", "concept"]
+    source_id: uuid.UUID | None = None
+    page_from: int | None = Field(default=None, ge=1)
+    page_to: int | None = Field(default=None, ge=1)
+    topic_id: uuid.UUID | None = None
+    concept_id: uuid.UUID | None = None
+
+
+class TargetIn(BaseModel):
+    course_id: uuid.UUID
+    kind: Literal["kolokvij", "izpit", "other"]
+    name: str = Field(min_length=1, max_length=120)
+    due_date: date
+    scope_description: str = Field(min_length=1, max_length=2000, description="The learner's own words")
+    scope: list[TargetScopeItem] = Field(default_factory=list, max_length=50)
+    notes: str | None = Field(default=None, max_length=4000)
+    goal: Literal["exam_only", "long_term"] = "long_term"
+
+
+class TargetUpdateIn(BaseModel):
+    due_date: date | None = None
+    status: Literal["upcoming", "passed", "failed", "cancelled"] | None = None
+    result: str | None = Field(default=None, max_length=120)
+    scope_description: str | None = Field(default=None, min_length=1, max_length=2000)
+    scope: list[TargetScopeItem] | None = Field(default=None, max_length=50)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class TopicWeight(BaseModel):
+    label: str = Field(min_length=1, max_length=200)
+    concept_id: uuid.UUID | None = None
+    weight: float = Field(default=1.0, ge=0.5, le=2.0)
+
+
+class ItemType(BaseModel):
+    type: str = Field(min_length=1, max_length=60)
+    share: float = Field(ge=0, le=1)
+
+
+class TargetProfileIn(BaseModel):
+    source_id: uuid.UUID | None = None
+    item_types: list[ItemType] = Field(default_factory=list, max_length=12)
+    bloom_mix: dict[str, float] = Field(default_factory=dict)
+    topic_weights: list[TopicWeight] = Field(default_factory=list, max_length=60)
+    example_items: list[str] = Field(default_factory=list, max_length=10)
+    notes: str | None = Field(default=None, max_length=4000)
+    model_name: str | None = Field(default=None, max_length=120)
+
+
+class DifficultyItem(BaseModel):
+    concept_id: uuid.UUID
+    difficulty: int = Field(ge=1, le=5)
+
+
+class DifficultyIn(BaseModel):
+    rated_by: Literal["claude", "learner"]
+    items: list[DifficultyItem] = Field(min_length=1, max_length=60)
+
+
+class AvailabilityIn(BaseModel):
+    weekly_minutes: list[int] | None = Field(default=None, min_length=7, max_length=7)
+    day: date | None = None
+    minutes: int | None = Field(default=None, ge=0, le=720)
+    note: str | None = Field(default=None, max_length=200)
+
+
+class StudySettingsIn(BaseModel):
+    weekly_minutes: list[int] | None = Field(default=None, min_length=7, max_length=7)
+    maintenance_percent: int | None = Field(default=None, ge=0, le=50)
+    style_percent: int | None = Field(default=None, ge=0, le=100)
+
+
+# ---------------------------------------------------------------- exam simulations (quizzes)
+
+
+class QuizOption(BaseModel):
+    key: str = Field(pattern=r"^[A-H]$")
+    text: str = Field(min_length=1, max_length=500)
+
+
+class QuizItemIn(BaseModel):
+    type: Literal["mcq", "open"]
+    prompt: str = Field(min_length=1, max_length=4000)
+    concept_ids: list[uuid.UUID] = Field(min_length=1, max_length=10)
+    bloom_level: int = Field(default=3, ge=1, le=6)
+    points: int = Field(default=1, ge=1, le=20)
+    options: list[QuizOption] = Field(default_factory=list, max_length=8)
+    correct_option: str | None = Field(default=None, pattern=r"^[A-H]$")
+    expected_points: list[str] = Field(default_factory=list, max_length=12)
+    source_refs: list[str] = Field(default_factory=list, max_length=20)
+    style: Literal["past_paper", "deeper"] = "past_paper"
+
+
+class QuizIn(BaseModel):
+    course_id: uuid.UUID
+    target_id: uuid.UUID | None = None
+    session_id: uuid.UUID | None = None
+    title: str = Field(min_length=1, max_length=200)
+    time_limit_minutes: int | None = Field(default=None, ge=1, le=300)
+    items: list[QuizItemIn] = Field(min_length=1, max_length=30)
+    model_name: str | None = Field(default=None, max_length=120)
+
+
+class QuizAnswer(BaseModel):
+    question_id: uuid.UUID
+    option: str | None = Field(default=None, pattern=r"^[A-H]$")
+    text: str | None = Field(default=None, max_length=20_000)
+    dont_know: bool = False
+
+
+class QuizDraftIn(BaseModel):
+    answers: list[QuizAnswer] = Field(default_factory=list, max_length=30)
+
+
+class QuizSubmitIn(BaseModel):
+    client_request_id: uuid.UUID
+    answers: list[QuizAnswer] = Field(default_factory=list, max_length=30)
+
+
+class AssessmentBatchItem(ConnectorAssessmentIn):
+    attempt_id: uuid.UUID
+
+
+class AssessmentBatchIn(BaseModel):
+    items: list[AssessmentBatchItem] = Field(min_length=1, max_length=30)

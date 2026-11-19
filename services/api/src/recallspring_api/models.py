@@ -77,10 +77,23 @@ class User(Base):
     connector_limit_percent: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default="100", default=100
     )
+    # Study time per weekday, Monday first (owner decision 2026-11-19: 60 min weekdays, 90 min weekends).
+    weekly_minutes: Mapped[list[int]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'[60,60,60,60,60,90,90]'::jsonb"),
+        default=lambda: [60, 60, 60, 60, 60, 90, 90],
+    )
+    maintenance_percent: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="15", default=15)
+    style_percent: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="75", default=75)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
 
-    __table_args__ = (CheckConstraint("connector_limit_percent BETWEEN 1 AND 100", name="connector_limit_percent"),)
+    __table_args__ = (
+        CheckConstraint("connector_limit_percent BETWEEN 1 AND 100", name="connector_limit_percent"),
+        CheckConstraint("maintenance_percent BETWEEN 0 AND 50", name="maintenance_percent"),
+        CheckConstraint("style_percent BETWEEN 0 AND 100", name="style_percent"),
+    )
 
 
 class AuthSession(Base):
@@ -144,6 +157,8 @@ class Concept(Base):
     term: Mapped[str] = mapped_column(String(200), nullable=False)
     definition_draft: Mapped[str | None] = mapped_column(Text)
     source_confidence: Mapped[str | None] = mapped_column(String(20))
+    difficulty_estimate: Mapped[int | None] = mapped_column(SmallInteger)
+    difficulty_source: Mapped[str | None] = mapped_column(String(20))
     revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
@@ -153,6 +168,12 @@ class Concept(Base):
         CheckConstraint(
             "source_confidence IS NULL OR source_confidence IN ('high','medium','low','inferred')",
             name="source_confidence",
+        ),
+        CheckConstraint(
+            "difficulty_estimate IS NULL OR difficulty_estimate BETWEEN 1 AND 5", name="difficulty_estimate"
+        ),
+        CheckConstraint(
+            "difficulty_source IS NULL OR difficulty_source IN ('claude','learner')", name="difficulty_source"
         ),
     )
 
@@ -188,6 +209,8 @@ class Question(Base):
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     rubric: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     source_refs: Mapped[list[Any]] = _json_list()
+    question_type: Mapped[str] = mapped_column(String(10), nullable=False, server_default="open", default="open")
+    options: Mapped[list[Any] | None] = mapped_column(JSONB)  # [{"key": "A", "text": "..."}] for mcq
     difficulty: Mapped[int | None] = mapped_column(SmallInteger)
     provenance: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = _created()
@@ -195,6 +218,7 @@ class Question(Base):
     __table_args__ = (
         CheckConstraint("bloom_level BETWEEN 1 AND 6", name="bloom_level"),
         CheckConstraint("difficulty IS NULL OR difficulty BETWEEN 1 AND 5", name="difficulty"),
+        CheckConstraint("question_type IN ('open','mcq')", name="question_type"),
     )
 
 
@@ -214,6 +238,8 @@ class Attempt(Base):
     user_id: Mapped[uuid.UUID] = _owner()
     question_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("questions.id"), nullable=False, index=True)
     session_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("study_sessions.id"))
+    quiz_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("quizzes.id"), index=True)
+    selected_option: Mapped[str | None] = mapped_column(String(10))
     client_request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     answer_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -528,3 +554,117 @@ class ConnectorUsage(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
     day: Mapped[date] = mapped_column(Date, primary_key=True)
     requests: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+
+
+# --------------------------------------------------------------------------- study targets (exams) and planning
+
+
+class StudyTarget(Base):
+    """What the learner prepares for: a kolokvij, an exam or another assessment, with its exact scope."""
+
+    __tablename__ = "study_targets"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    course_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("courses.id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="upcoming", default="upcoming")
+    result: Mapped[str | None] = mapped_column(String(120))
+    scope_description: Mapped[str] = mapped_column(Text, nullable=False)  # the learner's own words, verbatim
+    notes: Mapped[str | None] = mapped_column(Text)  # specifics: allowed aids, question types, emphasis …
+    goal: Mapped[str] = mapped_column(String(20), nullable=False, server_default="long_term", default="long_term")
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('kolokvij','izpit','other')", name="kind"),
+        CheckConstraint("status IN ('upcoming','passed','failed','cancelled')", name="status"),
+        CheckConstraint("goal IN ('exam_only','long_term')", name="goal"),
+    )
+
+
+class StudyTargetScope(Base):
+    """Resolved scope of a target. No rows means the whole course."""
+
+    __tablename__ = "study_target_scope"
+
+    id: Mapped[uuid.UUID] = _pk()
+    target_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("study_targets.id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sources.id"))
+    page_from: Mapped[int | None] = mapped_column(Integer)
+    page_to: Mapped[int | None] = mapped_column(Integer)
+    syllabus_item_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("syllabus_items.id"))
+    concept_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("concepts.id"))
+
+    __table_args__ = (CheckConstraint("kind IN ('source','pages','topic','concept')", name="kind"),)
+
+
+class TargetProfile(Base):
+    """Exam profile derived from past papers: item types, Bloom mix and topic weights (AI-derived, labelled)."""
+
+    __tablename__ = "target_profiles"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    target_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("study_targets.id"), nullable=False, index=True)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sources.id"))
+    item_types: Mapped[list[Any]] = _json_list()
+    bloom_mix: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    topic_weights: Mapped[list[Any]] = _json_list()
+    example_items: Mapped[list[Any]] = _json_list()
+    notes: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[datetime] = _created()
+
+
+class AvailabilityOverride(Base):
+    __tablename__ = "availability_overrides"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    minutes: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = _updated()
+
+    __table_args__ = (CheckConstraint("minutes BETWEEN 0 AND 720", name="minutes"),)
+
+
+# --------------------------------------------------------------------------- exam simulations (quizzes)
+
+
+class Quiz(Base):
+    """A kolokvij simulation: several questions answered in one form and submitted together."""
+
+    __tablename__ = "quizzes"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    course_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("courses.id"), nullable=False, index=True)
+    target_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("study_targets.id"))
+    session_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("study_sessions.id"))
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    time_limit_minutes: Mapped[int | None] = mapped_column(SmallInteger)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="open", default="open")
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    draft: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    draft_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    draft_saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created()
+
+    __table_args__ = (CheckConstraint("status IN ('open','submitted')", name="status"),)
+
+
+class QuizItem(Base):
+    __tablename__ = "quiz_items"
+
+    quiz_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("quizzes.id"), primary_key=True)
+    position: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    question_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("questions.id"), nullable=False)
+    points: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="1", default=1)
