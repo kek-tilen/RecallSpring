@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://recallspring.invalid/schemas/assessment.schema.json",
+  "title": "RecallSpring AI-assessment result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["attempt_id", "status", "grade", "feedback", "confidence", "rubric_version", "evidence_refs"],
+  "properties": {
+    "attempt_id": {"type": "string", "format": "uuid"},
+    "status": {"enum": ["final", "provisional", "ungraded"]},
+    "grade": {"type": ["integer", "null"], "minimum": 0, "maximum": 4},
+    "feedback": {"type": "string", "maxLength": 3000},
+    "confidence": {"enum": ["low", "medium", "high"]},
+    "rubric_version": {"type": "string", "minLength": 1, "maxLength": 60},
+    "evidence_refs": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 160}},
+    "strengths": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 500}},
+    "gaps": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 500}},
+    "remediation": {"type": ["string", "null"], "maxLength": 700},
+    "rubric_scores": {"type": "object", "maxProperties": 12, "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 4}}
+  },
+  "allOf": [
+    {"if": {"properties": {"status": {"const": "ungraded"}}}, "then": {"properties": {"grade": {"type": "null"}}}},
+    {"if": {"properties": {"status": {"enum": ["final", "provisional"]}}}, "then": {"properties": {"grade": {"type": "integer"}}}}
+  ]
+}

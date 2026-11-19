@@ -1,0 +1,34 @@
+# Never publish owner deployment topology or secrets
+private/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*oauth*.json
+*credential*.json
+*.sqlite
+*.db
+*.log
+*.bak
+
+# Real learner material for local testing only (never commit)
+fixtures-private/
+local-data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+build/

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://recallspring.invalid/schemas/visual-block.schema.json",
+  "title": "RecallSpring safe visual block",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "title", "alt_text", "data"],
+  "properties": {
+    "type": {"enum": ["process_flow", "comparison", "timeline", "concept_map", "data_chart", "interactive_parameter"]},
+    "title": {"type": "string", "minLength": 1, "maxLength": 120},
+    "alt_text": {"type": "string", "minLength": 1, "maxLength": 700},
+    "source_refs": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 160}},
+    "illustrative": {"type": "boolean"},
+    "data": {"type": "object", "maxProperties": 12}
+  },
+  "allOf": [
+    {"if": {"properties": {"type": {"const": "process_flow"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/graphData"}}}},
+    {"if": {"properties": {"type": {"const": "concept_map"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/graphData"}}}},
+    {"if": {"properties": {"type": {"const": "comparison"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/comparisonData"}}}},
+    {"if": {"properties": {"type": {"const": "timeline"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/timelineData"}}}},
+    {"if": {"properties": {"type": {"const": "data_chart"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/chartData"}}}},
+    {"if": {"properties": {"type": {"const": "interactive_parameter"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/parameterData"}}}}
+  ],
+  "$defs": {
+    "node": {"type": "object", "additionalProperties": false, "required": ["id", "label"], "properties": {"id":{"type":"string","maxLength":50},"label":{"type":"string","maxLength":140}}},
+    "graphData": {"type": "object", "additionalProperties": false, "required": ["nodes", "edges"], "properties": {"nodes":{"type":"array","minItems":1,"maxItems":18,"items":{"$ref":"#/$defs/node"}},"edges":{"type":"array","maxItems":30,"items":{"type":"object","additionalProperties":false,"required":["from","to"],"properties":{"from":{"type":"string","maxLength":50},"to":{"type":"string","maxLength":50}}}}}},
+    "comparisonData": {"type":"object","additionalProperties":false,"required":["columns","rows"],"properties":{"columns":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"string","maxLength":80}},"rows":{"type":"array","minItems":1,"maxItems":12,"items":{"type":"object","additionalProperties":false,"required":["criterion","values"],"properties":{"criterion":{"type":"string","maxLength":90},"values":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"string","maxLength":180}}}}}}},
+    "timelineData": {"type":"object","additionalProperties":false,"required":["events"],"properties":{"events":{"type":"array","minItems":2,"maxItems":20,"items":{"type":"object","additionalProperties":false,"required":["label","description"],"properties":{"label":{"type":"string","maxLength":90},"description":{"type":"string","maxLength":200}}}}}},
+    "chartData": {"type":"object","additionalProperties":false,"required":["chart","x_label","y_label","points"],"properties":{"chart":{"enum":["line","bar","scatter"]},"x_label":{"type":"string","maxLength":70},"y_label":{"type":"string","maxLength":70},"points":{"type":"array","minItems":2,"maxItems":50,"items":{"type":"object","additionalProperties":false,"required":["x","y"],"properties":{"x":{"type":["string","number"]},"y":{"type":"number"}}}}}},
+    "parameterData": {"type":"object","additionalProperties":false,"required":["parameter","minimum","maximum","step","initial","preset"],"properties":{"parameter":{"type":"string","maxLength":70},"minimum":{"type":"number"},"maximum":{"type":"number"},"step":{"type":"number","exclusiveMinimum":0},"initial":{"type":"number"},"preset":{"enum":["linear_growth","exponential_decay","quadratic_curve","unit_circle"]}}}
+  }
+}
