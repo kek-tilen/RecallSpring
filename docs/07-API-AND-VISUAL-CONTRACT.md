@@ -91,6 +91,10 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `get_quiz_results` | read | Answers (as learner material), keys, rubrics, pending open answers, points |
 | `record_assessments` | append | Batch grading, all or nothing |
 | `get_study_plan` | read | `plan-v1`, optional `course_id` (course) or none (overview), capacity per active target |
+| `open_summary_form` | UI | MCP App `ui://recallspring/summary`: the learner summarises the chunk just taught |
+| `save_learning_summary` | append, app-only | `POST /connector/learning`: exact summary as a note, concepts become `studied` |
+| `mark_concepts_known` | audited update | `POST /connector/concepts/known`: learner self-report with reason |
+| `create_quiz` / `create_questions` guard | — | `409 concepts_not_studied` for practice on unstudied concepts; `mode="diagnostic"` pre-tests never schedule reviews |
 
 ## API example: attempt creation
 

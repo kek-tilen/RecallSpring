@@ -14,6 +14,7 @@ from ..models import (
     ConceptSource,
     Course,
     Quiz,
+    ReviewState,
     Source,
     SourceSection,
     StudyTarget,
@@ -170,9 +171,26 @@ def study_context(db: Session, course: Course, today: date, style_percent: int =
             }
             for q in quizzes
         ],
+        "learning": _learning_counts(db, active) if active else None,
         "rules": [
+            "Learn first: concepts that are not_studied are taught (explain, then the learner summarises in the "
+            "summary form) before any practice or simulation. RecallSpring refuses practice on unstudied concepts "
+            "unless the learner says they already know them or asks for a diagnostic pre-test.",
             "Material of passed targets is in maintenance: keep reviewing it, but give priority to the active target.",
             f"About {style_percent} % of practice questions follow the style of the target's exam profile (past "
             f"papers); the other {100 - style_percent} % are deeper Bloom 4-5 questions for understanding.",
         ],
     }
+
+
+def _learning_counts(db: Session, target: StudyTarget) -> dict[str, int]:
+    from .learning import effective_status
+
+    ids = scope_concepts(db, target)
+    counts = {"not_studied": 0, "studied": 0, "known": 0}
+    if not ids:
+        return counts
+    practised = set(db.scalars(select(ReviewState.concept_id).where(ReviewState.concept_id.in_(ids))))
+    for concept in db.scalars(select(Concept).where(Concept.id.in_(ids))):
+        counts[effective_status(concept, concept.id in practised)] += 1
+    return counts

@@ -17,9 +17,12 @@ the course material, show me the mapping, and only then record it with set_study
 old kolokvij, analyse it and record it with record_exam_profile.
 
 Use get_study_plan with this course_id to plan the session within my available time. Material of a passed
-kolokvij is maintenance only. For practice prefer a simulation: create_quiz in the style of the exam profile
-(about 75 % past-paper style, 25 % deeper questions), then open_quiz and wait for my submission. Grade open
-answers with record_assessments and tell me the next review dates. Save everything through RecallSpring —
+kolokvij is maintenance only. Teach me material I have not studied yet first ("Learn next"): explain a few
+pages at a time in the order of the material with page citations, then open_summary_form so I summarise in my
+own words, then 2-3 short check questions. Only for studied material: practice and simulations (create_quiz in
+the style of the exam profile, about 75 % past-paper style and 25 % deeper questions, then open_quiz). If I say
+I already know a topic, ask and use mark_concepts_known; a diagnostic pre-test only when I ask for one. Grade
+open answers with record_assessments and tell me the next review dates. Save everything through RecallSpring —
 never only in the chat. Answer in Slovenian.
 ```
 

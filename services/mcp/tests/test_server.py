@@ -238,12 +238,21 @@ async def test_every_ui_tool_is_registered_with_its_resource() -> None:
         tools = {t.name: t for t in (await client.list_tools()).tools}
         resources = {str(r.uri) for r in (await client.list_resources()).resources}
     ui = {name: t.meta["ui"] for name, t in tools.items() if t.meta and "ui" in t.meta}
-    assert set(ui) == {"open_answer_form", "submit_answer_from_form", "open_quiz", "save_quiz_draft", "submit_quiz"}
+    assert set(ui) == {
+        "open_answer_form",
+        "submit_answer_from_form",
+        "open_quiz",
+        "save_quiz_draft",
+        "submit_quiz",
+        "open_summary_form",
+        "save_learning_summary",
+    }
     assert {u["resourceUri"] for u in ui.values()} <= resources
     assert {n for n, u in ui.items() if u.get("visibility") == ["app"]} == {
         "submit_answer_from_form",
         "save_quiz_draft",
         "submit_quiz",
+        "save_learning_summary",
     }
 
 
@@ -317,3 +326,46 @@ async def test_prompts_start_with_the_study_context() -> None:
     assert names == ["start-studying", "exam-overview"]
     text = prompt.messages[0].content.text
     assert "get_study_context" in text and "1st kolokvij" in text and "KV" in text
+
+
+# ---------------------------------------------------------------- learning first
+
+
+async def test_summary_form_is_self_contained_and_text_only() -> None:
+    async with Client(mcp) as client:
+        html = (await client.read_resource("ui://recallspring/summary")).contents[0].text
+    assert "<script src" not in html and "http://" not in html and "https://" not in html
+    assert "innerHTML" not in html and '"save_learning_summary"' in html and "Skip writing" in html
+
+
+async def test_summary_is_saved_exactly_with_its_request_id(api: FakeApi) -> None:
+    api.route("POST", "/learning", 201, {"note_id": "n1", "saved_at": "x", "concepts": [{"id": "c1"}]})
+    text = "  Glikoliza: citoplazma." + chr(10) + "(moje besede)  "
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "save_learning_summary",
+            {
+                "course_id": "k1",
+                "concept_ids": ["c1"],
+                "title": "Povzetek",
+                "text": text,
+                "client_request_id": "c0ffee00-0000-4000-8000-0000000000bb",
+            },
+        )
+    sent = api.requests[0]
+    assert json.loads(sent.content)["text"] == text
+    assert sent.headers["Idempotency-Key"] == "c0ffee00-0000-4000-8000-0000000000bb"
+    assert result.structured_content["note_id"] == "n1"
+
+
+async def test_instructions_and_quiz_tool_put_learning_first() -> None:
+    async with Client(mcp) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        prompt = await client.get_prompt("start-studying", {"course": "KV"})
+        instructions = client.instructions or ""
+    assert "LEARN FIRST" in instructions
+    assert (
+        "diagnostic" in tools["create_quiz"].description and "mode" in tools["create_quiz"].input_schema["properties"]
+    )
+    assert "mark_concepts_known" in tools
+    assert "not studied yet first" in prompt.messages[0].content.text

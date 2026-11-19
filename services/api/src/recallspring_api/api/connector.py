@@ -54,6 +54,8 @@ from ..schemas import (
     CourseIn,
     CourseOut,
     DifficultyIn,
+    KnownConceptsIn,
+    LearningSummaryIn,
     PlanOut,
     QuizDraftIn,
     QuizIn,
@@ -72,6 +74,7 @@ from ..services import attempts as attempt_svc
 from ..services import quizzes as quiz_svc
 from ..services import sources as source_svc
 from ..services.events import audit, learning_event
+from ..services.learning import effective_status, mark, require_studied, save_summary
 from ..services.ownership import owned
 from ..services.planner import today_plan
 from ..services.reviews import concept_ids_for_question, recompute, review_queue
@@ -152,6 +155,7 @@ def outline(course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session
             {
                 "id": str(c.id),
                 "term": c.term,
+                "study_status": effective_status(c, state is not None),
                 "definition_draft": c.definition_draft,
                 "topic_id": str(c.syllabus_item_id) if c.syllabus_item_id else None,
                 "source_section_ids": links,
@@ -308,6 +312,7 @@ def create_questions(
     if replay := replay_if_seen(db, ctx, payload):
         return replay
     provenance = {"origin": "claude_connector", "model": payload.model_name, "model_reported_by": "assistant"}
+    require_studied(db, ctx.user.id, [cid for item in payload.questions for cid in item.concept_ids])
     created = []
     for item in payload.questions:
         _course_concepts(db, ctx.user.id, payload.course_id, item.concept_ids)
@@ -468,6 +473,10 @@ def record_one_assessment(
     )
     now = clock.now()
     schedules = recompute(db, ctx.user, concept_ids_for_question(db, attempt.question_id), now)
+    if attempt.quiz_id is not None:
+        quiz = db.get(Quiz, attempt.quiz_id)
+        if quiz is not None and quiz.mode == "diagnostic":
+            quiz_svc.apply_diagnostic(db, ctx.user, quiz, ctx.request_id)
     body = {
         **attempt_svc.attempt_view(db, attempt),
         "schedule": [
@@ -928,3 +937,49 @@ def record_assessments_batch(
             }
         )
     return commit_with_response(db, ctx, payload, 200, {"results": results})
+
+
+# ---------------------------------------------------------------- learning first (ADR-006)
+
+
+@router.post("/learning", status_code=201)
+def save_learning_summary(
+    payload: LearningSummaryIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """End of a learning chunk, sent by the summary form: the learner's own summary is stored exactly as a note and
+    the concepts become *studied* (practice and simulations are allowed from then on)."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    owned(db, Course, payload.course_id, ctx.user.id)
+    body = save_summary(
+        db,
+        ctx.user,
+        course_id=payload.course_id,
+        concept_ids=payload.concept_ids,
+        title=payload.title,
+        text=payload.text,
+        client_request_id=payload.client_request_id,
+        request_id=ctx.request_id,
+    )
+    db.flush()
+    return commit_with_response(db, ctx, payload, 201, body)
+
+
+@router.post("/concepts/known")
+def mark_known(
+    payload: KnownConceptsIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """The learner says they already learned these concepts (e.g. in lectures). Audited with their reason."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    concepts = [owned(db, Concept, cid, ctx.user.id, for_update=True) for cid in dict.fromkeys(payload.concept_ids)]
+    out = mark(db, ctx.user, concepts, "known", "self_report", ctx.request_id)
+    audit(
+        db,
+        actor_id=ctx.user.id,
+        action="concepts.marked_known",
+        details={"concepts": [c["id"] for c in out], "reason": payload.reason},
+        request_id=ctx.request_id,
+    )
+    db.flush()
+    return commit_with_response(db, ctx, payload, 200, {"concepts": out})

@@ -26,6 +26,7 @@ from .client import RecallSpringClient
 
 FORM_URI = "ui://recallspring/answer-form"
 QUIZ_URI = "ui://recallspring/quiz"
+SUMMARY_URI = "ui://recallspring/summary"
 
 INSTRUCTIONS = """\
 RecallSpring is the learner's own study system. It stores their sources, notes, study targets (kolokvij / exam),
@@ -39,14 +40,23 @@ Start of every study session in a course:
    material (get_course_outline), confirm it, then set_study_target. Analyse an old paper with record_exam_profile.
 2. get_study_plan (course_id for one course, none for an overview across courses) and propose a session within the
    learner's available time. Passed material is maintenance only; the active target has priority.
-3. Practice: prefer a simulation - create_quiz in the style of the exam profile (the past-paper/deeper share is in
-   get_study_context), then open_quiz and wait. For a single question use create_questions + open_answer_form.
-   Only if no form can be shown, ask in chat and save with submit_chat_answer, copying the learner's words exactly.
-4. Grading: get_quiz_results (or get_attempt), then record_assessments (or record_assessment): grade 0-4 (0 No
+3. LEARN FIRST. Never quiz material the learner has not studied. For "Learn next" items (study_status
+   not_studied) teach in chunks of a few pages, in the order of the material: read the sections
+   (get_source_section), explain clearly with examples and page citations (a visual when it helps), answer the
+   learner's questions, then open_summary_form so they summarise in their own words (saved exactly as their note;
+   this marks the concepts studied), then 2-3 short check questions (Bloom 1-2, create_questions +
+   open_answer_form). If the learner says they already know a topic (e.g. from lectures), ask and use
+   mark_concepts_known. A pre-test only when the learner asks: create_quiz with mode="diagnostic" (it does not
+   affect reviews; concepts they show are marked known). RecallSpring refuses practice on unstudied concepts.
+4. Practice and simulations for studied material: create_quiz in the style of the exam profile (the past-paper /
+   deeper share is in get_study_context), then open_quiz and wait. Single questions: create_questions +
+   open_answer_form. Only if no form can be shown, ask in chat and save with submit_chat_answer, copying the
+   learner's words exactly.
+5. Grading: get_quiz_results (or get_attempt), then record_assessments (or record_assessment): grade 0-4 (0 No
    evidence, 1 Fragile, 2 Partial, 3 Solid, 4 Transfer); "provisional" when several answers are defensible or you
    are unsure, "ungraded" with grade null when it cannot be judged. Reward reasoning, not agreement with you. Cite
    only section IDs you received. Explain the feedback and the next review dates RecallSpring returned.
-5. End with record_session_summary. Update the target when the learner reports a result (update_study_target).
+6. End with record_session_summary. Update the target when the learner reports a result (update_study_target).
 
 Building the library (only when the learner asks): create_course; import_file for a PDF/Markdown/text file on
 this computer (it goes straight to RecallSpring, not through the chat); add_text_source only for short pasted
@@ -191,6 +201,52 @@ async def submit_quiz(quiz_id: str, client_request_id: str, answers: list[QuizAn
         idempotency_key=client_request_id,
     )
     return CallToolResult(content=[TextContent(type="text", text=as_json(result))], structured_content=result)
+
+
+@apps.tool(resource_uri=SUMMARY_URI, annotations=APPEND, title="Ask for the learner's summary")
+async def open_summary_form(
+    course_id: str, concept_ids: list[str], title: str, covered: str | None = None
+) -> CallToolResult:
+    """End of a learning chunk: show a form where the learner summarises the part you just taught in their own
+    words. Saving it stores the summary exactly as their note and marks the concepts studied (practice is allowed
+    afterwards). covered = the pages or sections you taught, e.g. "Predavanje 3, p. 12-15"."""
+    outline = await get_client().get(f"/courses/{course_id}/outline")
+    terms = [c["term"] for c in outline["concepts"] if c["id"] in set(concept_ids)]
+    data = {"course_id": course_id, "concept_ids": concept_ids, "title": title, "covered": covered, "terms": terms}
+    text = (
+        f"Showing the summary form for '{title}' ({', '.join(terms)}). Wait for the learner; then ask 2-3 short "
+        "check questions on this part."
+    )
+    return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=data)
+
+
+@apps.tool(resource_uri=SUMMARY_URI, visibility=["app"], annotations=APPEND, title="Save learning summary")
+async def save_learning_summary(
+    course_id: str, concept_ids: list[str], title: str, client_request_id: str, text: str = ""
+) -> CallToolResult:
+    """Called only by the summary form: stores the learner's own summary exactly and marks the concepts studied."""
+    saved = await get_client().post(
+        "/learning",
+        {
+            "course_id": course_id,
+            "concept_ids": concept_ids,
+            "title": title,
+            "text": text,
+            "client_request_id": client_request_id,
+        },
+        idempotency_key=client_request_id,
+    )
+    return CallToolResult(content=[TextContent(type="text", text=as_json(saved))], structured_content=saved)
+
+
+apps.add_html_resource(
+    SUMMARY_URI,
+    resources.files("recallspring_mcp").joinpath("summary_form.html").read_text(encoding="utf-8"),
+    name="summary",
+    title="RecallSpring learning summary",
+    description="Summarise what you just studied in your own words; saved exactly as your note.",
+    prefers_border=True,
+)
 
 
 apps.add_html_resource(
@@ -633,11 +689,13 @@ async def create_quiz(
     session_id: str | None = None,
     time_limit_minutes: int | None = None,
     model_name: str | None = None,
+    mode: Literal["practice", "diagnostic"] = "practice",
 ) -> str:
     """Create a kolokvij simulation (1-30 questions) for the active target, in the style of its exam profile:
     multiple-choice items (options A-H + correct_option; RecallSpring grades them) and open items (expected_points
     = private rubric; you grade them after submission). Follow the past-paper/deeper share from
-    get_study_context and mark each item's style. Then show it with open_quiz."""
+    get_study_context and mark each item's style. mode="practice" needs studied concepts (RecallSpring refuses
+    otherwise); mode="diagnostic" is a pre-test only when the learner asks for one. Then show it with open_quiz."""
     payload = {
         "course_id": course_id,
         "title": title,
@@ -646,6 +704,7 @@ async def create_quiz(
         "session_id": session_id,
         "time_limit_minutes": time_limit_minutes,
         "model_name": model_name,
+        "mode": mode,
     }
     return as_json(await get_client().post("/quizzes", payload))
 
@@ -682,6 +741,13 @@ async def record_assessments(items: list[AssessmentDraft], model_name: str | Non
     return as_json(await get_client().post("/assessments/batch", payload))
 
 
+@mcp.tool(annotations=APPEND)
+async def mark_concepts_known(concept_ids: list[str], reason: str) -> str:
+    """Only when the learner tells you they already learned these concepts (e.g. "we covered this in lectures"):
+    marks them known so practice is allowed. reason = what the learner said. Ask before using it."""
+    return as_json(await get_client().post("/concepts/known", {"concept_ids": concept_ids, "reason": reason}))
+
+
 # ---------------------------------------------------------------- prompts (shown in Claude's + menu)
 
 
@@ -693,8 +759,9 @@ def start_studying(course: str = "") -> str:
         "prepare for (1st kolokvij, 2nd kolokvij or the exam, whole course or only a part), the date, from which "
         "material to which, whether I have an old kolokvij, and any specifics. Map my answer to the course material, "
         "confirm it with me, then record it with set_study_target (and record_exam_profile for an old paper). Then "
-        "call get_study_plan for this course and propose today's session within my available time. Prefer a short "
-        "simulation (create_quiz + open_quiz) in the style of the exam profile."
+        "call get_study_plan for this course and propose today's session within my available time. Teach "
+        "material I have not studied yet first (explain, my summary in the summary form, short checks); "
+        "only then practise or run a simulation in the style of the exam profile."
     )
 
 

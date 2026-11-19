@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RecallSpring summary</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #FFFFFF; --surface: #EDF7F4; --ink: #24332F; --muted: #52645C; --border: #CBDDD6;
+    --primary: #0F766E; --primary-hover: #115E59; --on-primary: #FFFFFF; --danger: #B42318; --focus: #0F766E;
+    --radius-control: 10px;
+    font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #14201D; --surface: #1C2B27; --ink: #E3EEEA; --muted: #A7BAB2; --border: #33463F;
+    --primary: #5EC4B6; --primary-hover: #7FD3C7; --on-primary: #0B1A17; --danger: #F59A8F; --focus: #5EC4B6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; line-height: 1.5; }
+  main { padding: 16px; max-width: 720px; }
+  .eyebrow { margin: 0 0 4px; color: var(--muted); font-size: 13px; }
+  h1 { margin: 0 0 6px; font-size: 18px; }
+  .covered { margin: 0 0 12px; color: var(--muted); font-size: 14px; white-space: pre-wrap; }
+  label { display: block; font-weight: 600; margin: 8px 0 6px; }
+  textarea { width: 100%; min-height: 180px; resize: vertical; padding: 10px 12px; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-control); }
+  textarea[readonly] { background: var(--surface); }
+  .hint { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  button { min-height: 44px; padding: 0 16px; font: inherit; border-radius: var(--radius-control); cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg); color: var(--ink); }
+  button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+  button.primary:hover { background: var(--primary-hover); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  #status { min-height: 1.5em; margin: 12px 0 0; }
+  #status.error { color: var(--danger); }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">RecallSpring · learning</p>
+  <h1 id="title">Loading…</h1>
+  <p class="covered" id="covered"></p>
+  <label for="summary">Summarise it in your own words</label>
+  <textarea id="summary" aria-describedby="hint" disabled></textarea>
+  <p class="hint" id="hint">Write from memory: the main idea, how it works, and one example. It is saved exactly as
+    your note. Short check questions follow.</p>
+  <div class="actions">
+    <button type="button" class="primary" id="save" disabled>Save summary</button>
+    <button type="button" id="skip" disabled>Skip writing</button>
+  </div>
+  <p id="status" role="status" aria-live="polite"></p>
+</main>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const ui = { title: $("title"), covered: $("covered"), text: $("summary"), save: $("save"), skip: $("skip"),
+               status: $("status") };
+  const clientRequestId = (crypto.randomUUID && crypto.randomUUID()) ||
+    "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) =>
+      (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
+  let chunk = null, saved = false, nextId = 1;
+  const pending = new Map();
+  const send = (msg) => window.parent.postMessage(msg, "*");
+  const notify = (method, params) => send({ jsonrpc: "2.0", method, params: params || {} });
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    send({ jsonrpc: "2.0", id, method, params: params || {} });
+  });
+  function setStatus(text, isError) { ui.status.textContent = text; ui.status.className = isError ? "error" : ""; }
+  function setBusy(busy) {
+    const locked = busy || saved || !chunk;
+    ui.save.disabled = locked; ui.skip.disabled = locked;
+    ui.text.disabled = !chunk; ui.text.readOnly = busy || saved;
+  }
+  function resultData(result) {
+    if (result && result.structuredContent) return result.structuredContent;
+    try { return JSON.parse(result.content[0].text); } catch (e) { return null; }
+  }
+  function applyContext(ctx) {
+    if (ctx && (ctx.theme === "dark" || ctx.theme === "light")) document.documentElement.dataset.theme = ctx.theme;
+  }
+  function show(data) {
+    if (!data || !data.concept_ids) return;
+    chunk = data;
+    ui.title.textContent = data.title;                       // textContent only: never parsed as HTML
+    ui.covered.textContent = (data.terms && data.terms.length ? "Concepts: " + data.terms.join(", ") : "") +
+      (data.covered ? "\nMaterial: " + data.covered : "");
+    setBusy(false);
+    ui.text.focus();
+  }
+  async function submit(skip) {
+    if (!chunk || saved) return;
+    const text = skip ? "" : ui.text.value;
+    if (!skip && !text.trim()) { setStatus("Write a few sentences, or choose “Skip writing”.", true); return; }
+    setBusy(true);
+    setStatus("Saving…");
+    try {
+      const res = await request("tools/call", { name: "save_learning_summary", arguments: {
+        course_id: chunk.course_id, concept_ids: chunk.concept_ids, title: chunk.title, text,
+        client_request_id: clientRequestId } });
+      const data = resultData(res);
+      if (res.isError || !data || !data.concepts) throw new Error((res.content && res.content[0] && res.content[0].text) || "Not saved.");
+      saved = true;
+      setBusy(false);
+      setStatus(skip ? "Marked as studied." : "Summary saved as your note at " + new Date(data.saved_at).toLocaleTimeString() + ".");
+      request("ui/message", { role: "user", content: { type: "text",
+        text: (skip ? "I studied this part without writing a summary." : "I saved my summary in RecallSpring.") +
+              " Please continue with 2-3 short check questions on it." } }).catch(() => {});
+    } catch (err) {
+      setBusy(false);
+      setStatus("Not saved: " + (err && err.message ? err.message : "unknown error") + " Your text is still here.", true);
+    }
+  }
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const msg = event.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id !== undefined && !msg.method) {
+      const entry = pending.get(msg.id);
+      if (!entry) return;
+      pending.delete(msg.id);
+      if (msg.error) entry.reject(new Error(msg.error.message || "Request failed")); else entry.resolve(msg.result);
+      return;
+    }
+    if (msg.method === "ui/notifications/tool-result") show(resultData(msg.params));
+    else if (msg.method === "ui/notifications/host-context-changed") applyContext(msg.params);
+    else if (msg.method === "ui/resource-teardown" && msg.id !== undefined) send({ jsonrpc: "2.0", id: msg.id, result: {} });
+  });
+  ui.save.addEventListener("click", () => submit(false));
+  ui.skip.addEventListener("click", () => submit(true));
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => notify("ui/notifications/size-changed",
+      { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })).observe(document.body);
+  }
+  request("ui/initialize", { protocolVersion: "2026-01-26",
+    appInfo: { name: "recallspring-summary", version: "1" }, appCapabilities: {} })
+    .then((res) => { applyContext(res && res.hostContext); notify("ui/notifications/initialized"); })
+    .catch(() => setStatus("This chat could not open the summary form. Write your summary in the chat instead.", true));
+})();
+</script>
+</body>
+</html>

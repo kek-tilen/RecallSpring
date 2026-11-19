@@ -159,6 +159,12 @@ class Concept(Base):
     source_confidence: Mapped[str | None] = mapped_column(String(20))
     difficulty_estimate: Mapped[int | None] = mapped_column(SmallInteger)
     difficulty_source: Mapped[str | None] = mapped_column(String(20))
+    # Learning-first (ADR-006): practice and simulations need the concept to be studied or known first.
+    study_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="not_studied", default="not_studied"
+    )
+    study_source: Mapped[str | None] = mapped_column(String(20))
+    studied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
@@ -174,6 +180,10 @@ class Concept(Base):
         ),
         CheckConstraint(
             "difficulty_source IS NULL OR difficulty_source IN ('claude','learner')", name="difficulty_source"
+        ),
+        CheckConstraint("study_status IN ('not_studied','studied','known')", name="study_status"),
+        CheckConstraint(
+            "study_source IS NULL OR study_source IN ('session','self_report','diagnostic')", name="study_source"
         ),
     )
 
@@ -650,6 +660,7 @@ class Quiz(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     time_limit_minutes: Mapped[int | None] = mapped_column(SmallInteger)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="open", default="open")
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, server_default="practice", default="practice")
     provenance: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     draft: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     draft_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
@@ -658,7 +669,10 @@ class Quiz(Base):
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created()
 
-    __table_args__ = (CheckConstraint("status IN ('open','submitted')", name="status"),)
+    __table_args__ = (
+        CheckConstraint("status IN ('open','submitted')", name="status"),
+        CheckConstraint("mode IN ('practice','diagnostic')", name="mode"),
+    )
 
 
 class QuizItem(Base):

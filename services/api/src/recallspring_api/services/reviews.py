@@ -7,11 +7,11 @@ from collections import defaultdict
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..learning.scheduler import Deferral, Evidence, ReviewSchedule, local_day_start, replay
-from ..models import Assessment, Attempt, Concept, QuestionConcept, ReviewDeferral, ReviewState, User
+from ..models import Assessment, Attempt, Concept, QuestionConcept, Quiz, ReviewDeferral, ReviewState, User
 
 
 def effective_assessment(assessments: list[Assessment]) -> Assessment | None:
@@ -32,7 +32,10 @@ def _evidence_for_concept(db: Session, user_id: uuid.UUID, concept_id: uuid.UUID
         select(Attempt, Assessment)
         .join(QuestionConcept, QuestionConcept.question_id == Attempt.question_id)
         .join(Assessment, Assessment.attempt_id == Attempt.id)
+        .outerjoin(Quiz, Quiz.id == Attempt.quiz_id)
         .where(QuestionConcept.concept_id == concept_id, Attempt.user_id == user_id)
+        # Diagnostic pre-tests show what is already known; they never drive the review schedule (ADR-006).
+        .where(or_(Quiz.id.is_(None), Quiz.mode != "diagnostic"))
     ).all()
     by_attempt: dict[uuid.UUID, tuple[Attempt, list[Assessment]]] = {}
     grouped: dict[uuid.UUID, list[Assessment]] = defaultdict(list)

@@ -20,14 +20,25 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import AvailabilityOverride, Concept, Course, ReviewState, StudyTarget, User
-from . import mastery
+from ..models import (
+    AvailabilityOverride,
+    Concept,
+    ConceptSource,
+    Course,
+    ReviewState,
+    Source,
+    SourceSection,
+    StudyTarget,
+    User,
+)
+from . import learning, mastery
 from .targets import active_target, latest_profile, live_targets, scope_concepts
 
 PLAN_POLICY = "plan-v1"
 MAX_ITEMS = 6
-BASE_MINUTES = {"Review due": 4, "Maintain": 4, "Strengthen": 6, "Explore next": 8}
-REMAINING_WORK = {"not_started": 14, "emerging": 10, "developing": 6, "reliable": 0}
+BASE_MINUTES = {"Review due": 4, "Maintain": 4, "Strengthen": 6, "Learn next": 12, "Practice": 6}
+# Minutes still needed per concept: learning (12) + first practice (6) when not studied, otherwise by band.
+REMAINING_WORK = {"not_studied": 18, "not_started": 6, "emerging": 10, "developing": 6, "reliable": 0}
 WEAK_REASONS = {"partial", "lapse", "uncertain_followup"}
 EMPTY_MESSAGE = "You're caught up. Continue a topic or browse your library."
 NOTE = "Estimated from practice, not a guarantee of recall."
@@ -101,6 +112,8 @@ def today_plan(
         else []
     )
 
+    sections_map, order_keys = _material(db, [c.id for c in concepts])
+    status_map = {c.id: learning.effective_status(c, c.id in states) for c in concepts}
     main: list[dict[str, Any]] = []
     maintenance: list[tuple[datetime, dict[str, Any]]] = []
     for concept in concepts:
@@ -147,9 +160,24 @@ def today_plan(
                     target_name,
                 )
             )
+        elif state is None and status_map[concept.id] == "not_studied":
+            pages = ", ".join(sec["citation_label"] for sec in sections_map.get(concept.id, [])[:3])
+            why = (
+                "New material, not studied yet: "
+                + (f"study {pages} " if pages else "study it ")
+                + "with Claude's explanation, then summarise it in your own words."
+                + context
+            )
+            item = _item("Learn next", concept, courses, why, band, diff, target_name)
+            item["_score"] = urgency * 0.95  # in material order, not by difficulty
+            item["_order"] = order_keys.get(concept.id, ())
+            if weight > 1.0:
+                item["estimated_minutes"] += 4  # frequent on past papers: study it in more depth
+            main.append(item)
         elif state is None:
-            why = "Not practised yet. Read the linked source, write a note, then try a first question." + context
-            main.append(_scored(urgency * weight, 0.9, "Explore next", concept, courses, why, band, diff, target_name))
+            label = "Studied" if status_map[concept.id] == "studied" else "Already known"
+            why = f"{label}, not practised yet: a few Bloom 3-5 questions check it." + context
+            main.append(_scored(urgency * weight, 0.9, "Practice", concept, courses, why, band, diff, target_name))
         elif band == "emerging" or state.due_reason.get("code") in WEAK_REASONS:
             why = (
                 f"{mastery.BAND_LABELS[band]}: your last answers showed gaps; a short exercise now strengthens it "
@@ -169,7 +197,7 @@ def today_plan(
         maint_used += item["estimated_minutes"]
     used += maint_used
     main_added = 0
-    for item in sorted(main, key=lambda i: (-i["_score"], i["term"])):
+    for item in sorted(main, key=lambda i: (-round(i["_score"], 6), i.get("_order", ()), i["term"])):
         if len(items) >= MAX_ITEMS or (main_added and used + item["estimated_minutes"] > available):
             break
         items.append(item)
@@ -178,6 +206,9 @@ def today_plan(
     ordered = [i for i in items if i["category"] != "Maintain"] + [i for i in items if i["category"] == "Maintain"]
     for i in ordered:
         i.pop("_score", None)
+        i.pop("_order", None)
+        i["study_status"] = status_map[i["concept_id"]]
+        i["sections"] = sections_map.get(i["concept_id"], [])[:3]
     return {
         "policy_version": PLAN_POLICY,
         "generated_at": now,
@@ -186,7 +217,7 @@ def today_plan(
         "maintenance_percent": user.maintenance_percent,
         "items": ordered,
         "targets": [
-            _capacity(db, user, courses[cid], sc, states, now, today, len(scopes))
+            _capacity(db, user, courses[cid], sc, states, status_map, now, today, len(scopes))
             for cid, sc in scopes.items()
             if sc.active is not None
         ],
@@ -241,18 +272,22 @@ def _capacity(
     course: Course,
     sc: _CourseScope,
     states: dict[uuid.UUID, ReviewState],
+    status_map: dict[uuid.UUID, str],
     now: datetime,
     today: date,
     course_count: int,
 ) -> dict[str, Any]:
     assert sc.active is not None and sc.active_scope is not None and sc.days_left is not None
     bands = {b: 0 for b in mastery.BANDS}
+    studied = {"not_studied": 0, "studied": 0, "known": 0}
     remaining = 0
     for concept_id in sc.active_scope:
         state = states.get(concept_id)
         b = mastery.band(state)
         bands[b] += 1
-        remaining += REMAINING_WORK[b] + (
+        studied[status_map.get(concept_id, "not_studied")] += 1
+        work_key = "not_studied" if b == "not_started" and status_map.get(concept_id) == "not_studied" else b
+        remaining += REMAINING_WORK[work_key] + (
             BASE_MINUTES["Review due"] if state is not None and state.due_at <= now else 0
         )
     days = max(0, sc.days_left)
@@ -276,8 +311,33 @@ def _capacity(
         "days_left": sc.days_left,
         "concepts_in_scope": len(sc.active_scope),
         "bands": bands,
+        "study_status": studied,
         "remaining_minutes": remaining,
         "available_minutes": usable,
         "status": status,
         "message": message,
     }
+
+
+def _material(
+    db: Session, concept_ids: list[uuid.UUID]
+) -> tuple[dict[uuid.UUID, list[dict[str, Any]]], dict[uuid.UUID, tuple]]:
+    """Linked sections per concept (for "study pages X") and each concept's position in the material
+    (source upload order, then page/position), so new material is learned in the order it is taught."""
+    if not concept_ids:
+        return {}, {}
+    rows = db.execute(
+        select(ConceptSource.concept_id, SourceSection, Source)
+        .join(SourceSection, SourceSection.id == ConceptSource.section_id)
+        .join(Source, Source.id == SourceSection.source_id)
+        .where(ConceptSource.concept_id.in_(concept_ids), Source.deleted_at.is_(None))
+        .order_by(Source.uploaded_at, Source.id, SourceSection.page, SourceSection.position)
+    ).all()
+    sections: dict[uuid.UUID, list[dict[str, Any]]] = {}
+    order: dict[uuid.UUID, tuple] = {}
+    for concept_id, section, source in rows:
+        sections.setdefault(concept_id, []).append(
+            {"section_id": section.id, "citation_label": section.citation_label, "filename": source.filename}
+        )
+        order.setdefault(concept_id, (source.uploaded_at, str(source.id), section.page or 0, section.position))
+    return sections, order

@@ -32,6 +32,7 @@
 | Default study time 60 min weekdays / 90 min weekends; maintenance share 15 % | Approved 2026-11-19 |
 | Kolokvij simulations in a RecallSpring form (MCQ + open), stored in RecallSpring; Claude's own chat widgets do not count as evidence | Approved 2026-11-19 |
 | Claude Projects: one per course + one Overview project (templates in `docs/claude-projects.md`) | Approved 2026-11-19 |
+| Learning first: teach new material (explain, own-words summary, short checks) before practice or simulations; server refuses practice on unstudied concepts; diagnostics only on request and never affect reviews | Approved 2026-11-19 (ADR-006) |
 
 ## Working assumptions (do not mistake for owner approval)
 

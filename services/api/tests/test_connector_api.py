@@ -185,6 +185,9 @@ def test_connector_questions_keep_provenance_and_validate_refs(owner_api: Api, c
         "expected_points": ["criterion"],
         "source_refs": [ids["section_ids"][1]],
     }
+    refused = conn.post("/questions", {"course_id": ids["course_id"], "questions": [good]})
+    assert refused.status_code == 409 and refused.json()["code"] == "concepts_not_studied"
+    conn.post("/concepts/known", {"concept_ids": [ids["concept_id"]], "reason": "covered in lectures"})
     r = conn.post("/questions", {"course_id": ids["course_id"], "questions": [good], "model_name": "Claude Opus 5.5"})
     assert r.status_code == 201
     q = r.json()["questions"][0]
@@ -234,7 +237,7 @@ def test_plan_orders_due_strengthen_explore_with_reasons(
 
     ids = owner_api.course_with_question()
     plan = conn.get("/plan").json()
-    assert [(i["category"], i["term"]) for i in plan["items"]] == [("Explore next", "Glycolysis")]
+    assert [(i["category"], i["term"]) for i in plan["items"]] == [("Learn next", "Glycolysis")]
 
     owner_api.answer(ids["question_id"], kind="dont_know", text="")
     frozen.advance(days=1)

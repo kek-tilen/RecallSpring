@@ -7,6 +7,7 @@ Thin MCP server that Claude Desktop starts over stdio. Every tool calls RecallSp
 - **Library (append):** `create_course`, `import_file` (local PDF/Markdown/text in Documents, Downloads or Desktop, uploaded directly, waits for extraction), `add_text_source` (pasted text), `create_concepts` (linked to sections or marked inferred), `get_source_status`
 - **Study targets and planning:** `get_study_context`, `set_study_target`, `update_study_target`, `record_exam_profile`, `set_concept_difficulty`, `set_availability`; `get_study_plan` takes `course_id` or none (overview)
 - **Simulations:** `create_quiz`, `open_quiz` (MCP App `ui://recallspring/quiz`, app-only `save_quiz_draft` / `submit_quiz`), `get_quiz_results`, `record_assessments` (batch)
+- **Learning first:** `open_summary_form` (MCP App `ui://recallspring/summary`, app-only `save_learning_summary`), `mark_concepts_known`; `create_quiz` takes `mode` (`practice` needs studied concepts, `diagnostic` never schedules reviews)
 - **Prompts:** `start-studying`, `exam-overview`
 - **MCP Apps:** `open_answer_form` renders `ui://recallspring/answer-form`, a self-contained first-party HTML form (no external scripts, `textContent` only). It saves the learner's exact text through the app-only tool `submit_answer_from_form` (`_meta.ui.visibility: ["app"]`), then posts a chat message so Claude grades it.
 - Learner material is wrapped in `<learner_material>` blocks and described to Claude as data, never instructions.

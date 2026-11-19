@@ -80,6 +80,12 @@ Suggested baseline weighted priority: overdue duration capped, low recent eviden
 - Knowledge bands (`not_started`, `emerging`, `developing`, `reliable`) and difficulty (observed after 3+ answers, else learner rating, else Claude's estimate) are explainable estimates.
 - Kolokvij simulations (multiple choice + open questions) are answered in a RecallSpring form: drafts autosave, submission stores every answer exactly in one transaction, multiple choice is graded from the key, open answers by Claude. About 75 % of practice questions follow the past-paper style, 25 % are deeper Bloom 4–5 questions.
 
+### Implemented: learning first (ADR-006)
+
+- Each concept is `not_studied`, `studied` or `known`. New material is taught before it is practised: Claude explains a few pages at a time in the order of the material, the learner writes a summary in their own words (saved exactly as a note), then 2–3 short checks. Only then do practice questions and kolokvij simulations follow.
+- RecallSpring refuses Claude's practice on unstudied concepts. A learner who already knows a topic says so (self-report, audited) or asks for a diagnostic pre-test, which never affects reviews and marks shown concepts as known.
+- The plan shows `Learn next` items with the pages to study, then `Practice`, `Review due`, `Strengthen` and `Maintain`.
+
 ## Long-term learning
 
 Review should persist after exams to address owner's reported forgetting. Long-term targets prioritize fundamentals and inter-topic transfer. Default schedule and concept importance can be adjusted by user with natural-language commands, but modifications always pass through typed server actions and audit.

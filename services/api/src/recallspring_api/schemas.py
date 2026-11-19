@@ -340,8 +340,14 @@ class NoteRevisionOut(BaseModel):
 # ---------------------------------------------------------------- planner
 
 
+class PlanSectionRef(BaseModel):
+    section_id: uuid.UUID
+    citation_label: str
+    filename: str
+
+
 class PlanItemOut(BaseModel):
-    category: Literal["Review due", "Strengthen", "Explore next", "Maintain"]
+    category: Literal["Review due", "Strengthen", "Learn next", "Practice", "Maintain"]
     concept_id: uuid.UUID
     term: str
     course_id: uuid.UUID
@@ -350,8 +356,10 @@ class PlanItemOut(BaseModel):
     estimated_minutes: int
     target: str | None = None
     band: Literal["not_started", "emerging", "developing", "reliable"]
+    study_status: Literal["not_studied", "studied", "known"]
     difficulty: int
     difficulty_source: str
+    sections: list[PlanSectionRef] = Field(default_factory=list)
 
 
 class TargetCapacityOut(BaseModel):
@@ -573,6 +581,10 @@ class QuizIn(BaseModel):
     time_limit_minutes: int | None = Field(default=None, ge=1, le=300)
     items: list[QuizItemIn] = Field(min_length=1, max_length=30)
     model_name: str | None = Field(default=None, max_length=120)
+    mode: Literal["practice", "diagnostic"] = Field(
+        default="practice",
+        description="practice needs studied concepts; diagnostic is a pre-test that does not affect reviews",
+    )
 
 
 class QuizAnswer(BaseModel):
@@ -597,3 +609,19 @@ class AssessmentBatchItem(ConnectorAssessmentIn):
 
 class AssessmentBatchIn(BaseModel):
     items: list[AssessmentBatchItem] = Field(min_length=1, max_length=30)
+
+
+# ---------------------------------------------------------------- learning first
+
+
+class LearningSummaryIn(BaseModel):
+    course_id: uuid.UUID
+    concept_ids: list[uuid.UUID] = Field(min_length=1, max_length=20)
+    title: str = Field(min_length=1, max_length=200)
+    text: str = Field(default="", max_length=200_000, description="The learner's own summary, exactly as typed")
+    client_request_id: uuid.UUID
+
+
+class KnownConceptsIn(BaseModel):
+    concept_ids: list[uuid.UUID] = Field(min_length=1, max_length=60)
+    reason: str = Field(min_length=1, max_length=500, description="What the learner said, e.g. covered in lectures")

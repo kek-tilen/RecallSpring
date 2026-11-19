@@ -11,10 +11,15 @@ from .conftest import Api, ConnectorApi, FrozenClock
 from .pdfs import make_pdf
 
 
-def course_with_concepts(api: Api, c: ConnectorApi, terms: list[str]) -> tuple[str, dict[str, str]]:
+def course_with_concepts(
+    api: Api, c: ConnectorApi, terms: list[str], known: bool = False
+) -> tuple[str, dict[str, str]]:
     course = c.post("/courses", {"title": "Komunikacijska varnost"}).json()["id"]
     created = c.post(f"/courses/{course}/concepts", {"concepts": [{"term": t} for t in terms]}).json()["concepts"]
-    return course, {x["term"]: x["id"] for x in created}
+    ids = {x["term"]: x["id"] for x in created}
+    if known:
+        assert c.post("/concepts/known", {"concept_ids": list(ids.values()), "reason": "lectures"}).status_code == 200
+    return course, ids
 
 
 def target(c: ConnectorApi, course: str, name: str, due: str, scope: list[dict[str, Any]], **extra: Any) -> dict:
@@ -63,7 +68,7 @@ def test_context_asks_what_the_learner_prepares_for_until_a_target_exists(
     assert ctx["needs_setup"] is False and ctx["ask_learner"] == []
     assert active["days_left"] == 14 and active["concepts_in_scope"] == 1
     assert active["scope_description"] == "2. kolokvij: as described by me" and active["notes"].startswith("Only")
-    assert "75 %" in ctx["rules"][1]
+    assert "75 %" in ctx["rules"][2] and "Learn first" in ctx["rules"][0]
 
 
 def test_page_range_scope_resolves_to_concepts_on_those_pages(owner_api: Api, conn: ConnectorApi) -> None:
@@ -124,7 +129,7 @@ def test_passed_kolokvij_goes_to_maintenance_and_the_next_one_gets_priority(
 
     plan = conn.get("/plan").json()
     cats = [(i["category"], i["term"]) for i in plan["items"]]
-    assert cats == [("Explore next", "Nmap"), ("Maintain", "Firewalls")]
+    assert cats == [("Learn next", "Nmap"), ("Maintain", "Firewalls")]
     assert "Maintenance of 1. kolokvij material" in plan["items"][1]["why_selected"]
     assert "Counts for 2. kolokvij in 9 days." in plan["items"][0]["why_selected"]
     assert plan["targets"][0]["target"] == "2. kolokvij" and plan["available_minutes"] == 60  # Friday default
@@ -136,7 +141,7 @@ def test_capacity_check_warns_when_time_is_short(owner_api: Api, conn: Connector
     course, ids = course_with_concepts(owner_api, conn, [f"Concept {i}" for i in range(10)])
     target(conn, course, "1. kolokvij", "2026-11-21", [])  # whole course, Thursday + Friday left
     cap = conn.get("/plan").json()["targets"][0]
-    assert cap["remaining_minutes"] == 140 and cap["available_minutes"] == 102 and cap["status"] == "at_risk"
+    assert cap["remaining_minutes"] == 180 and cap["available_minutes"] == 102 and cap["status"] == "at_risk"
     assert "Not enough time" in cap["message"] and cap["bands"]["not_started"] == 10
 
 
@@ -151,7 +156,7 @@ def test_availability_override_sets_todays_minutes(owner_api: Api, conn: Connect
 
 
 def test_exam_profile_weight_raises_a_topic(owner_api: Api, conn: ConnectorApi, frozen: FrozenClock) -> None:
-    course, ids = course_with_concepts(owner_api, conn, ["Alpha", "Zeta"])
+    course, ids = course_with_concepts(owner_api, conn, ["Alpha", "Zeta"], known=True)
     t = target(conn, course, "Izpit", "2026-12-20", [])
     r = conn.post(
         f"/targets/{t['id']}/profile",
@@ -179,7 +184,7 @@ def test_learner_difficulty_rating_is_not_overwritten_by_claude(owner_api: Api, 
     )
     assert r.json()["concepts"][0] == {"concept_id": ids["Crypto"], "difficulty": 5, "kept": "learner"}
     item = conn.get("/plan").json()["items"][0]
-    assert item["difficulty"] == 5 and item["difficulty_source"] == "learner" and item["estimated_minutes"] == 10
+    assert item["difficulty"] == 5 and item["difficulty_source"] == "learner" and item["estimated_minutes"] == 14
 
 
 def test_owner_study_settings_are_validated(owner_api: Api) -> None:
@@ -240,7 +245,7 @@ def make_quiz(c: ConnectorApi, course: str, concept: str, **extra: Any) -> dict:
 def test_simulation_flow_persists_answers_grades_mcq_and_awaits_claude(
     owner_api: Api, conn: ConnectorApi, frozen: FrozenClock
 ) -> None:
-    course, ids = course_with_concepts(owner_api, conn, ["Nmap"])
+    course, ids = course_with_concepts(owner_api, conn, ["Nmap"], known=True)
     quiz = make_quiz(conn, course, ids["Nmap"], time_limit_minutes=45)
     qid = quiz["quiz_id"]
 
@@ -296,7 +301,7 @@ def test_simulation_flow_persists_answers_grades_mcq_and_awaits_claude(
 
 
 def test_invalid_simulations_are_rejected(owner_api: Api, conn: ConnectorApi) -> None:
-    course, ids = course_with_concepts(owner_api, conn, ["Nmap"])
+    course, ids = course_with_concepts(owner_api, conn, ["Nmap"], known=True)
     base = {"course_id": course, "title": "x"}
     bad_key = {
         "type": "mcq",
@@ -326,7 +331,7 @@ def test_invalid_simulations_are_rejected(owner_api: Api, conn: ConnectorApi) ->
 
 
 def test_batch_grading_is_all_or_nothing(owner_api: Api, conn: ConnectorApi) -> None:
-    course, ids = course_with_concepts(owner_api, conn, ["Nmap"])
+    course, ids = course_with_concepts(owner_api, conn, ["Nmap"], known=True)
     quiz = make_quiz(conn, course, ids["Nmap"])
     form = conn.get(f"/quizzes/{quiz['quiz_id']}").json()
     conn.post(

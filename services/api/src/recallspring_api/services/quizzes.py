@@ -27,6 +27,7 @@ from ..models import (
 from ..schemas import QuizAnswer, QuizIn
 from .attempts import add_assessment, assessments_for, create_attempt
 from .events import learning_event
+from .learning import mark, require_studied
 from .reviews import concept_ids_for_question, effective_assessment, recompute
 from .sources import parse_refs, sections_in_course
 
@@ -60,6 +61,8 @@ def create_quiz(db: Session, user: User, payload: QuizIn, provenance: dict[str, 
         session = db.get(StudySession, payload.session_id)
         if session is None or session.user_id != user.id:
             raise not_found("Session")
+    if payload.mode == "practice":  # learning first (ADR-006): no practice simulation on unstudied material
+        require_studied(db, user.id, [cid for item in payload.items for cid in item.concept_ids])
     now = clock.now()
     quiz = Quiz(
         user_id=user.id,
@@ -68,6 +71,7 @@ def create_quiz(db: Session, user: User, payload: QuizIn, provenance: dict[str, 
         session_id=payload.session_id,
         title=payload.title,
         time_limit_minutes=payload.time_limit_minutes,
+        mode=payload.mode,
         provenance=provenance,
         created_at=now,
     )
@@ -145,6 +149,7 @@ def form_view(db: Session, quiz: Quiz) -> dict[str, Any]:
         "quiz_id": str(quiz.id),
         "title": quiz.title,
         "status": quiz.status,
+        "mode": quiz.mode,
         "time_limit_minutes": quiz.time_limit_minutes,
         "opened_at": quiz.opened_at.isoformat() if quiz.opened_at else None,
         "deadline": deadline(quiz).isoformat() if deadline(quiz) else None,
@@ -260,9 +265,36 @@ def submit(
         entity_type="quiz",
         entity_id=quiz.id,
         event_type="quiz.submitted",
-        payload={"items": len(items)},
+        payload={"items": len(items), "mode": quiz.mode},
         request_id=request_id,
     )
+    if quiz.mode == "diagnostic":
+        apply_diagnostic(db, user, quiz, request_id)
+
+
+def apply_diagnostic(db: Session, user: User, quiz: Quiz, request_id: str | None) -> list[dict[str, Any]]:
+    """A concept shown in a diagnostic pre-test (every item on it graded final, not low confidence, grade >= 3)
+    is marked *known*, so its learning step can be shortened; everything else stays to be learned. Concepts with
+    ungraded items wait. Called after submission and after each grade."""
+    if quiz.mode != "diagnostic":
+        return []
+    attempts = {a.question_id: a for a in db.scalars(select(Attempt).where(Attempt.quiz_id == quiz.id))}
+    verdict: dict[uuid.UUID, str] = {}  # "yes" | "no" | "pending"
+    for _, question in _items(db, quiz):
+        attempt = attempts.get(question.id)
+        eff = effective_assessment(assessments_for(db, attempt.id)) if attempt else None
+        if attempt is not None and eff is None:
+            outcome = "pending"
+        elif eff is not None and eff.status == "final" and eff.confidence != "low" and (eff.grade or 0) >= 3:
+            outcome = "yes"
+        else:
+            outcome = "no"
+        for concept_id in concept_ids_for_question(db, question.id):
+            pair = (verdict.get(concept_id, "yes"), outcome)
+            verdict[concept_id] = "no" if "no" in pair else ("pending" if "pending" in pair else "yes")
+    known_ids = [cid for cid, v in verdict.items() if v == "yes"]
+    concepts = list(db.scalars(select(Concept).where(Concept.id.in_(known_ids)))) if known_ids else []
+    return mark(db, user, concepts, "known", "diagnostic", request_id)
 
 
 def results_view(db: Session, quiz: Quiz, *, for_learner: bool = False) -> dict[str, Any]:
@@ -319,7 +351,13 @@ def results_view(db: Session, quiz: Quiz, *, for_learner: bool = False) -> dict[
         "max_points": max_points,
         "pending_items": pending,
         "complete": pending == 0 and quiz.status == "submitted",
+        "mode": quiz.mode,
         "items": out_items,
-        "note": "Open answers are graded by Claude (an AI estimate you can challenge); multiple-choice items are "
+        "note": (
+            "Diagnostic pre-test: it shows what you already know and does not change your review schedule. "
+            if quiz.mode == "diagnostic"
+            else ""
+        )
+        + "Open answers are graded by Claude (an AI estimate you can challenge); multiple-choice items are "
         "graded by RecallSpring from the answer key.",
     }
