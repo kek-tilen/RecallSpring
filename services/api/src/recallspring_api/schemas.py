@@ -74,6 +74,7 @@ class ConceptIn(BaseModel):
     definition_draft: str | None = Field(default=None, max_length=5000)
     syllabus_item_id: uuid.UUID | None = None
     source_confidence: Literal["high", "medium", "low", "inferred"] | None = None
+    source_section_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
 
 
 class ConceptOut(_Out):
@@ -84,6 +85,7 @@ class ConceptOut(_Out):
     definition_draft: str | None
     source_confidence: str | None
     revision: int
+    source_section_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------- study sessions
@@ -226,3 +228,110 @@ class ReviewQueueOut(BaseModel):
 class DeferIn(BaseModel):
     days: int = Field(ge=1, le=30)
     reason: str | None = Field(default=None, max_length=300)
+
+
+# ---------------------------------------------------------------- sources
+
+
+class SourceTextIn(BaseModel):
+    """Pasted content (e.g. when a PDF has no extractable text)."""
+
+    course_id: uuid.UUID
+    title: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=2_000_000)
+    format: Literal["markdown", "plain"] = "markdown"
+
+
+class SourceOut(BaseModel):
+    id: uuid.UUID
+    course_id: uuid.UUID
+    filename: str
+    kind: str
+    mime_type: str
+    byte_size: int
+    sha256: str
+    origin: str
+    duplicate_of_id: uuid.UUID | None
+    duplicate_of_course_id: uuid.UUID | None
+    parse_state: Literal["pending", "processing", "ready", "needs_attention", "failed"]
+    parse_error: str | None
+    parse_message: str | None
+    parse_notes: list[str]
+    page_count: int | None
+    version: int
+    section_count: int
+    uploaded_at: datetime
+    parsed_at: datetime | None
+
+
+class SectionOut(BaseModel):
+    id: uuid.UUID
+    source_id: uuid.UUID
+    source_version: int
+    position: int
+    page: int | None
+    heading: str | None
+    citation_label: str
+    text: str
+    char_start: int
+    char_end: int
+
+
+class SectionPageOut(BaseModel):
+    sections: list[SectionOut]
+    total: int
+    offset: int
+    limit: int
+
+
+class SearchHitOut(BaseModel):
+    section_id: uuid.UUID
+    source_id: uuid.UUID
+    filename: str
+    citation_label: str
+    snippet: str
+    rank: float
+
+
+class SearchOut(BaseModel):
+    hits: list[SearchHitOut]
+    note: str = "Snippets are excerpts of your uploaded material."
+
+
+# ---------------------------------------------------------------- notes
+
+
+class NoteIn(BaseModel):
+    course_id: uuid.UUID
+    topic_id: uuid.UUID | None = None
+    client_note_id: uuid.UUID
+    title: str = Field(default="Untitled note", min_length=1, max_length=200)
+    body: str = Field(default="", max_length=200_000)
+
+
+class NotePatch(BaseModel):
+    base_revision: int = Field(ge=1)
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    body: str | None = Field(default=None, max_length=200_000)
+
+
+class NoteOut(BaseModel):
+    id: uuid.UUID
+    course_id: uuid.UUID
+    topic_id: uuid.UUID | None
+    client_note_id: uuid.UUID
+    title: str
+    body: str
+    revision: int
+    saved_at: datetime
+    created_at: datetime
+
+
+class NoteRevisionOut(BaseModel):
+    id: uuid.UUID
+    kind: Literal["autosave", "conflict"]
+    revision: int
+    base_revision: int | None
+    title: str
+    body: str
+    saved_at: datetime

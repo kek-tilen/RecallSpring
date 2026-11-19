@@ -7,7 +7,7 @@ import logging
 from fastapi import FastAPI
 
 from . import __version__, errors
-from .api import attempts, auth, courses, health, questions, reviews, study
+from .api import attempts, auth, courses, health, notes, questions, reviews, sources, study
 from .config import get_settings
 from .security import LoginRateLimiter
 
@@ -27,7 +27,7 @@ def create_app() -> FastAPI:
     )
     app.state.login_limiter = LoginRateLimiter(settings.login_max_failures, settings.login_failure_window_seconds)
     errors.install(app)
-    for module in (health, auth, courses, study, questions, attempts, reviews):
+    for module in (health, auth, courses, sources, notes, study, questions, attempts, reviews):
         app.include_router(module.router, prefix=API_PREFIX)
     return app
 

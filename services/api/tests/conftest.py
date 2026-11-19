@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import tempfile
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -36,6 +37,8 @@ os.environ.update(
         "RS_AI_EVALUATION_PROVIDER": "mock",
         "RS_AI_QUESTION_PROVIDER": "mock",
         "RS_MOCK_AI_BEHAVIOR": "normal",
+        "RS_STORAGE_DIR": tempfile.mkdtemp(prefix="recallspring-test-storage-"),
+        "RS_EXTRACTION_ISOLATION": "inprocess",  # one dedicated test covers the subprocess path
     }
 )
 
@@ -48,11 +51,27 @@ from sqlalchemy import create_engine, make_url, text  # noqa: E402
 from recallspring_api import clock  # noqa: E402
 from recallspring_api.config import get_settings  # noqa: E402
 from recallspring_api.db import get_engine, new_session  # noqa: E402
+from recallspring_api.ingest.jobs import run_pending  # noqa: E402
 from recallspring_api.main import create_app  # noqa: E402
 from recallspring_api.models import Base, User  # noqa: E402
 from recallspring_api.security import hash_password  # noqa: E402
 
 PASSWORD = "correct horse battery staple"
+
+BIOLOGY_MD = """# Cellular respiration
+
+Cells release energy from glucose in several connected stages.
+
+## Glycolysis
+
+Glycolysis happens in the cytoplasm. One glucose molecule is split into two pyruvate molecules, with a small
+net gain of ATP and NADH.
+
+## Citric acid cycle
+
+In the mitochondrial matrix, pyruvate is converted to acetyl-CoA, which the citric acid cycle oxidises to CO2,
+producing NADH and FADH2.
+"""
 
 
 def alembic_config(url: str) -> Config:
@@ -141,12 +160,31 @@ class Api:
     def get(self, path: str, **params: Any) -> Any:
         return self.client.get(f"/api/v1{path}", params=params)
 
+    def upload(self, course_id: str, filename: str, content: bytes, key: str | None = None) -> Any:
+        headers = self.headers(key)
+        return self.client.post(
+            "/api/v1/sources", data={"course_id": course_id}, files={"file": (filename, content)}, headers=headers
+        )
+
+    def paste(self, course_id: str, text: str, title: str = "Lecture notes", fmt: str = "markdown") -> Any:
+        return self.post("/sources/text", {"course_id": course_id, "title": title, "text": text, "format": fmt})
+
+    def sections(self, source_id: str) -> list[dict[str, Any]]:
+        return self.get(f"/sources/{source_id}/sections").json()["sections"]
+
     # ---- convenience builders
     def course_with_question(self, *, expected_points: list[str] | None = None) -> dict[str, str]:
         course = self.post("/courses", {"title": "Biology 101"}).json()
+        source = self.paste(course["id"], BIOLOGY_MD).json()
+        run_pending()
+        section_ids = [s["id"] for s in self.sections(source["id"])]
         concept = self.post(
             f"/courses/{course['id']}/concepts",
-            {"term": "Glycolysis", "definition_draft": "Glucose is split into pyruvate"},
+            {
+                "term": "Glycolysis",
+                "definition_draft": "Glucose is split into pyruvate",
+                "source_section_ids": section_ids[:2],
+            },
         ).json()
         question = self.post(
             "/questions",
@@ -158,10 +196,16 @@ class Api:
                 "expected_points": expected_points
                 if expected_points is not None
                 else ["glycolysis happens in the cytoplasm", "pyruvate feeds the citric acid cycle"],
-                "source_refs": ["sec-1", "sec-2"],
+                "source_refs": section_ids[:2],
             },
         ).json()
-        return {"course_id": course["id"], "concept_id": concept["id"], "question_id": question["id"]}
+        return {
+            "course_id": course["id"],
+            "concept_id": concept["id"],
+            "question_id": question["id"],
+            "source_id": source["id"],
+            "section_ids": section_ids,
+        }
 
     def answer(
         self,

@@ -2,6 +2,7 @@
 
 recallspring create-owner --username <name>      (password is prompted, never passed as an argument)
 recallspring seed-demo --username <name>         (adds a clearly labelled demo course)
+recallspring worker [--once]                     (processes source extraction jobs; no model calls)
 """
 
 from __future__ import annotations
@@ -111,9 +112,22 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("create-owner", "seed-demo"):
         p = sub.add_parser(name)
         p.add_argument("--username", required=True)
+    worker = sub.add_parser("worker")
+    worker.add_argument("--once", action="store_true", help="process queued jobs, then exit")
     args = parser.parse_args(argv)
     if args.command == "create-owner":
         return create_owner(args.username)
+    if args.command == "worker":
+        import logging
+
+        from .ingest.jobs import run_pending, run_worker
+
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+        if args.once:
+            print(f"Processed {run_pending()} job(s).")
+        else:
+            run_worker()
+        return 0
     return seed_demo(args.username)
 
 

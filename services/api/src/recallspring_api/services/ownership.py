@@ -8,12 +8,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..errors import not_found
-from ..models import Attempt, Concept, Course, Question, StudySession
+from ..models import Attempt, Concept, Course, Note, Question, Source, SourceSection, StudySession
 
-_LABELS = {Course: "Course", Concept: "Concept", Question: "Question", Attempt: "Attempt", StudySession: "Session"}
+_LABELS = {
+    Course: "Course",
+    Concept: "Concept",
+    Question: "Question",
+    Attempt: "Attempt",
+    StudySession: "Session",
+    Source: "Source",
+    SourceSection: "Section",
+    Note: "Note",
+}
 
 
-def owned[T: (Course, Concept, Question, Attempt, StudySession)](
+def owned[T: (Course, Concept, Question, Attempt, StudySession, Source, SourceSection, Note)](
     db: Session, model: type[T], entity_id: uuid.UUID, user_id: uuid.UUID, *, for_update: bool = False
 ) -> T:
     stmt = select(model).where(model.id == entity_id, model.user_id == user_id)

@@ -33,6 +33,19 @@ class Settings(BaseSettings):
     # Input bounds
     max_answer_chars: int = 20_000
     max_prompt_chars: int = 4_000
+    max_note_chars: int = 200_000
+    note_snapshot_window_seconds: int = 120
+
+    # Sources (docs/08 → Files). Originals are stored privately under storage_dir, keyed by content hash.
+    storage_dir: Path = _REPO_ROOT / "local-data" / "storage"
+    max_upload_bytes: int = 30 * 1024 * 1024
+    max_library_bytes: int = 250 * 1024 * 1024
+    max_pdf_pages: int = 600
+    extraction_timeout_seconds: int = 120
+    # "subprocess" isolates parser crashes and enforces the timeout; "inprocess" is only for fast tests.
+    extraction_isolation: Literal["subprocess", "inprocess"] = "subprocess"
+    job_lease_seconds: int = 300
+    job_max_attempts: int = 3
 
     # AI (Mode B). "none" disables in-app AI; "mock" is for development/tests and is always labelled Simulated.
     ai_evaluation_provider: Literal["none", "mock"] = "none"

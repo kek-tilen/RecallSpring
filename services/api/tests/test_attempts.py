@@ -98,7 +98,7 @@ def test_mock_assessment_is_labelled_simulated_and_never_lengthens_interval(
     assert assessment["simulated"] is True and assessment["provider"] == "mock"
     assert assessment["status"] == "provisional" and assessment["confidence"] == "low"
     assert assessment["feedback"].startswith("[Simulated")
-    assert set(assessment["evidence_refs"]) <= {"sec-1", "sec-2"}
+    assert assessment["evidence_refs"] and set(assessment["evidence_refs"]) <= set(ids["section_ids"][:2])
 
     upcoming = owner_api.get("/reviews/due", horizon_days=1).json()["items"]
     assert len(upcoming) == 1

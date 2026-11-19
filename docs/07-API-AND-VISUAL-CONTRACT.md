@@ -24,9 +24,15 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/sources` | Multipart upload; create extraction job |
 | GET | `/sources/{id}` | Status, metadata, sections |
 | GET | `/sources/{id}/sections` | Read extracted source sections |
+| POST | `/sources/text` | Pasted Markdown/plain text becomes a source (fallback for scanned PDFs) |
+| GET | `/sources/search?q=&course_id=` | Full-text search over current sections; plain-text snippets marked « » |
+| GET | `/sources/{id}/file` | Unchanged original, always as attachment with `nosniff` |
+| POST | `/sources/{id}/reprocess` | Extract again as a new version; earlier sections stay citable |
+| GET | `/sections/{id}` | One citable section (text, page/heading, offsets, citation label) |
 | GET/PATCH | `/topics/{id}` | Topic and links |
 | POST | `/notes` | Create note, autosave revisions |
-| PATCH | `/notes/{id}` | Mutate note by revision, `409` on conflict |
+| PATCH | `/notes/{id}` | Mutate note by `base_revision`; `409 revision_conflict` keeps the rejected draft as a `conflict` revision |
+| GET | `/notes`, `/notes/{id}`, `/notes/{id}/revisions` | Notes and history (autosave snapshots, preserved conflicts) |
 | POST | `/study-sessions` | Start study/review session |
 | GET | `/study-sessions/{id}` | Retrieve session with messages and state |
 | POST | `/study-sessions/{id}/turns` | User message saved; optional streamed tutor response |

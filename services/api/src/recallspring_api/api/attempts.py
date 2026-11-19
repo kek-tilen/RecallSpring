@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import clock
-from ..ai.provider import ProviderError, StructuredRequest
+from ..ai.provider import ProviderError, SourceExcerpt, StructuredRequest
 from ..ai.registry import provider_for
 from ..ai.tasks import EVALUATION_PROMPT_VERSION, build_evaluation_request, validate_assessment
 from ..config import get_settings
@@ -25,6 +25,7 @@ from ..services import attempts as svc
 from ..services.events import learning_event
 from ..services.ownership import owned
 from ..services.reviews import concept_ids_for_question, recompute
+from ..services.sources import parse_refs, sections_in_course
 
 router = APIRouter(tags=["attempts"])
 
@@ -111,7 +112,11 @@ async def evaluate_attempt(attempt_id: uuid.UUID, ctx: WriteCtx = Depends(write_
                 return JSONResponse(svc.attempt_view(db, attempt)), None, None, []
             question = db.get(Question, attempt.question_id)
             assert question is not None
-            allowed_refs = [str(r) for r in question.source_refs]
+            excerpts = [
+                SourceExcerpt(str(s.id), s.citation_label, s.text)
+                for s in sections_in_course(db, ctx.user.id, question.course_id, parse_refs(question.source_refs))
+            ]
+            allowed_refs = [e.section_id for e in excerpts]
             request = build_evaluation_request(
                 model=model,
                 question_prompt=question.prompt,
@@ -119,7 +124,7 @@ async def evaluate_attempt(attempt_id: uuid.UUID, ctx: WriteCtx = Depends(write_
                 expected_points=list(question.rubric.get("expected_points", [])),
                 answer_text=attempt.answer_text,
                 answer_mode=attempt.answer_mode,
-                allowed_refs=allowed_refs,
+                sources=excerpts,
             )
             db.commit()
             return None, claimed_at, request, allowed_refs

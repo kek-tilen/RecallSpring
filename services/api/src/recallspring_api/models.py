@@ -11,8 +11,10 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     Index,
@@ -25,7 +27,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 NAMING_CONVENTION = {
@@ -339,3 +341,149 @@ class IdempotencyRecord(Base):
     created_at: Mapped[datetime] = _created()
 
     __table_args__ = (UniqueConstraint("user_id", "key", name="uq_idempotency_user_key"),)
+
+
+# --------------------------------------------------------------------------- sources
+
+
+class Source(Base):
+    """An uploaded or pasted document. The original bytes are kept unchanged in private storage."""
+
+    __tablename__ = "sources"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    course_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("courses.id"), nullable=False, index=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    origin: Mapped[str] = mapped_column(String(20), nullable=False)
+    duplicate_of_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sources.id"))
+    parse_state: Mapped[str] = mapped_column(String(20), nullable=False)
+    parse_error: Mapped[str | None] = mapped_column(String(60))
+    parse_notes: Mapped[list[Any]] = _json_list()
+    parser_version: Mapped[str | None] = mapped_column(String(60))
+    page_count: Mapped[int | None] = mapped_column(Integer)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
+    uploaded_at: Mapped[datetime] = _created()
+    parsed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = _updated()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index("ix_sources_user_sha256", "user_id", "sha256"),
+        CheckConstraint("kind IN ('pdf','markdown','text')", name="kind"),
+        CheckConstraint("origin IN ('upload','paste')", name="origin"),
+        CheckConstraint(
+            "parse_state IN ('pending','processing','ready','needs_attention','failed')", name="parse_state"
+        ),
+    )
+
+
+class SourceSection(Base):
+    """A citable unit of extracted text (a PDF page or a Markdown/plain-text section)."""
+
+    __tablename__ = "source_sections"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sources.id"), nullable=False, index=True)
+    source_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    page: Mapped[int | None] = mapped_column(Integer)
+    heading: Mapped[str | None] = mapped_column(String(300))
+    citation_label: Mapped[str] = mapped_column(String(160), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    char_start: Mapped[int] = mapped_column(Integer, nullable=False)
+    char_end: Mapped[int] = mapped_column(Integer, nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(60), nullable=False)
+    tsv: Mapped[Any] = mapped_column(TSVECTOR, Computed("to_tsvector('simple'::regconfig, text)", persisted=True))
+    created_at: Mapped[datetime] = _created()
+
+    __table_args__ = (
+        UniqueConstraint("source_id", "source_version", "position", name="uq_source_sections_position"),
+        Index("ix_source_sections_tsv", "tsv", postgresql_using="gin"),
+    )
+
+
+class ConceptSource(Base):
+    """Evidence link from a concept to a source section; ``inferred`` marks links without a direct quote."""
+
+    __tablename__ = "concept_sources"
+
+    concept_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("concepts.id"), primary_key=True)
+    section_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("source_sections.id"), primary_key=True, index=True)
+    excerpt: Mapped[str | None] = mapped_column(String(1000))
+    inferred: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
+    created_at: Mapped[datetime] = _created()
+
+
+# --------------------------------------------------------------------------- notes
+
+
+class Note(Base):
+    """Learner-owned text. Never rewritten by the tutor; every acknowledged save bumps ``revision``."""
+
+    __tablename__ = "notes"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    course_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("courses.id"), nullable=False, index=True)
+    syllabus_item_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("syllabus_items.id"))
+    client_note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (UniqueConstraint("user_id", "client_note_id", name="uq_notes_user_client_note"),)
+
+
+class NoteRevision(Base):
+    """History snapshots (``autosave`` coalesced per editing burst) and preserved conflicting drafts."""
+
+    __tablename__ = "note_revisions"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    note_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("notes.id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    base_revision: Mapped[int | None] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (CheckConstraint("kind IN ('autosave','conflict')", name="kind"),)
+
+
+# --------------------------------------------------------------------------- jobs
+
+
+class Job(Base):
+    """Deterministic background work (no model calls). Claimed with SELECT … FOR UPDATE SKIP LOCKED."""
+
+    __tablename__ = "jobs"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    type: Mapped[str] = mapped_column(String(40), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    run_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+    __table_args__ = (
+        Index("ix_jobs_claim", "state", "run_after"),
+        CheckConstraint("state IN ('queued','running','succeeded','failed')", name="state"),
+    )

@@ -12,7 +12,12 @@
 - **Lint/format:** ruff (`ruff check`, `ruff format`), line length 120.
 - **Ports (local):** API `127.0.0.1:4318`, web `127.0.0.1:4317`, dev DB `127.0.0.1:55432`. Never 3000/8000.
 
+- **Ingestion:** `pypdf` (BSD) rather than PyMuPDF (AGPL) for PDF text. Extraction runs in a separate `python -I` process with a wall-clock timeout so a malicious or broken file cannot hang or crash the worker; jobs live in PostgreSQL (`SKIP LOCKED`, leases, bounded retries with backoff) — no Redis.
+
 ## Consequences
+
+- Windows offers no per-process memory cap for the extractor; in container deployments the worker's memory limit bounds it. OCR remains out of scope.
+- An uploaded blob is written before the database commit; if the commit fails an unreferenced blob may remain (content-addressed, harmless; a later cleanup job can remove orphans).
 
 - Login rate limiting is in-process; it assumes a single API worker (true for the single-user deployment). Revisit if more workers are ever run.
 - `starlette.testclient` warns that `httpx` support is deprecated in favour of `httpx2`; switch when FastAPI's test client does.

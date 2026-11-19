@@ -7,7 +7,9 @@ import uuid
 from typing import Any
 
 from ..contracts import load_schema, schema_errors
-from .provider import ProviderInvalidOutput, StructuredRequest
+from .provider import ProviderInvalidOutput, SourceExcerpt, StructuredRequest
+
+MAX_EXCERPT_CHARS = 4000
 
 EVALUATION_PROMPT_VERSION = "eval-v1"
 QUESTION_PROMPT_VERSION = "qgen-v1"
@@ -71,6 +73,16 @@ def _escape(text: str) -> str:
     return text.replace("</", "<\\/")
 
 
+def render_sources(sources: list[SourceExcerpt]) -> str:
+    """Untrusted document content, clearly delimited and labelled with the only IDs that may be cited."""
+    blocks = [
+        f'<section id="{_escape(s.section_id)}" label="{_escape(s.citation_label)}">\n'
+        f"{_escape(s.text[:MAX_EXCERPT_CHARS])}\n</section>"
+        for s in sources
+    ]
+    return "<sources>\n" + "\n".join(blocks) + "\n</sources>"
+
+
 def assessment_output_schema() -> dict[str, Any]:
     """The shared assessment schema without ``attempt_id`` (the server adds it)."""
     schema = copy.deepcopy(load_schema("assessment.schema.json"))
@@ -87,15 +99,15 @@ def build_evaluation_request(
     expected_points: list[str],
     answer_text: str,
     answer_mode: str,
-    allowed_refs: list[str],
+    sources: list[SourceExcerpt],
 ) -> StructuredRequest:
     rubric = "\n".join(f"- {_escape(p)}" for p in expected_points) or "- (no rubric points recorded)"
-    refs = "\n".join(f'<section id="{_escape(r)}"/>' for r in allowed_refs)
+    allowed_refs = [s.section_id for s in sources]
     input_text = (
         f'<question bloom_level="{bloom_level}">{_escape(question_prompt)}</question>\n'
         f"<rubric>\n{rubric}\n</rubric>\n"
         f'<learner_answer mode="{answer_mode}">{_escape(answer_text)}</learner_answer>\n'
-        f"<sources>\n{refs}\n</sources>"
+        f"{render_sources(sources)}"
     )
     return StructuredRequest(
         task="evaluation",
@@ -104,6 +116,7 @@ def build_evaluation_request(
         input_text=input_text,
         json_schema=assessment_output_schema(),
         schema_name="assessment",
+        sources=tuple(sources),
         hints={"answer_text": answer_text, "expected_points": expected_points, "allowed_refs": allowed_refs},
     )
 
@@ -141,16 +154,16 @@ def build_question_request(
     model: str,
     concepts: list[dict[str, Any]],
     bloom_levels: list[int],
-    allowed_refs: list[str],
+    sources: list[SourceExcerpt],
 ) -> StructuredRequest:
+    allowed_refs = [s.section_id for s in sources]
     concept_lines = "\n".join(
         f'<concept id="{c["id"]}">{_escape(c["term"])}: {_escape(c.get("definition") or "")}</concept>'
         for c in concepts
     )
-    refs = "\n".join(f'<section id="{_escape(r)}"/>' for r in allowed_refs)
     input_text = (
         f'<request bloom_levels="{",".join(map(str, bloom_levels))}"/>\n'
-        f"<concepts>\n{concept_lines}\n</concepts>\n<sources>\n{refs}\n</sources>"
+        f"<concepts>\n{concept_lines}\n</concepts>\n{render_sources(sources)}"
     )
     return StructuredRequest(
         task="question_generation",
@@ -159,6 +172,7 @@ def build_question_request(
         input_text=input_text,
         json_schema=QUESTION_OUTPUT_SCHEMA,
         schema_name="questions",
+        sources=tuple(sources),
         hints={"concepts": concepts, "bloom_levels": bloom_levels, "allowed_refs": allowed_refs},
     )
 

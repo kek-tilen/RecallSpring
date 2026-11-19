@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -10,10 +11,11 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import not_found
-from ..models import Concept, Course, SyllabusItem
+from ..models import Concept, ConceptSource, Course, SourceSection, SyllabusItem
 from ..schemas import ConceptIn, ConceptOut, CourseIn, CourseOut, SyllabusItemIn, SyllabusItemOut
 from ..services.events import learning_event
 from ..services.ownership import owned
+from ..services.sources import sections_in_course
 
 router = APIRouter(tags=["courses"])
 
@@ -92,15 +94,28 @@ def create_syllabus_item(
 @router.get("/courses/{course_id}/concepts", response_model=list[ConceptOut])
 def list_concepts(
     course_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
-) -> list[Concept]:
+) -> list[dict[str, Any]]:
     owned(db, Course, course_id, ctx.user.id)
-    return list(
+    concepts = db.scalars(
+        select(Concept)
+        .where(Concept.course_id == course_id, Concept.user_id == ctx.user.id, Concept.deleted_at.is_(None))
+        .order_by(Concept.term)
+    )
+    return [concept_view(db, c) for c in concepts]
+
+
+def concept_view(db: Session, concept: Concept) -> dict[str, Any]:
+    section_ids = list(
         db.scalars(
-            select(Concept)
-            .where(Concept.course_id == course_id, Concept.user_id == ctx.user.id, Concept.deleted_at.is_(None))
-            .order_by(Concept.term)
+            select(ConceptSource.section_id)
+            .join(SourceSection, SourceSection.id == ConceptSource.section_id)
+            .where(ConceptSource.concept_id == concept.id)
+            .order_by(SourceSection.source_id, SourceSection.source_version, SourceSection.position)
         )
     )
+    out = ConceptOut.model_validate(concept)
+    out.source_section_ids = section_ids
+    return out.model_dump(mode="json")
 
 
 @router.post("/courses/{course_id}/concepts", status_code=201, response_model=ConceptOut)
@@ -114,8 +129,12 @@ def create_concept(
         topic = db.get(SyllabusItem, payload.syllabus_item_id)
         if topic is None or topic.user_id != ctx.user.id or topic.course_id != course_id:
             raise not_found("Topic")
-    concept = Concept(user_id=ctx.user.id, course_id=course_id, **payload.model_dump())
+    sections = sections_in_course(db, ctx.user.id, course_id, payload.source_section_ids)
+    concept = Concept(user_id=ctx.user.id, course_id=course_id, **payload.model_dump(exclude={"source_section_ids"}))
     db.add(concept)
     db.flush()
+    for section in sections:
+        db.add(ConceptSource(concept_id=concept.id, section_id=section.id))
+    db.flush()
     db.refresh(concept)
-    return commit_with_response(db, ctx, payload, 201, ConceptOut.model_validate(concept).model_dump(mode="json"))
+    return commit_with_response(db, ctx, payload, 201, concept_view(db, concept))

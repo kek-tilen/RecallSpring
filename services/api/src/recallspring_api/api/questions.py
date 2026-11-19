@@ -11,7 +11,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from .. import clock
-from ..ai.provider import ProviderError
+from ..ai.provider import ProviderError, SourceExcerpt
 from ..ai.registry import provider_for
 from ..ai.tasks import QUESTION_PROMPT_VERSION, build_question_request, validate_questions
 from ..config import get_settings
@@ -22,6 +22,7 @@ from ..models import Attempt, Concept, Course, Question, QuestionConcept
 from ..schemas import QuestionGenerateIn, QuestionIn, QuestionListOut, QuestionOut
 from ..services.events import learning_event
 from ..services.ownership import owned
+from ..services.sources import parse_refs, sections_for_concepts, sections_in_course
 
 router = APIRouter(tags=["questions"])
 
@@ -102,6 +103,7 @@ def create_question(
     if replay := replay_if_seen(db, ctx, payload):
         return replay
     _course_concepts(db, ctx.user.id, payload.course_id, payload.concept_ids)
+    sections_in_course(db, ctx.user.id, payload.course_id, parse_refs(payload.source_refs))
     q = _add_question(
         db,
         user_id=ctx.user.id,
@@ -121,22 +123,31 @@ def create_question(
 async def generate_questions(payload: QuestionGenerateIn, ctx: WriteCtx = Depends(write_ctx)) -> JSONResponse:
     """User-initiated, provider-backed question generation (Mode B). Never runs in the background."""
 
-    def prepare() -> tuple[JSONResponse | None, list[dict[str, Any]]]:
+    def prepare() -> tuple[JSONResponse | None, list[dict[str, Any]], list[SourceExcerpt]]:
         with new_session() as db:
             if replay := replay_if_seen(db, ctx, payload):
-                return replay, []
+                return replay, [], []
             concepts = _course_concepts(db, ctx.user.id, payload.course_id, payload.concept_ids)
-            return None, [{"id": str(c.id), "term": c.term, "definition": c.definition_draft} for c in concepts]
+            excerpts = [
+                SourceExcerpt(str(s.id), s.citation_label, s.text)
+                for s in sections_for_concepts(db, ctx.user.id, [c.id for c in concepts])[:12]
+            ]
+            return (
+                None,
+                [{"id": str(c.id), "term": c.term, "definition": c.definition_draft} for c in concepts],
+                excerpts,
+            )
 
-    replay, concepts = await run_in_threadpool(prepare)
+    replay, concepts, excerpts = await run_in_threadpool(prepare)
+    allowed_refs = [e.section_id for e in excerpts]
     if replay is not None:
         return replay
     levels = sorted(payload.bloom_levels) if payload.order == "progressive" else list(payload.bloom_levels)
     try:
         provider, model = provider_for("question_generation")
-        request = build_question_request(model=model, concepts=concepts, bloom_levels=levels, allowed_refs=[])
+        request = build_question_request(model=model, concepts=concepts, bloom_levels=levels, sources=excerpts)
         result = await asyncio.wait_for(provider.generate_structured(request), get_settings().ai_timeout_seconds)
-        items = validate_questions(result.data, {c["id"] for c in concepts}, set(levels), allowed_refs=[])
+        items = validate_questions(result.data, {c["id"] for c in concepts}, set(levels), allowed_refs)
     except TimeoutError as exc:
         raise ApiError(
             503,

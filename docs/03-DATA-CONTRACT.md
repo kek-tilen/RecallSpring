@@ -21,12 +21,13 @@
 | `courses` | `id`, owner, title, description, `long_term_retention` bool, status |
 | `syllabus_items` | `id`, course, title, parent, position, expected coverage, optional exam weighting |
 | `exams` | `id`, course, date/timezone, title, status, goal priority |
-| `sources` | `id`, course, filename, mime, bytes, SHA256, private storage key, parse state, version, uploaded time |
-| `source_sections` | `id`, source, order, page/heading, extracted text, text offsets, citation label, parser version |
+| `sources` | `id`, course, filename, kind, mime, bytes, SHA256, private content-addressed storage key, origin (`upload/paste`), `duplicate_of`, parse state/error/notes, parser version, version, uploaded/parsed time |
+| `source_sections` | `id`, source, source version, order, page/heading, extracted text, text offsets, citation label, parser version, `tsvector` (language-neutral `simple` config) |
 | `concepts` | `id`, course, canonical term, definition draft, syllabus item link, state (`new/learning/learned/...`), `source_confidence` |
 | `concept_sources` | concept-to-source_section link with evidence excerpt span, inference flag |
 | `concept_relations` | from, to, relation enum (`prerequisite/part_of/related_to/contrasts_with`), origin and confidence |
-| `notes` | `id`, author, topic, raw Markdown/plaintext, revision, deleted_at, autosave timestamp |
+| `notes` | `id`, author, course, topic, `client_note_id` (offline idempotency), raw Markdown/plaintext, revision, deleted_at, saved_at |
+| `note_revisions` | note, kind (`autosave` snapshot coalesced per editing burst, or `conflict` = a rejected stale draft kept until resolved), revision, base revision, body, saved_at |
 | `study_sessions` | `id`, owner, course/topic, mode (`new_learning/review`), timestamps, checkpoint |
 | `messages` | `id`, session, role, content, source refs, visual block IDs, status; separately from attempts |
 | `questions` | `id`, topic/concepts, Bloom level 1–6, prompt, answer rubric, source refs, difficulty, provenance, generated_at |

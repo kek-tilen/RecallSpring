@@ -24,7 +24,15 @@ cp .env.example .env          # then put the password from infra/.env into RS_DA
 .venv/Scripts/recallspring create-owner --username <name>   # password is prompted; no public sign-up
 .venv/Scripts/recallspring seed-demo --username <name>      # labelled demo course
 .venv/Scripts/uvicorn recallspring_api.main:app --host 127.0.0.1 --port 4318
+.venv/Scripts/recallspring worker                  # second terminal: extracts uploaded sources (no model calls)
+.venv/Scripts/recallspring worker --once           # process queued jobs and exit
 ```
+
+## Sources and notes
+
+- `POST /sources` (multipart `course_id`, `file`) accepts PDF, Markdown and UTF-8 text up to 30 MiB (library 250 MiB). The extension must match the content; originals are stored unchanged under `RS_STORAGE_DIR`, keyed by owner and SHA-256, never by filename. Identical files are flagged with `duplicate_of_id` and never merged across courses. `POST /sources/text` turns pasted text into a source.
+- The worker extracts each source in a separate `python -I` process with a timeout (`RS_EXTRACTION_TIMEOUT_SECONDS`) into citable sections: PDF pages (`p. 3`), Markdown headings (`§ Glycolysis`) or plain-text parts. Scanned PDFs fail with `no_extractable_text`; partly scanned ones are `needs_attention` with the page list. Nothing is invented: questions, concepts and assessments may cite only real section IDs of the same course.
+- Notes autosave with `PATCH /notes/{id}` and `base_revision`. A stale save returns `409 revision_conflict` with the current version, and the rejected draft is kept as a `conflict` revision, so both versions survive until you resolve them.
 
 ## Write requests
 
