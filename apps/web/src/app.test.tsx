@@ -1,0 +1,85 @@
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError, request } from "./api";
+import { Highlighted, Meter } from "./components/ui";
+import { gradeLabel, gradedBy } from "./format";
+import { safeNext } from "./pages/Login";
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+function mockFetch(status: number, body: unknown) {
+  return vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }),
+  );
+}
+
+describe("api client", () => {
+  it("sends the CSRF token and a fresh idempotency key on writes only", async () => {
+    document.cookie = "rs_csrf=abc123; path=/";
+    const fetch = mockFetch(200, { ok: true });
+    await request("/notes", { json: { a: 1 } });
+    await request("/notes", { json: { a: 1 } });
+    await request("/dashboard");
+    const [first, second, read] = fetch.mock.calls.map((c) => (c[1] as RequestInit).headers as Record<string, string>);
+    expect(first!["X-CSRF-Token"]).toBe("abc123");
+    expect(first!["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(first!["Idempotency-Key"]).not.toBe(second!["Idempotency-Key"]);
+    expect(read!["X-CSRF-Token"]).toBeUndefined();
+    expect(fetch.mock.calls[0]![0]).toBe("/api/v1/notes");
+  });
+
+  it("turns the error envelope into an ApiError", async () => {
+    mockFetch(409, { code: "revision_conflict", message: "Both versions are kept.", request_id: "r-1", details: { x: 1 } });
+    const error = await request("/notes/1", { method: "PATCH", json: {} }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 409, code: "revision_conflict", requestId: "r-1", message: "Both versions are kept." });
+  });
+
+  it("reports an unreachable server plainly", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    await expect(request("/dashboard")).rejects.toMatchObject({ code: "offline" });
+  });
+});
+
+describe("rendering learner and model text", () => {
+  it("shows search highlights as text, never as markup", () => {
+    const { container } = render(<Highlighted text={'before «<img src=x onerror=alert(1)>» after'} />);
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("mark")?.textContent).toBe("<img src=x onerror=alert(1)>");
+  });
+
+  it("keeps meter counts in the legend so colour is never the only cue", () => {
+    render(
+      <Meter
+        label="Study progress"
+        segments={[
+          { label: "Not studied", value: 3, step: 0 },
+          { label: "Known", value: 1, step: 3 },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("img").getAttribute("aria-label")).toBe("Study progress. Not studied: 3, Known: 1");
+    expect(screen.getByText("Not studied").parentElement?.textContent).toContain("3");
+  });
+});
+
+describe("small helpers", () => {
+  it("only redirects to paths inside the app after sign-in", () => {
+    expect(safeNext("/courses/1?tab=notes")).toBe("/courses/1?tab=notes");
+    expect(safeNext("//evil.example")).toBe("/");
+    expect(safeNext("/\\evil.example")).toBe("/");
+    expect(safeNext("https://evil.example")).toBe("/");
+    expect(safeNext("/login")).toBe("/");
+    expect(safeNext(null)).toBe("/");
+  });
+
+  it("labels grades and graders honestly", () => {
+    expect(gradeLabel(null)).toBe("Not graded");
+    expect(gradeLabel(3)).toBe("3/4 · Solid");
+    expect(gradedBy("ai")).toBe("Claude");
+    expect(gradedBy("deterministic")).toBe("RecallSpring (answer key)");
+  });
+});

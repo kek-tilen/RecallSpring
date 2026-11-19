@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     job_lease_seconds: int = 300
     job_max_attempts: int = 3
 
+    # Web app: the built single-page app (apps/web/dist) is served by the API when present.
+    web_dist: Path = _REPO_ROOT / "apps" / "web" / "dist"
+
     # Claude connector (Mode A): requests per learner-local day at 100 %; the owner scales it 1–100 %.
     connector_daily_requests_default: int = 600
     connector_note_chars: int = 8_000  # per note; keeps tool output (and Claude plan usage) small

@@ -8,19 +8,20 @@
 
 ```text
 AGENTS.md                 Non-negotiable rules for every coding agent
+apps/web/                 Web app: overview of everything RecallSpring stores — see apps/web/README.md
 docs/                     Product, architecture and safety specification (01–10)
 docs/adr/                 Architecture decision records
 docs/agent-briefs/        Briefs for the implementing agents
 packages/contracts/       Shared JSON schemas (assessment, visual blocks)
 services/api/             FastAPI backend, migrations, tests, AI provider adapters
 services/mcp/             Claude connector (MCP server) for Claude Desktop — see docs/connector-setup.md
-scripts/start-local.ps1   Start the local database, API and worker
+scripts/start-local.ps1   Start the local database, API (serves the web app) and worker; -Restart after updates
 infra/compose.dev.yml     Local development database (loopback only)
 ```
 
 ## Local development (Windows / macOS / Linux)
 
-Requirements: Python 3.12+, Docker (for PostgreSQL), Node 22+ (frontend, later).
+Requirements: Python 3.12+, Docker (for PostgreSQL), Node 22+ (web app).
 
 ```bash
 # 1. Start the local dev database (binds to 127.0.0.1 only)
@@ -37,6 +38,16 @@ cp .env.example .env    # set the password from infra/.env
 ```
 
 Copy `infra/.env.example` to `infra/.env` with a random password first.
+
+```bash
+# 3. Web app (served by the API at http://127.0.0.1:4318/)
+cd apps/web
+npm ci
+npm run build
+```
+
+On Windows `scripts/start-local.ps1` starts the database, API and worker; run it with `-Restart` after updating the
+code. Then open `http://127.0.0.1:4318/` and sign in with your RecallSpring account.
 
 See `services/api/README.md` for configuration, the owner-account CLI and the demo seed.
 

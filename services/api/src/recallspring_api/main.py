@@ -6,8 +6,21 @@ import logging
 
 from fastapi import FastAPI
 
-from . import __version__, errors
-from .api import attempts, auth, connector, courses, health, notes, questions, reviews, settings, sources, study
+from . import __version__, errors, web
+from .api import (
+    attempts,
+    auth,
+    connector,
+    courses,
+    health,
+    notes,
+    overview,
+    questions,
+    reviews,
+    settings,
+    sources,
+    study,
+)
 from .config import get_settings
 from .security import LoginRateLimiter
 
@@ -27,8 +40,24 @@ def create_app() -> FastAPI:
     )
     app.state.login_limiter = LoginRateLimiter(config.login_max_failures, config.login_failure_window_seconds)
     errors.install(app)
-    for module in (health, auth, courses, sources, notes, study, questions, attempts, reviews, settings, connector):
+    modules = (
+        health,
+        auth,
+        courses,
+        sources,
+        notes,
+        study,
+        questions,
+        attempts,
+        reviews,
+        settings,
+        overview,
+        connector,
+    )
+    for module in modules:
         app.include_router(module.router, prefix=API_PREFIX)
+    # Last: the web app's catch-all route must not shadow API routes.
+    web.install(app, config.web_dist, API_PREFIX)
     return app
 
 

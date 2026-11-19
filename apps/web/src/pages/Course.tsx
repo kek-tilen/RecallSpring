@@ -1,0 +1,386 @@
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router";
+import { get } from "../api";
+import { Async, BandChip, BandMeter, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip, StudyMeter } from "../components/ui";
+import { Upload } from "../components/Upload";
+import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, plural, relativeDay } from "../format";
+import { useCourseOverview } from "../queries";
+import type { AttemptRow, ConceptRow, CourseOverview, StudyStatus, Target, TargetProfile } from "../types";
+import { NewNoteButton, NoteList } from "./Notes";
+import { SourceTable } from "./Library";
+import { QuizTable } from "./Simulations";
+
+const TABS = [
+  { id: "concepts", label: "Concepts" },
+  { id: "targets", label: "Exams" },
+  { id: "materials", label: "Materials" },
+  { id: "notes", label: "Notes" },
+  { id: "simulations", label: "Simulations" },
+  { id: "answers", label: "Answers" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
+
+export function CoursePage() {
+  const { courseId = "" } = useParams();
+  const [params] = useSearchParams();
+  const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "concepts") as Tab;
+  const q = useCourseOverview(courseId);
+
+  return (
+    <div className="page">
+      <Async q={q} lines={8}>
+        {(o) => {
+          const active = o.targets.find((t) => t.id === o.active_target_id);
+          const counts: Record<Tab, number | null> = {
+            concepts: o.concepts.length,
+            targets: o.targets.length,
+            materials: o.sources.length,
+            notes: o.notes,
+            simulations: o.quizzes.length,
+            answers: null,
+          };
+          return (
+            <>
+              <PageHead title={o.course.title} sub={o.course.description} crumbs={[{ to: "/courses", label: "Courses" }]} />
+              <div className="grid cols-2">
+                <Card title="Next exam" tint>
+                  {active ? (
+                    <div className="stack" style={{ gap: 6 }}>
+                      <div style={{ fontWeight: 650 }}>
+                        {active.name} · {dateLabel(active.due_date)}
+                      </div>
+                      <div className="small muted">
+                        {active.days_left >= 0 ? `${plural(active.days_left, "day")} left` : "Date passed"} ·{" "}
+                        {plural(active.concepts_in_scope, "concept")} in scope
+                      </div>
+                      <div className="small pre">{active.scope_description}</div>
+                    </div>
+                  ) : (
+                    <p className="small muted">No exam or kolokvij is set. Claude asks for it at the start of a study session.</p>
+                  )}
+                </Card>
+                <Card title="Progress" tint>
+                  <div className="stack">
+                    <StudyMeter progress={o.progress} />
+                    <BandMeter progress={o.progress} />
+                    <p className="tiny muted">{o.note}</p>
+                  </div>
+                </Card>
+              </div>
+
+              <nav className="tabs" aria-label="Course sections">
+                {TABS.map((t) => (
+                  <Link key={t.id} to={`?tab=${t.id}`} aria-current={tab === t.id ? "page" : undefined} replace>
+                    {t.label}
+                    {counts[t.id] !== null && <span className="n">{counts[t.id]}</span>}
+                  </Link>
+                ))}
+              </nav>
+
+              {tab === "concepts" && <ConceptsTab o={o} />}
+              {tab === "targets" && <TargetsTab targets={o.targets} activeId={o.active_target_id} />}
+              {tab === "materials" && (
+                <div className="stack" style={{ gap: 20 }}>
+                  <SourceTable sources={o.sources} />
+                  <Card title="Add material">
+                    <Upload courseId={o.course.id} />
+                  </Card>
+                </div>
+              )}
+              {tab === "notes" && (
+                <div className="stack">
+                  <div className="row" style={{ justifyContent: "flex-end" }}>
+                    <NewNoteButton courseId={o.course.id} />
+                  </div>
+                  <NoteList courseId={o.course.id} />
+                </div>
+              )}
+              {tab === "simulations" && <QuizTable quizzes={o.quizzes} />}
+              {tab === "answers" && <AnswersTab courseId={o.course.id} />}
+            </>
+          );
+        }}
+      </Async>
+    </div>
+  );
+}
+
+const STUDY_FILTERS: (StudyStatus | "all")[] = ["all", "not_studied", "studied", "known"];
+
+function ConceptsTab({ o }: { o: CourseOverview }) {
+  const [filter, setFilter] = useState<StudyStatus | "all">("all");
+  const [text, setText] = useState("");
+  const rows = useMemo(() => {
+    const needle = text.trim().toLocaleLowerCase();
+    return o.concepts.filter(
+      (c) => (filter === "all" || c.study_status === filter) && (!needle || c.term.toLocaleLowerCase().includes(needle)),
+    );
+  }, [o.concepts, filter, text]);
+
+  if (o.concepts.length === 0) {
+    return <Empty title="No concepts yet">Claude creates concepts from your material when it reads it with you.</Empty>;
+  }
+  return (
+    <div className="stack">
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <div className="row" role="group" aria-label="Filter by study status">
+          {STUDY_FILTERS.map((f) => (
+            <button key={f} type="button" className="chip chip-filter" aria-pressed={filter === f} onClick={() => setFilter(f)}>
+              {f === "all" ? `All ${o.concepts.length}` : `${STUDY_LABEL[f]} ${o.progress.study[f]}`}
+            </button>
+          ))}
+        </div>
+        <label style={{ minWidth: 220 }}>
+          <span className="sr-only">Find a concept</span>
+          <input type="search" placeholder="Find a concept" value={text} onChange={(e) => setText(e.target.value)} />
+        </label>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Concept</th>
+              <th>Study</th>
+              <th>Knowledge</th>
+              <th>Difficulty</th>
+              <th>Next review</th>
+              <th>Where in the material</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c) => (
+              <ConceptTr key={c.id} c={c} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length === 0 && <p className="muted small">No concept matches.</p>}
+    </div>
+  );
+}
+
+function ConceptTr({ c }: { c: ConceptRow }) {
+  return (
+    <tr>
+      <td>
+        <Link to={`/concepts/${c.id}`} style={{ fontWeight: 600 }}>
+          {c.term}
+        </Link>
+      </td>
+      <td>
+        <StudyChip status={c.study_status} />
+      </td>
+      <td>
+        <BandChip band={c.band} />
+      </td>
+      <td>
+        <Difficulty value={c.difficulty} source={c.difficulty_source} />
+      </td>
+      <td>
+        {c.review ? (
+          <span className={c.review.is_due ? "chip warn" : undefined} title={c.review.reason ?? undefined}>
+            {c.review.is_due ? "Due" : dateLabel(c.review.due_at)}
+          </span>
+        ) : (
+          <span className="muted small">Not scheduled</span>
+        )}
+      </td>
+      <td className="small muted">{c.sections.map((s) => s.label).join(", ") || "—"}</td>
+    </tr>
+  );
+}
+
+const BLOOM = ["", "Remember", "Understand", "Apply", "Analyse", "Evaluate", "Create"];
+const pct = (x: unknown) => `${Math.round(Number(x) * 100)}%`;
+
+/** Claude's exam-profile fields, summarised as plain text (never rendered as markup). */
+function ItemTypes({ value }: { value: TargetProfile["item_types"] }) {
+  if (!value?.length) return <span className="muted">—</span>;
+  return <>{value.map((v) => `${v.type} ${pct(v.share)}`).join(" · ")}</>;
+}
+
+function BloomMix({ value }: { value: TargetProfile["bloom_mix"] }) {
+  const entries = Object.entries(value ?? {}).sort(([a], [b]) => Number(a) - Number(b));
+  if (!entries.length) return <span className="muted">—</span>;
+  return <>{entries.map(([level, share]) => `${BLOOM[Number(level)] ?? `Level ${level}`} ${pct(share)}`).join(" · ")}</>;
+}
+
+function TopicWeights({ value }: { value: TargetProfile["topic_weights"] }) {
+  if (!value?.length) return <span className="muted">—</span>;
+  return <>{value.map((w) => `${w.label} ×${w.weight}`).join(" · ")}</>;
+}
+
+const GOAL: Record<string, string> = { long_term: "Remember it long-term", exam_only: "Only for this exam" };
+
+function TargetsTab({ targets, activeId }: { targets: Target[]; activeId: string | null }) {
+  if (targets.length === 0) {
+    return (
+      <Empty title="No exams or kolokviji yet">
+        At the start of a study session Claude asks what you prepare for and records it here.
+      </Empty>
+    );
+  }
+  return (
+    <div className="stack" style={{ gap: 16 }}>
+      {targets.map((t) => (
+        <Card
+          key={t.id}
+          title={t.name}
+          meta={`${TARGET_KIND[t.kind] ?? t.kind} · ${dateLabel(t.due_date)}`}
+          action={
+            t.id === activeId ? (
+              <span className="chip solid">Active</span>
+            ) : (
+              <span className={t.status === "passed" ? "chip good" : "chip"}>{t.status}</span>
+            )
+          }
+        >
+          <div className="stack">
+            <dl className="kv">
+              <dt>When</dt>
+              <dd>
+                {dateLabel(t.due_date)} ({t.days_left >= 0 ? `in ${plural(t.days_left, "day")}` : "passed"})
+              </dd>
+              <dt>Scope in your words</dt>
+              <dd className="pre">{t.scope_description}</dd>
+              <dt>Mapped to</dt>
+              <dd>
+                {t.scope.length === 0
+                  ? "—"
+                  : t.scope
+                      .map((s) =>
+                        s.kind === "pages" && s.pages
+                          ? `${s.filename ?? "material"} pp. ${s.pages[0]}–${s.pages[1]}`
+                          : s.kind === "source"
+                            ? `${s.filename ?? "material"} (whole)`
+                            : s.kind,
+                      )
+                      .join("; ")}{" "}
+                · {plural(t.concepts_in_scope, "concept")}
+              </dd>
+              {t.goal && (
+                <>
+                  <dt>Goal</dt>
+                  <dd>{GOAL[t.goal] ?? t.goal}</dd>
+                </>
+              )}
+              {t.result && (
+                <>
+                  <dt>Result</dt>
+                  <dd>{t.result}</dd>
+                </>
+              )}
+              {t.notes && (
+                <>
+                  <dt>Notes</dt>
+                  <dd className="pre">{t.notes}</dd>
+                </>
+              )}
+            </dl>
+            {t.profile && (
+              <details>
+                <summary style={{ cursor: "pointer", fontWeight: 600 }}>Exam style from an old paper</summary>
+                <div className="stack" style={{ marginTop: 10 }}>
+                  <dl className="kv">
+                    <dt>Question types</dt>
+                    <dd>
+                      <ItemTypes value={t.profile.item_types} />
+                    </dd>
+                    <dt>Thinking levels</dt>
+                    <dd>
+                      <BloomMix value={t.profile.bloom_mix} />
+                    </dd>
+                    <dt>Topic weights</dt>
+                    <dd>
+                      <TopicWeights value={t.profile.topic_weights} />
+                    </dd>
+                    <dt>Examples</dt>
+                    <dd>
+                      {t.profile.example_items?.length ? (
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {t.profile.example_items.map((x, i) => (
+                            <li key={i} className="pre">
+                              {x}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </dd>
+                    {t.profile.notes && (
+                      <>
+                        <dt>Notes</dt>
+                        <dd className="pre">{t.profile.notes}</dd>
+                      </>
+                    )}
+                  </dl>
+                  <p className="tiny muted">
+                    Analysed by {t.profile.derived_by === "assistant" ? "Claude" : t.profile.derived_by} on {dateTime(t.profile.created_at)}.
+                  </p>
+                </div>
+              </details>
+            )}
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function AnswersTab({ courseId }: { courseId: string }) {
+  const q = useQuery({
+    queryKey: ["attempts", courseId],
+    queryFn: () => get<AttemptRow[]>("/attempts", { course_id: courseId, limit: 200 }),
+  });
+  return (
+    <Async q={q}>
+      {(rows) =>
+        rows.length === 0 ? (
+          <Empty title="No answers yet">Answers you give in Claude's forms are saved here word for word.</Empty>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Saved</th>
+                  <th>Question</th>
+                  <th>Answer</th>
+                  <th>Grade</th>
+                  <th>Captured</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((a) => (
+                  <tr key={a.attempt_id}>
+                    <td className="small nowrap" title={dateTime(a.submitted_at)}>
+                      {relativeDay(a.submitted_at)}
+                    </td>
+                    <td>
+                      {a.question}
+                      {a.quiz_id && (
+                        <div className="tiny">
+                          <Link to={`/simulations/${a.quiz_id}`}>From a simulation</Link>
+                        </div>
+                      )}
+                    </td>
+                    <td className="small">{ATTEMPT_KIND[a.kind] ?? a.kind}</td>
+                    <td>
+                      {a.status === "saved_awaiting_evaluation" ? (
+                        <span className="chip">Awaiting feedback</span>
+                      ) : (
+                        <GradeChip grade={a.grade} status={a.assessment_status} />
+                      )}
+                    </td>
+                    <td className="small muted">{CAPTURED_VIA[a.captured_via] ?? a.captured_via}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </Async>
+  );
+}

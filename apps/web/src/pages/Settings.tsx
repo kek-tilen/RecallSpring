@@ -1,0 +1,288 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState, type FormEvent } from "react";
+import { request } from "../api";
+import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
+import { dateTime } from "../format";
+import { keys, useConnector, useSession, useStudySettings } from "../queries";
+import type { ConnectorSettings, ConnectorToken, StudySettings } from "../types";
+
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function StudyForm({ initial }: { initial: StudySettings }) {
+  const qc = useQueryClient();
+  const [minutes, setMinutes] = useState(initial.weekly_minutes);
+  const [maintenance, setMaintenance] = useState(initial.maintenance_percent);
+  const [style, setStyle] = useState(initial.style_percent);
+  const save = useMutation({
+    mutationFn: () =>
+      request<StudySettings>("/settings/study", {
+        method: "PUT",
+        json: { weekly_minutes: minutes, maintenance_percent: maintenance, style_percent: style },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.studySettings });
+      void qc.invalidateQueries({ queryKey: keys.dashboard });
+    },
+  });
+  const dirty =
+    minutes.join() !== initial.weekly_minutes.join() || maintenance !== initial.maintenance_percent || style !== initial.style_percent;
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    save.mutate();
+  }
+
+  return (
+    <form className="stack" onSubmit={submit}>
+      <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend className="small" style={{ fontWeight: 600, marginBottom: 8 }}>
+          Minutes per day
+        </legend>
+        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(84px, 1fr))", gap: 8 }}>
+          {DAYS.map((d, i) => (
+            <label key={d} className="field">
+              {d}
+              <input
+                type="number"
+                min={0}
+                max={720}
+                step={5}
+                value={minutes[i]}
+                onChange={(e) => setMinutes(minutes.map((m, j) => (j === i ? Math.max(0, Math.min(720, Number(e.target.value) || 0)) : m)))}
+              />
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <label className="field">
+        Maintenance share: {maintenance}%
+        <span className="hint">Time kept for material of a passed kolokvij so it is not forgotten.</span>
+        <input type="range" min={0} max={50} value={maintenance} onChange={(e) => setMaintenance(Number(e.target.value))} />
+      </label>
+      <label className="field">
+        Past-paper style: {style}%
+        <span className="hint">Share of simulation questions in the style of your old papers; the rest go deeper.</span>
+        <input type="range" min={0} max={100} step={5} value={style} onChange={(e) => setStyle(Number(e.target.value))} />
+      </label>
+      {save.error && <ErrorNote error={save.error} />}
+      <div className="row">
+        <button type="submit" className="btn primary" disabled={!dirty || save.isPending}>
+          Save study settings
+        </button>
+        {save.isSuccess && !dirty && <span className="small muted">Saved.</span>}
+      </div>
+    </form>
+  );
+}
+
+function TokenRow({ t, onRevoke }: { t: ConnectorToken; onRevoke: (t: ConnectorToken) => void }) {
+  return (
+    <tr>
+      <td>{t.label}</td>
+      <td className="small">{dateTime(t.created_at)}</td>
+      <td className="small">{t.last_used_at ? dateTime(t.last_used_at) : "Never"}</td>
+      <td>
+        {t.revoked_at ? (
+          <span className="chip">Revoked {dateTime(t.revoked_at)}</span>
+        ) : (
+          <button type="button" className="btn small danger" onClick={() => onRevoke(t)}>
+            Revoke
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function ConnectorPanel({ c }: { c: ConnectorSettings }) {
+  const qc = useQueryClient();
+  const [percent, setPercent] = useState(c.limit_percent);
+  const [revoking, setRevoking] = useState<ConnectorToken | null>(null);
+  const [shown, setShown] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => setPercent(c.limit_percent), [c.limit_percent]);
+  const refresh = () => void qc.invalidateQueries({ queryKey: keys.connector });
+
+  const limit = useMutation({
+    mutationFn: () => request<ConnectorSettings>("/settings/connector", { method: "PUT", json: { limit_percent: percent } }),
+    onSuccess: refresh,
+  });
+  const create = useMutation({
+    mutationFn: () => request<ConnectorToken & { token: string | null }>("/settings/connector/tokens", { json: { label: "Claude Desktop" } }),
+    onSuccess: (t) => {
+      setShown(t.token);
+      setCopied(false);
+      refresh();
+    },
+  });
+  const revoke = useMutation({
+    mutationFn: (t: ConnectorToken) => request<ConnectorToken>(`/settings/connector/tokens/${t.id}/revoke`, { method: "POST", json: {} }),
+    onSuccess: () => {
+      setRevoking(null);
+      refresh();
+    },
+  });
+  const projected = Math.max(1, Math.round((c.daily_default * percent) / 100));
+
+  return (
+    <div className="stack" style={{ gap: 18 }}>
+      <p className="small">
+        Claude Desktop uses RecallSpring through the connector on your own Claude plan. RecallSpring never sees your Claude sign-in.
+        Requests today: <strong>{c.used_today}</strong> of <strong>{c.daily_limit}</strong>.
+      </p>
+      <form
+        className="stack"
+        onSubmit={(e) => {
+          e.preventDefault();
+          limit.mutate();
+        }}
+      >
+        <label className="field">
+          Daily request limit: {percent}% ({projected} requests)
+          <span className="hint">Caps how many connector calls Claude can make per day, to protect your plan's usage.</span>
+          <input type="range" min={1} max={100} value={percent} onChange={(e) => setPercent(Number(e.target.value))} />
+        </label>
+        {limit.error && <ErrorNote error={limit.error} />}
+        <div>
+          <button type="submit" className="btn" disabled={percent === c.limit_percent || limit.isPending}>
+            Save limit
+          </button>
+        </div>
+      </form>
+      <hr className="soft" />
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <h3>Connector tokens</h3>
+        <button type="button" className="btn small" onClick={() => create.mutate()} disabled={create.isPending}>
+          Create token
+        </button>
+      </div>
+      {create.error && <ErrorNote error={create.error} />}
+      {shown && (
+        <div className="notice warn stack" role="status">
+          <strong>Copy this token now. It is shown only once.</strong>
+          <div className="token-box">{shown}</div>
+          <div className="row">
+            <button
+              type="button"
+              className="btn small"
+              onClick={() => {
+                void navigator.clipboard.writeText(shown).then(() => setCopied(true));
+              }}
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+            <button type="button" className="btn small ghost" onClick={() => setShown(null)}>
+              Hide
+            </button>
+          </div>
+          <span className="tiny">
+            The installer script writes it to the connector's token file for you; see docs/connector-setup.md. Never paste it into a chat.
+          </span>
+        </div>
+      )}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Label</th>
+              <th>Created</th>
+              <th>Last used</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {c.tokens.map((t) => (
+              <TokenRow key={t.id} t={t} onRevoke={setRevoking} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Confirm
+        open={revoking !== null}
+        title="Revoke connector token?"
+        confirmLabel="Revoke token"
+        danger
+        busy={revoke.isPending}
+        onConfirm={() => revoking && revoke.mutate(revoking)}
+        onClose={() => setRevoking(null)}
+      >
+        Claude Desktop using “{revoking?.label}” loses access to RecallSpring immediately. Your study records stay as they are. This
+        cannot be undone; create a new token to reconnect.
+        {revoke.error && <ErrorNote error={revoke.error} />}
+      </Confirm>
+    </div>
+  );
+}
+
+type Theme = "system" | "light" | "dark";
+
+function readTheme(): Theme {
+  try {
+    const t = localStorage.getItem("rs-theme");
+    return t === "light" || t === "dark" ? t : "system";
+  } catch {
+    return "system";
+  }
+}
+
+export function applyTheme(theme: Theme = readTheme()): void {
+  if (theme === "system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", theme);
+}
+
+function ThemePicker() {
+  const [theme, setTheme] = useState<Theme>(readTheme);
+  function pick(t: Theme) {
+    setTheme(t);
+    try {
+      if (t === "system") localStorage.removeItem("rs-theme");
+      else localStorage.setItem("rs-theme", t);
+    } catch {
+      /* storage unavailable: the choice lasts for this page only */
+    }
+    applyTheme(t);
+  }
+  return (
+    <div className="row" role="radiogroup" aria-label="Theme">
+      {(["light", "dark", "system"] as const).map((t) => (
+        <button key={t} type="button" role="radio" aria-checked={theme === t} aria-pressed={theme === t} className="chip chip-filter" onClick={() => pick(t)}>
+          {t === "system" ? "Match system" : t === "light" ? "Light" : "Dark"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function SettingsPage() {
+  const study = useStudySettings();
+  const connector = useConnector();
+  const session = useSession();
+  return (
+    <div className="page">
+      <PageHead title="Settings" sub="Study time, the Claude connector and how RecallSpring looks. Every change is recorded in History." />
+      <div className="grid cols-2" style={{ alignItems: "start" }}>
+        <div className="stack" style={{ gap: 16 }}>
+          <Card title="Study time">
+            <Async q={study}>{(s) => <StudyForm initial={s} />}</Async>
+          </Card>
+          <Card title="Appearance">
+            <ThemePicker />
+          </Card>
+          <Card title="Account">
+            <dl className="kv">
+              <dt>Username</dt>
+              <dd>{session.data?.user.username}</dd>
+              <dt>Timezone</dt>
+              <dd>{session.data?.user.timezone}</dd>
+              <dt>Session ends</dt>
+              <dd>{session.data ? dateTime(session.data.expires_at) : ""}</dd>
+            </dl>
+          </Card>
+        </div>
+        <Card title="Claude connector">
+          <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
+        </Card>
+      </div>
+    </div>
+  );
+}
