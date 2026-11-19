@@ -128,6 +128,22 @@ def test_deferral_only_moves_due_later() -> None:
     assert apply_deferral(None, Deferral(T0, later)) is None
 
 
+def test_deferral_keeps_the_evidence_reason_for_knowledge_bands() -> None:
+    from types import SimpleNamespace
+
+    from recallspring_api.services import mastery
+
+    lapse = apply_evidence(apply_evidence(None, ev(T0, 3), TZ), ev(T0 + timedelta(days=2), 0), TZ)
+    assert lapse.reason.code == "lapse"
+    deferred = apply_deferral(lapse, Deferral(T0 + timedelta(days=2), local_day_start(T0, TZ, 6)))
+    assert deferred is not None and deferred.reason.code == "deferred"
+    assert deferred.reason.as_dict()["evidence_code"] == "lapse"
+    again = apply_deferral(deferred, Deferral(T0 + timedelta(days=3), local_day_start(T0, TZ, 9)))
+    assert again is not None and again.reason.as_dict()["evidence_code"] == "lapse"
+    state = SimpleNamespace(due_reason=again.reason.as_dict(), step=again.step, consecutive_successes=0)
+    assert mastery.band(state) == "emerging"  # type: ignore[arg-type]
+
+
 def test_replay_is_independent_of_input_order() -> None:
     events: list[Evidence | Deferral] = []
     at = T0

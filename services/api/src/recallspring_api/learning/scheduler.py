@@ -63,10 +63,13 @@ class DueReason:
     interval_days: int | None = None
     grade: int | None = None
     attempt_id: uuid.UUID | None = None
+    # The reason code of the last graded evidence; a deferral moves the date but must not hide it.
+    evidence_code: str | None = None
 
     def as_dict(self) -> dict[str, object]:
         return {
             "code": self.code,
+            "evidence_code": self.evidence_code or self.code,
             "message": self.message,
             "interval_days": self.interval_days,
             "grade": self.grade,
@@ -219,7 +222,14 @@ def apply_deferral(state: ReviewSchedule | None, d: Deferral) -> ReviewSchedule 
     return replace(
         state,
         due_at=until,
-        reason=DueReason("deferred", "Review deferred by you.", None, state.reason.grade, state.reason.attempt_id),
+        reason=DueReason(
+            "deferred",
+            "Review deferred by you.",
+            None,
+            state.reason.grade,
+            state.reason.attempt_id,
+            state.reason.evidence_code or state.reason.code,
+        ),
     )
 
 

@@ -10,6 +10,11 @@ BANDS = ("not_started", "emerging", "developing", "reliable")
 BAND_LABELS = {"not_started": "Not started", "emerging": "Emerging", "developing": "Developing", "reliable": "Reliable"}
 
 
+def evidence_code(state: ReviewState) -> str | None:
+    """Reason code of the last graded evidence (a deferral keeps it in ``evidence_code``)."""
+    return state.due_reason.get("evidence_code") or state.due_reason.get("code")
+
+
 def band(state: ReviewState | None) -> str:
     """Deterministic band from the replayed review state.
 
@@ -20,7 +25,7 @@ def band(state: ReviewState | None) -> str:
     """
     if state is None:
         return "not_started"
-    code = state.due_reason.get("code")
+    code = evidence_code(state)
     grade = state.due_reason.get("grade")
     if code == "lapse" or (code == "first_evidence" and grade is not None and grade <= 1):
         return "emerging"
@@ -40,7 +45,7 @@ def difficulty(concept: Concept, state: ReviewState | None) -> Difficulty:
     Claude's estimate, which beats the neutral default of 3."""
     if state is not None and state.evidence_count >= 3:
         observed = 3 + 0.5 * state.lapse_count - (1 if state.step >= 3 else 0)
-        if state.due_reason.get("code") in ("partial", "lapse"):
+        if evidence_code(state) in ("partial", "lapse"):
             observed += 0.5
         return Difficulty(max(1, min(5, round(observed))), "observed")
     if concept.difficulty_estimate is not None:

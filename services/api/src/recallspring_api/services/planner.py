@@ -178,7 +178,7 @@ def today_plan(
             label = "Studied" if status_map[concept.id] == "studied" else "Already known"
             why = f"{label}, not practised yet: a few Bloom 3-5 questions check it." + context
             main.append(_scored(urgency * weight, 0.9, "Practice", concept, courses, why, band, diff, target_name))
-        elif band == "emerging" or state.due_reason.get("code") in WEAK_REASONS:
+        elif band == "emerging" or mastery.evidence_code(state) in WEAK_REASONS:
             why = (
                 f"{mastery.BAND_LABELS[band]}: your last answers showed gaps; a short exercise now strengthens it "
                 f"before the review on {state.due_at.astimezone(tz).date().isoformat()}." + context
