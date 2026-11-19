@@ -1,5 +1,7 @@
 # Prompt for Opus — Architecture, Backend and Technical Gate
 
+> **Note (2026-11-19):** the AI design changed by owner decision — Claude connector (Mode A) plus pluggable in-app providers (Mode B). Where this document mentions SIWC as the only AI route or forbids all API keys, `AGENTS.md`, `docs/04-AI-INTEGRATION.md` and `docs/adr/002-ai-provider-architecture.md` take precedence.
+
 You are the **architecture and backend lead** for a new open-source personal learning app called **RecallSpring**. Read the entire attached `recallspring-build-spec` pack, especially `AGENTS.md` and `docs/04-AI-INTEGRATION.md`, before writing code. All product UI/copy must be English; the owner communicates in Slovenian but the shipped application language is English.
 
 ## Your objective

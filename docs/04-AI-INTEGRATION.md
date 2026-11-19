@@ -1,89 +1,139 @@
-# 04 — AI Provider Contract and Technical Feasibility Gate
+# 04 — AI Provider Architecture and Integration Contract
 
-## Hard user constraints
+> **Revised 2026-11-19 by owner decision** (replaces the SIWC-only design). Rationale and alternatives: `docs/adr/002-ai-provider-architecture.md`. Research facts: `docs/10-DECISIONS-AND-RISKS.md` → Gate 0 research log.
 
-- **No traditional OpenAI/Anthropic API keys, no API billing requirement.**
-- The app should offer a first-class ChatGPT tutoring experience through an official, permitted integration. It must **not** pretend this is the full ChatGPT first-party interface.
-- The VPS is user-controlled; whether a remote deployment meets all current terms must be checked against official documentation at runtime.
-- Use an AI adapter interface so the deterministic learning engine and user data remain usable even when disconnected or quota limited.
+## Hard constraints
 
-## Official route to test first
+- AI is **optional and pluggable**. The deterministic learning engine, sources, notes, review queue and planner work with every provider disconnected.
+- **No mandatory paid usage.** The owner's primary path uses their own Claude plan inside the official Claude app (Mode A). Paid API usage (Mode B with an API key) is opt-in and capped in USD.
+- Only official, documented integration routes. Never collect, store or intermediate Claude.ai or ChatGPT consumer credentials or session tokens outside the vendor's own official flow; never call internal endpoints; never route a request through another person's plan.
+- Provider-neutral data model: learning records belong to RecallSpring regardless of which model produced or graded them. Every AI-derived record stores provider, model and prompt/rubric version.
 
-OpenAI's **Sign in with ChatGPT (SIWC)** allows eligible Plus/Pro users, with consent and relevant scopes, to invoke an eligible Responses API subset via OAuth in supported open-source apps. The official self-hosted VM guide describes completing OAuth locally and transferring protected credentials to the user's VM. These are changing preview capabilities, not a blanket promise that every feature of ChatGPT is accessible.
+## Modes at a glance
 
-Sources (revalidate before coding):
-- https://developers.openai.com/siwc/quickstart
-- https://developers.openai.com/siwc/token-sharing-open-source
-- https://developers.openai.com/siwc/token-sharing-open-source/sign-in
-- https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms
-- https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference
-- https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations
-- https://openai.com/policies/sign-in-with-chatgpt-terms/
+| Mode | Where the conversation happens | Who pays | Status |
+|---|---|---|---|
+| **A — Claude connector** | Official Claude app (Claude Desktop first) calling RecallSpring's MCP tools | Learner's own Claude plan (usage counts against its limits) | **Primary; build first** |
+| **B — In-app provider** | RecallSpring's own tutor pane, via `LLMProvider` adapters | Depends on adapter: ChatGPT plan (SIWC), Anthropic API credits (key), self-hosted model | After Mode A; adapters are independent |
+| **Core (no AI)** | RecallSpring UI | — | Always available |
 
-### Legal/security invariants
+Anthropic's terms state that developers building their own products should use API-key authentication and may not offer Claude.ai login or route requests through Free/Pro/Max credentials. Mode A complies because the learner uses the **unmodified official Claude app** with their own plan, and RecallSpring is only a tool server that the app calls. RecallSpring never sees Claude credentials.
 
-- Authentication tokens must be obtained only from officially supported flows, kept under user's local control, never logged or stored in user browser code or remote-managed storage; the user's self-hosted, controlled VM needs explicit security review. Never repurpose tokens for unrelated apps.
-- Requests from remote runtime must be controlled by the authenticated user; user requests or user-authorized automations only. **Explicit opt-in before any background LLM calls**; off by default. Deterministic scheduling needs no LLM request.
-- No account pooling, credential sharing, resale, subscription usage bypass, or service offered to other users on one subscription.
-- Treat revoked/expired scope as a normal state. Show explicit disconnect and delete local credentials controls.
+## Mode A — Claude connector (MCP)
 
-### As-of-2026-11-19 SIWC preview contract
+### Transport and authentication
 
-- Discover available models with the connected user's OAuth bearer token; do not hardcode an entitlement or assume `GPT-6` is available.
-- Responses HTTP requests: `store: false`, `stream: true`; use `instructions` or developer role instructions. Supply entire required conversation context inside `input` each request; do not use `previous_response_id` over HTTP.
-- Preview rejects certain normal Responses fields, including `background`, `conversation`, `max_output_tokens`, `max_tool_calls`, `metadata`, `moderation`, `multi_agent`, `prompt`, `prompt_cache_retention`, `safety_identifier`, `temperature`, `top_logprobs`, `top_p`, `truncation`, `user` (verify current list).
-- Unsupported hosted tools currently include image generation, file search, Code Interpreter, native computer use, hosted MCP/connectors and `tool_search`. Do not rely on any of these for v1.
-- Supported inputs may include text, image and file content for eligible models, but the Files upload API, audio/video input and transcription are not supported through this flow at present.
-- Streaming can end with success or fail *after* data has been received. Persist full evaluated result only on valid completion; partial textual tutoring stream may be shown as interrupted.
-- App **owns its entire conversation history and source retrieval**. Do not import first-party ChatGPT conversations; sign-in does not provide access to them.
+- **Local (now, desktop-first):** Claude Desktop launches the RecallSpring connector as a local **stdio** MCP server. The connector is a thin client of the RecallSpring API (`services/mcp`), authenticated with a **scoped connector token** created in RecallSpring Settings (shown once, stored hashed server-side, revocable, `last_used_at` tracked). Scope `connector` cannot reach deletion, export, budget, consent or account routes.
+- **Remote (deferred):** Claude web/mobile connect to custom connectors **from Anthropic's cloud**, so a remote connector needs a public HTTPS endpoint (Streamable HTTP) protected by OAuth. Deferred until the owner approves a domain and HTTPS (Gate 4); the owner studies on one computer.
 
-## Gate 0: Mandatory minimal proof of concept
+### Tool catalogue (read + append only)
 
-Without touching VPS production state:
+The authoritative list lives in `docs/07-API-AND-VISUAL-CONTRACT.md` → Claude connector tool contract. Principles:
 
-1. Make a minimal open-source repo and exercise supported local SIWC OAuth consent with an eligible account.
-2. Confirm actual granted scopes and model discovery. Show them in UI, excluding tokens.
-3. Make one *official* streamed Responses request satisfying preview field restrictions; receive `response.completed`.
-4. Confirm one subsequent turn with app-owned history; confirm `store:false` behavior.
-5. Exercise user-visible quota, revoked-auth, network interruption and token-refresh paths (mock where necessary).
-6. Validate a self-hosted VM flow on an isolated test machine/container with protected credential transfer **only after user authorization** and following official guide.
-7. Verify that intended request patterns (interactive study, sources, function-style output) are supported. Confirm appropriate terms for user-controlled remote automation.
-8. Record the final decision in `docs/10-DECISIONS-AND-RISKS.md` and only then unlock production AI features.
+- Read tools return learner content and source text **wrapped and labeled as untrusted document content** with section IDs and citation labels; source text can never act as instructions.
+- Append tools create records (questions, attempts, assessments, session summaries) through the same validated service functions as the HTTP API.
+- **No destructive tools.** Deleting, restoring, exporting, changing budgets/consent/routing and editing source documents happen only in RecallSpring's UI with explicit confirmation.
+- Tool descriptions instruct the model: do not reveal rubrics before submission; prefer Bloom 3–5; separate question generation from grading; cite section IDs; say when evidence is missing.
 
-**Failure behavior:** If SIWC is unavailable or incompatible, ship a usable non-AI core and a clear AI connection blocker; do not sneak in another paid or unofficial provider. User approval is required to change no-key constraint.
+### Answer capture (persist-first invariant)
 
-## Provider interface (proposed)
+1. Claude calls `open_answer_form(question_id)`. Hosts that support **MCP Apps** render RecallSpring's first-party answer form inside the chat.
+2. The learner types the answer in the form; the form calls `submit_attempt` with the **exact typed text** and a client request ID. The server commits the attempt before replying (`captured_via = "answer_form"`).
+3. Only then does Claude read the attempt (`get_attempt`) and grade it.
+4. Fallback where the form cannot render: Claude passes the learner's chat answer to `submit_attempt` with `captured_via = "assistant_transcription"`; the UI marks such attempts so the learner can check the stored text.
 
-```typescript
-interface TutorProvider {
-  getConnectionStatus(): Promise<ConnectionStatus>;
-  listModels(): Promise<ModelInfo[]>;
-  streamTutorTurn(args: {
-    courseId: string;
-    sessionId: string;
-    history: ValidatedTutorMessage[];
-    sourceContext: SourceExcerpt[];
-    intent: "explain" | "generate_question" | "evaluate" | "visualize";
-    idempotencyKey: string;
-  }): AsyncIterable<ProviderEvent>;
-}
+### Assessment recording and validation
+
+`record_assessment` accepts the `packages/contracts/schemas/assessment.schema.json` shape plus provider/model metadata. The server:
+
+- validates the schema, grade/status consistency and size bounds;
+- accepts `evidence_refs` only if they are source-section IDs that RecallSpring returned in this study session; unknown refs are dropped and the assessment is downgraded to `provisional` with a factuality flag;
+- never lets an uncertain (`provisional`, `ungraded`, low-confidence) assessment promote mastery or lengthen an interval (see `docs/05-LEARNING-ENGINE.md`);
+- appends; never overwrites earlier assessments. Learner corrections (`Challenge evaluation`) are separate appended records.
+
+### Model choice and limits
+
+The learner picks the model in the Claude app (owner default: **Sonnet**, switching to **Opus** for demanding material). RecallSpring records the model name Claude reports, labelled `reported_by_assistant` (unverified). Plan usage limits are managed by the Claude app; RecallSpring cannot see them. RecallSpring's own **daily connector-request limit** (1–100 % of the default) can throttle tool calls.
+
+### Limitations to keep honest in the UI
+
+- The chat transcript lives in the learner's Claude account; RecallSpring holds the learning record (questions, attempts, assessments, notes, schedule) and optional session summaries.
+- Visual explanations in Mode A are drawn by the Claude app itself; RecallSpring's safe visual renderer applies to its own UI (Mode B and stored visual blocks).
+- Connector features depend on the Claude app (custom connectors, MCP Apps). If a feature disappears, fall back to transcription capture and keep the core working.
+
+## Mode B — in-app providers
+
+### Provider interface
+
+```python
+class LLMProvider(Protocol):
+    id: str  # "anthropic_api", "siwc", "openai_compatible", "mock"
+    def capabilities(self, model: str) -> ProviderCapabilities: ...
+    async def connection_status(self) -> ConnectionStatus: ...
+    async def list_models(self) -> list[ModelInfo]: ...  # discovered, never hardcoded entitlements
+    def stream_turn(self, request: TurnRequest) -> AsyncIterator[ProviderEvent]: ...
+    async def generate_structured(self, request: StructuredRequest) -> StructuredResult: ...
 ```
 
-Server-side policy validator constrains inputs, checks consent, model availability and owner session; output parser validates structured objects before commit. PII/redaction policy and prompt budget per course/session configurable.
+`ProviderCapabilities` flags: `streaming`, `structured_output`, `tool_use`, `citations`, `pdf_input`, `image_input`, `prompt_caching`, `usage_reporting`, `cost_reporting`. Feature code checks capabilities instead of provider names. A per-task **routing table** (`tutor`, `question_generation`, `evaluation`, `concept_extraction`) maps each task to a provider and model, with per-course and per-session overrides. Owner default for every task: `claude-sonnet-5-5` when the Anthropic adapter is configured; Opus (`claude-opus-5-5`) selectable for demanding courses.
 
-## AI tutor behavior
+A server-side policy layer runs before every call: owner session, consent (background opt-in), budget/limit check, input-size bounds, provider capability check. Output parsers validate structured objects before commit; invalid output becomes a sanitized error event, never a partial record.
+
+### Adapter: Anthropic Claude API (`anthropic_api`)
+
+- Official `anthropic` Python SDK only. Owner-provided API key from platform.claude.com, stored server-side as a protected secret file; never echoed back after saving.
+- **Hard monthly USD limit** set by the owner. Each call is pre-checked against the remaining budget and post-recorded in an `ai_usage_ledger` from `response.usage` and a versioned pricing table. At the limit: stop new calls and show the limit state; never switch model or provider silently. Recommend the owner also sets a spend limit in the Anthropic Console.
+- Streaming for tutor turns; `stop_reason` checked before reading content (handle `refusal`, `max_tokens`).
+- **Citations** on source `document` blocks for tutor explanations (verifiable quotes with page/char locations). **Structured outputs** (`output_config.format`) for assessments and generated questions. The two cannot be combined in one request, so grading and cited explanation are separate calls.
+- **Prompt caching** for stable source context (frozen system prompt and source blocks first, volatile content last); verify with `usage.cache_read_input_tokens`.
+- Adaptive thinking with an explicit `effort` per task; no sampling parameters.
+
+### Adapter: OpenAI Sign in with ChatGPT (`siwc`)
+
+Kept as a feature for other self-hosters and for the owner. Implemented after Mode A. Contract as researched on 2026-11-19 (revalidate before coding):
+
+- Dynamic client registration (`client_id=dynamic_agent_client` + `agent_name_hint` on first sign-in; the issued `oaiapp_…` client ID is reused afterwards), PKCE S256, fresh `state`/`nonce`, stable per-host `ext_agent_host_id`, scopes `openid profile email offline_access resource.invoke chatgpt.tokens.use.direct`, `resource=https://api.openai.com/v1`.
+- Redirect URI **only** `http://127.0.0.1:<port>/…` (never `localhost`): sign-in completes on the computer running the browser. Remote instances receive credentials through the official self-hosted VM procedure (secure transfer; the VM owns refreshes).
+- Access token 1 h; refresh tokens rotate (30-day lifetime each); serialize refreshes; revoke via the discovery document's `revocation_endpoint` on sign-out.
+- Inference `POST https://api.openai.com/v1/responses` with `store: false`, `stream: true`, full history in `input`, system text via `instructions`. Omit `previous_response_id`, `background`, `conversation`, `max_output_tokens`, `max_tool_calls`, `metadata`, `moderation`, `multi_agent`, `prompt`, `prompt_cache_retention`, `safety_identifier`, `temperature`, `top_logprobs`, `top_p`, `truncation`, `user` — enforced by an **allowlist request builder**. Function/custom tools are supported (use them for structured grading); hosted image generation, file search, code interpreter, computer use, hosted MCP and `tool_search` are not.
+- Errors: `subscription_sharing_usage_limit_exceeded` (429) pauses plan-using requests with OpenAI's `Usage limit reached` / `Manage usage` UI; `…_usage_unavailable` and `…_user_unavailable` (503) use bounded backoff; `…_user_not_eligible` is explained without looping OAuth; `…_unsupported_capability` (400) removes the offending field and never retries the same body.
+- Scope caveat: OpenAI's docs describe this path for open-source and *locally hosted* apps; clear a remotely hosted instance with OpenAI (interest form) before enabling SIWC there.
+
+### Adapter: OpenAI-compatible / custom LLMs (`openai_compatible`, future)
+
+For self-hosted or third-party models exposing an OpenAI-compatible API (e.g. Ollama, LM Studio, vLLM). Capabilities are declared per configured model by the owner; missing structured-output support falls back to strict JSON validation with `ungraded` on failure.
+
+### Adapter: mock (`mock`)
+
+Deterministic, for tests and offline development only. Every mock output is labelled **Simulated** in API responses and UI, is always `provisional` with low confidence, and therefore never changes intervals or mastery.
+
+## Consent, limits and background calls
+
+- User-initiated calls are the default. Server-initiated LLM calls (e.g. nightly question pre-generation) require a dedicated `Allow background AI requests` opt-in per provider, OFF by default, with scope, frequency and revoke control. A review reminder never implies a model call.
+- Limits: monthly **USD** limit for API-key providers; daily AI-request limit **1–100 %** of the default for plan-based providers and the connector. Limit state is visible in Settings and wherever an AI action is offered.
+
+## AI tutor behavior (all modes)
 
 - Teach via concise explanation, ask follow-up questions, clarify misconceptions and calibrate difficulty.
-- Base course-specific claims on selected source sections; show references. If evidence absent, distinguish general knowledge from provided material.
-- Never disclose answer rubric before learner submission unless user explicitly asks for a hint/answer.
-- Separate **generation** from **grading**. On objective items use deterministic checks where possible; on open-ended Bloom 4/5 use rubrics, counterexamples, evidence and `provisional` grade when multiple defensible answers exist.
-- Teacher cannot directly edit DB or execute arbitrary visual JS; all actions pass typed backend functions and authorization.
-- Visual suggestions use the allowlisted schemas in `schemas/` only; if invalid, fall back to plain text plus an error event.
+- Base course-specific claims on selected source sections and show references. Without evidence, distinguish general knowledge from the provided material.
+- Never disclose the answer rubric before submission unless the learner asks for a hint or the answer.
+- Separate **generation** from **grading**. Use deterministic checks for objective items; for open-ended Bloom 4/5 use rubrics, counterexamples and evidence, and `provisional` when several defensible answers exist.
+- Reply in the language of the learner's question or material unless the learner chooses otherwise; never translate original notes without consent. UI copy stays English.
+- The model never mutates records directly: every action passes typed backend functions with authorization and validation.
+- Visual suggestions in RecallSpring's UI use only the allowlisted schemas in `packages/contracts/schemas/`; invalid specs fall back to plain text plus an error event.
 
-## Asynchronous AI policy
+## Gate 0 (revised)
 
-Default: schedule dates/questions from stored content deterministically, generate or evaluate using a model only when the user actively starts or continues a session. If later allowing server-initiated LLM calls (e.g. nightly question pre-generation), obtain a dedicated `Allow background AI requests` opt-in with scope, frequency and revoke control; include quota and usage disclosure. A background model call must not be inferred from a generic review reminder.
+1. ✅ Re-validate official terms and docs (Anthropic consumer vs API use, Claude custom connectors, MCP Apps, SIWC) — 2026-11-19, see research log.
+2. **Mode A smoke test (local):** Claude Desktop lists RecallSpring tools; reads plan and source sections; an answer submitted through the form is stored verbatim before grading; an assessment with a fabricated evidence ref is downgraded; no destructive tool is reachable.
+3. **Mode B (later, per adapter):** SIWC OAuth + model discovery + streamed `response.completed` + second turn with app-owned history + quota/revoke/refresh paths; Anthropic API key smoke test only if the owner adds a key and a USD limit.
+4. Record PASS/BLOCKED per mode in `docs/10-DECISIONS-AND-RISKS.md`; a mode is enabled only after it passes.
 
 ## Model testing
 
-Run prompts against a curated source-based test set with adversarial instruction text embedded in PDFs. Verify source citations, rubric grading, 'I don't know' behavior, JSON output validation and refusal to obey prompt injection in imported documents. Never pass a user's source document as a higher-priority instruction.
+Run prompts against a curated, human-reviewed source-based test set (including adversarial instruction text embedded in PDFs) for every provider/model pair in use. Verify citations, rubric grading, "I don't know" behavior, structured-output validation and refusal to obey prompt injection in imported documents. Never pass a learner's source document as a higher-priority instruction.
+
+## Sources (revalidate on implementation day)
+
+- Anthropic: https://code.claude.com/docs/en/legal-and-compliance (authentication and credential use), https://support.claude.com/en/articles/11175166 (custom connectors via remote MCP), https://modelcontextprotocol.io/docs/extensions/apps (MCP Apps), https://privacy.claude.com/en/articles/7996866 (API data retention)
+- OpenAI SIWC: https://developers.openai.com/siwc/token-sharing-open-source and its `sign-in`, `self-hosted-vms`, `models-and-inference`, `preview-limitations`, `errors-and-recovery`, `token-reference`, `profiles-and-sessions` pages; https://developers.openai.com/siwc/ui-ux-guidelines; https://openai.com/policies/sign-in-with-chatgpt-terms/ (returned HTTP 403 to automated fetch on 2026-11-19 — read manually before enabling SIWC)

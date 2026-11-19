@@ -12,7 +12,8 @@ docs/                     Product, architecture and safety specification (01–1
 docs/adr/                 Architecture decision records
 docs/agent-briefs/        Briefs for the implementing agents
 packages/contracts/       Shared JSON schemas (assessment, visual blocks)
-services/api/             FastAPI backend, migrations, tests, SIWC client
+services/api/             FastAPI backend, migrations, tests, AI provider adapters
+services/mcp/             Claude connector (MCP server) — planned
 infra/compose.dev.yml     Local development database (loopback only)
 ```
 
@@ -37,7 +38,12 @@ See `services/api/README.md` for configuration, the owner-account CLI and the de
 
 ## AI integration
 
-RecallSpring uses **official Sign in with ChatGPT (SIWC)** plan sharing for open-source apps — never classic API keys, never unofficial endpoints. Without a connection, every non-AI feature (notes, sources, scheduling, planning) keeps working. See `docs/04-AI-INTEGRATION.md` and `docs/adr/002-siwc-integration.md`.
+AI is pluggable and optional:
+
+- **Mode A — Claude connector:** study in the official Claude app (Claude Desktop) on your own Claude plan; RecallSpring is an MCP connector that Claude uses to read your plan and sources and to record questions, answers and assessments.
+- **Mode B — in-app providers:** OpenAI *Sign in with ChatGPT*, the Anthropic API with your own key and a hard monthly USD limit, and later OpenAI-compatible/custom models.
+
+Only official integration routes are used; no consumer credentials are ever stored. Without any AI connection every non-AI feature (sources, notes, scheduling, planning) keeps working. See `docs/04-AI-INTEGRATION.md` and `docs/adr/002-ai-provider-architecture.md`.
 
 ## License
 

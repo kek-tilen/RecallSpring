@@ -2,7 +2,7 @@
 
 ## Team roles and handoff
 
-- **Opus — architecture and backend lead:** validate SIWC gate, data model and migration constraints, FastAPI/auth/learning scheduler, source retrieval and AI assessment rules, test review.
+- **Opus — architecture and backend lead:** validate AI gates (Claude connector first, then SIWC), data model and migration constraints, FastAPI/auth/learning scheduler, source retrieval and AI assessment rules, test review.
 - **Sol — frontend and integration lead:** Sage Study accessible React interface, offline outbox, source/notes workspace, validated visualization components, E2E and UX quality.
 - Both review each other's pull requests. Either may challenge architecture with evidence; owner retains deployment and destructive-operation approval.
 - Do not run both agents against the same uncommitted branch. Use separate branches, documented interface contracts and clear PR boundaries.
@@ -11,13 +11,13 @@
 
 ### M0 — Feasibility and safe foundation (blocking)
 
-- `M0.1` Re-validate SIWC access/terms and self-hosted VM token handling using up-to-date docs.
-- `M0.2` Build small OAuth + model catalog + streamed `response.completed` proof, locally; log only non-sensitive results.
-- `M0.3` Test revoked tokens, plan quota/error handling, and refresh behavior; document account consent.
+- `M0.1` Re-validate official provider terms (Anthropic consumer vs API use, Claude connectors and MCP Apps, SIWC) — done 2026-11-19, see `docs/10` research log.
+- `M0.2` Claude Desktop connector smoke test locally: tools listed, plan read, answer captured via form, assessment recorded and validated.
+- `M0.3` After Mode A: SIWC proof (OAuth, model catalog, streamed `response.completed`, revoked/quota/refresh paths); optional Anthropic API key smoke test with a USD limit.
 - `M0.4` Assess VPS capacity, image footprint and ProtectedApp separation; **do not deploy**.
 - `M0.5` Create git repository, license proposal, CI, lint/test, dependency pins, threat model.
 
-**Gate:** POC works legally/technically or project AI feature is explicitly blocked pending owner decision. Do not imply first-party ChatGPT features port over.
+**Gate:** each AI mode is enabled only after its proof works legally and technically; otherwise it stays disabled with a clear blocker. Do not imply that first-party ChatGPT or Claude app features port into RecallSpring's own UI.
 
 ### M1 — Durable core
 
@@ -33,7 +33,8 @@
 
 ### M2 — Tutor and evaluator
 
-- `M2.1` SIWC provider adapter behind feature flag and model picker.
+- `M2.0` Claude connector: MCP server (stdio for Claude Desktop), answer-form MCP App, scoped connector tokens.
+- `M2.1` `LLMProvider` adapters behind feature flags with per-task model routing and limits: Anthropic API, SIWC, mock.
 - `M2.2` Source-grounded concept map (verified sections, uncertainty flags).
 - `M2.3` Bloom 3/4/5 question generation with rubric; mixed/progressive modes.
 - `M2.4` Transparent grading with source refs, grade 0–4/NULL and challenge flow.
@@ -79,7 +80,7 @@
 | T-09 | Browser offline during notes | Draft in local outbox, later merges or flags conflict |
 | T-10 | Two devices same note revision | 409 and both versions retained until user resolves |
 | T-11 | Delete a course | Preview impacts; nothing removed before confirmation |
-| T-12 | SIWC disconnect/quota exceeded | App usable for notes/scheduling, no paid fallback |
+| T-12 | Provider disconnect, quota or USD limit reached | App usable for notes/scheduling; no silent provider/model switch, no paid fallback |
 | T-13 | App restart | DB data, sources, notes, attempts and review dates persist |
 | T-14 | Export and restore | Full dataset plus original source files recovered; no secrets in export |
 | T-15 | Backend authorization | Cross-user access fails in test fixture even if single user in prod |
@@ -92,6 +93,9 @@
 | T-22 | Accessible visuals | Screen reader description and keyboard controls work |
 | T-23 | One-step plan after exam | Long-term foundational concepts remain eligible for review |
 | T-24 | DB unavailable when submitting | No false 'saved' acknowledgment; local draft retained |
+| T-25 | Source text asks the connector to delete data | No destructive tool exists; records stay append-only; audit shows the attempt |
+| T-26 | Connector answer capture | Form path stores the exact typed text; transcription path is flagged `assistant_transcription` |
+| T-27 | Fabricated evidence ref in `record_assessment` | Ref dropped, grade downgraded to `provisional`, schedule not lengthened |
 
 ## Handoffs and proof required for every milestone
 
@@ -103,4 +107,4 @@
 
 ## Build order and scope control
 
-No polishing of visual themes before the AI gate and persistence are proven. Do not implement all six visualization variants before one end-to-end validated flow works. First 'thin slice' should allow: upload example -> extract section -> select concept -> write note -> ask question -> save raw answer -> evaluate (real SIWC if gate passed, otherwise mock) -> schedule due review -> reopen and see state.
+No polishing of visual themes before the AI gate and persistence are proven. Do not implement all six visualization variants before one end-to-end validated flow works. First 'thin slice' should allow: upload example -> extract section -> select concept -> write note -> ask question -> save raw answer -> evaluate (Claude connector in Mode A, otherwise a labelled mock) -> schedule due review -> reopen and see state.

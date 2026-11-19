@@ -31,7 +31,7 @@ All text/action contrast must meet WCAG 2.2 AA; change tones as needed. Use read
 ## Navigation hierarchy
 
 **Desktop (optional left rail)**: `Home`, `Courses`, `Study`, `Review`, `Insights`, `Library`, `Settings`.  
-**Mobile**: bottom nav with `Home`, `Study`, `Review`, `Library` + overflow `More`; keyboard shortcuts not required for core use.
+**Mobile** (deferred — desktop-first by owner decision; keep layouts responsive where cheap): bottom nav with `Home`, `Study`, `Review`, `Library` + overflow `More`; keyboard shortcuts not required for core use.
 
 ### Home dashboard: the three obvious actions
 
@@ -43,7 +43,7 @@ Below: `Today's plan` with explainable 2–5 tasks, `Needs attention` and a brie
 
 ### Study Workspace
 
-Desktop split view: readable source/notes at left, tutor conversation at right; adjustable sizes and focus mode. Mobile: switcher tabs `Source`, `Notes`, `Tutor` and a persistent save indicator. Learner can hide sources during retrieval and reveal them afterward.
+Desktop split view: readable source/notes at left, tutor conversation at right; adjustable sizes and focus mode. In Mode A the right pane is a `Study with Claude` panel (connector status, how to start, questions/attempts/assessments Claude recorded in this session); in Mode B it is the in-app tutor. Mobile: switcher tabs `Source`, `Notes`, `Tutor` and a persistent save indicator. Learner can hide sources during retrieval and reveal them afterward.
 
 Components:
 - Note editor with autosave and revision history; copy/quote source anchors.
@@ -91,7 +91,7 @@ Provide full mouse/touch alternatives. In-context help should be short, not a tu
 
 - New user: friendly empty state with `Add your first course` and sample workflow.
 - No reviews due: `You're caught up. Continue a topic or browse your library.`
-- AI rate limit: `Your ChatGPT plan is temporarily at its usage limit. Your notes and answers are saved. You can continue reading and writing.`
+- AI limit reached: `<Provider> is at its usage limit. Your notes and answers are saved. You can continue reading and writing.` For SIWC follow OpenAI's wording (`Usage limit reached`, `Manage usage` link); for API keys say `Monthly AI budget reached ($X of $Y)`; for RecallSpring's own daily limit say so explicitly.
 - Pending evaluation: `Answer saved. Feedback is still processing.`
 - Offline: `You're offline. Drafts will sync when connected.`
 - Sync conflict: compare side by side; no silent overwrite.
@@ -99,8 +99,8 @@ Provide full mouse/touch alternatives. In-context help should be short, not a tu
 
 ## Security and privacy UI
 
-- Distinguish RecallSpring login from `Connect ChatGPT` OAuth permission.
-- Show AI permission state, current connected account (limited identity), model choice and plan usage controls.
+- Distinguish RecallSpring login from AI connections: `Claude connector` (connector token, last used, revoke, setup steps for Claude Desktop), `Continue with ChatGPT` (SIWC, per OpenAI UI guidelines), `Claude API key` (masked, never re-displayed).
+- Show AI permission state, connected account (limited identity), per-task model choice (tutor default Sonnet), monthly USD limit for API keys and daily request limit (1–100 %) for plan-based providers, with current usage.
 - Explicit `Allow background AI requests` opt-in OFF by default; explain quotas and ability to revoke; do not hide consent in T&Cs.
 - Destructive action dialog includes exact scope and recoverability period. Exports and backups explained in settings.
 
@@ -112,6 +112,7 @@ Provide full mouse/touch alternatives. In-context help should be short, not a tu
 4. Answer submission, grading/uncertainty panel and source references.
 5. Review batch and next-due explanation.
 6. Interactive process flow / comparison visual.
-7. Settings: theme, timezone, connection, export, deletion.
+7. Settings: theme, timezone, AI connections and limits, export, deletion.
+8. `Study with Claude` panel: connector status and the records Claude created.
 
 Demo data must be labeled as such; screenshots used for acceptance before production integration.

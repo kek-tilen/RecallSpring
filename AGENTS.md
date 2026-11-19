@@ -24,17 +24,22 @@ Implement RecallSpring per `README.md` and the `docs/` specifications. It is a s
 - Do not interpret AI-graded mastery as a validated psychometric score.
 - Deleted data requires explicit confirmation; use reversible soft-delete and audit for a retention period. Never ask the LLM to mutate records directly without server-side permission checks.
 - All UI copy English; all sources and learner content may be in any language. Never automatically translate original notes without consent.
-- Strict allowlisted visual JSON components. **Do not execute model-generated HTML, JS, CSS, SQL, shell code, or templates.**
+- Strict allowlisted visual JSON components. **Do not execute model-generated HTML, JS, CSS, SQL, shell code, or templates.** RecallSpring's own static MCP App UI (e.g. the connector answer form) is first-party code reviewed like any frontend code and never embeds model-generated markup or scripts.
 - Accessible, keyboard-friendly, responsive, light mode default. User can decide if visual aids are useful; avoid decoration over learning value.
 
-## AI integration critical
+## AI integration critical (revised 2026-11-19 by owner decision — see `docs/adr/002-ai-provider-architecture.md`)
 
-- No classic LLM API keys; no hardcoded credentials; no scraping ChatGPT cookies or reverse-engineered internal endpoints.
-- First implement isolated SIWC proof of concept per official OpenAI documentation, using this project's approved self-hosted user-controlled VM model. The OAuth credential storage must remain under the user's control and protected; never in Git, client JS, logs, error traces, images, CI artifacts, or remote managed secret storage.
-- Do **not** assume a ChatGPT subscription grants unrestricted models, volume, native ChatGPT visuals, Code Interpreter, image generation, file search, or conversation sync.
-- SIWC preview HTTP responses require `store: false`, `stream: true`, complete request history in input and officially supported fields only. Check current docs before implementing.
-- Background **LLM** requests require separate affirmative user consent under current SIWC terms. Deterministic server-side scheduling without model calls may operate automatically. User-initiated calls are the default.
-- Quota exceeded / revoked authorization / disconnection => clear UI status, save drafts and queue deterministic work; **never silently fall back to billable API-key usage**.
+AI is pluggable and optional. The non-AI core (sources, notes, scheduling, planning, review queue) must always work.
+
+- **Mode A — Claude connector (the owner's primary path).** The learner studies in the official Claude app (Claude Desktop first) on their own Claude plan; RecallSpring is an MCP server exposing typed, authorized tools. RecallSpring never obtains, stores, proxies or requests Claude.ai credentials or session tokens, and never sends model requests on the learner's Claude plan itself.
+- **Mode B — in-app AI providers** behind the `LLMProvider` interface: official OpenAI *Sign in with ChatGPT* (SIWC), the Anthropic Claude API with an owner-provided API key (official `anthropic` SDK only), and later OpenAI-compatible/custom LLMs. Provider and model are chosen per task and can be overridden per course or session.
+- Never scrape cookies or session tokens, never call reverse-engineered internal endpoints, never route requests through another person's account or plan.
+- API keys and OAuth credentials are owner-controlled secrets in protected server-side storage only; never in Git, client JS, logs, error traces, images, CI artifacts, exports or plaintext database columns.
+- Paid usage needs an owner-set hard limit: a monthly USD limit for API-key providers; a daily AI-request limit (1–100 % of the default) for plan-based providers. Never silently switch provider or model, and never fall back from plan-based to billable usage.
+- SIWC: HTTP requests use `store: false`, `stream: true`, complete history in `input` and officially supported fields only. Do **not** assume a ChatGPT plan grants unrestricted models, volume, native ChatGPT visuals or hosted tools. Revalidate the official docs on implementation day.
+- Background LLM requests (no user action) require separate affirmative opt-in, OFF by default, for every provider. Deterministic scheduling without model calls may run automatically. User-initiated calls are the default.
+- Connector tools may read learning data and append records. They must never delete, finalize deletions, modify source documents, change budgets or consent, or bypass server-side validation (schema, evidence references, ownership).
+- Quota exceeded / revoked authorization / disconnection => clear UI status, save drafts and queue deterministic work.
 
 ## Engineering discipline
 

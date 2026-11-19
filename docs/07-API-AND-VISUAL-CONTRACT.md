@@ -10,10 +10,14 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 |---|---|---|
 | POST | `/auth/login` | Private app session (Argon2id credentials; rate-limited) |
 | POST | `/auth/logout` | Revoke session |
-| GET | `/ai/connection` | Current OAuth connection + model sharing status |
-| POST | `/ai/connect/start` | Initiate supported user-authorized SIWC flow or return on-device instructions |
-| POST | `/ai/disconnect` | Revoke/forget credentials as supported |
-| GET | `/ai/models` | Discover actual eligible models |
+| GET | `/ai/providers` | Providers, connection state, capabilities, limits and current usage |
+| PUT | `/ai/providers/{provider}` | Configure a provider (store API key server-side, set limits); never echoes secrets |
+| POST | `/ai/providers/{provider}/connect` | Start the provider's official auth flow (SIWC) or verify a key |
+| POST | `/ai/providers/{provider}/disconnect` | Revoke/forget credentials as supported |
+| GET | `/ai/models` | Models actually available per provider (discovered, not hardcoded) |
+| GET/PUT | `/ai/routing` | Per-task model routing and course/session overrides |
+| GET/POST | `/connector/tokens` | List/create scoped Claude connector tokens (secret shown once) |
+| POST | `/connector/tokens/{id}/revoke` | Revoke a connector token |
 | GET/POST | `/courses` | List/create courses |
 | GET/PATCH | `/courses/{id}` | Course detail and goals |
 | GET/POST | `/courses/{id}/syllabus` | Syllabus objectives and coverage |
@@ -42,6 +46,24 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | GET | `/health/ready` | DB and storage checks, restricted if exposed |
 
 For streaming, use SSE or chunked fetch response with typed events (`turn.started`, `text.delta`, `visual.validated`, `turn.completed`, `turn.failed`). A request failure must never erase saved user input. Streaming responses can be recovered by GET session. Keep server-side authorization checks independent of UI.
+
+## Claude connector (MCP) tool contract
+
+Tools call the same service layer as the HTTP API with a `connector`-scoped token. All writes are append-only and idempotent; there are **no** delete, restore, export, budget, consent or routing tools.
+
+| Tool | Kind | Contract |
+|---|---|---|
+| `get_study_plan` | read | Today's ranked plan with `why_selected` |
+| `list_courses`, `get_course_outline` | read | Courses, syllabus topics, concepts and coverage |
+| `search_sources`, `get_source_section` | read | Section text wrapped as untrusted document content, with section ID and citation label; IDs are remembered for the session |
+| `get_notes` | read | Learner notes for a topic (read-only; the tutor may comment in chat but never rewrites notes) |
+| `get_due_reviews` | read | Due concepts with due reason and last evidence |
+| `create_questions` | append | Generated questions (Bloom level, prompt, hidden rubric, source refs validated against returned section IDs) |
+| `open_answer_form` | UI | MCP App answer form for a question; the form submits the learner's typed text to `submit_attempt` |
+| `submit_attempt` | append | Persist-first, idempotent by `client_request_id`; records `captured_via` |
+| `get_attempt` | read | Exact stored answer, status, existing assessments |
+| `record_assessment` | append | Validated against `assessment.schema.json`; unknown evidence refs dropped and grade downgraded to `provisional`; records reported model |
+| `record_session_summary` | append | Optional short summary linked to the study session |
 
 ## API example: attempt creation
 
@@ -99,7 +121,7 @@ When the model proposes an invalid block, log only a sanitized validation reason
 
 - Upload failure: retry with same idempotency key or create a new operation intentionally.
 - 409 note conflict: preserve both versions, show diff and explicit resolution.
-- SIWC model limit or refusal: retain attempt, display `Saved; feedback unavailable`, allow manual later retry.
-- 401 SIWC auth revoked: app remains usable; prompt reconnection, never redirect away mid-edit.
+- Provider limit (plan quota, USD limit, daily limit) or model refusal: retain attempt, display `Saved; feedback unavailable` with the specific limit, allow manual later retry; never switch provider or model silently.
+- Provider auth revoked (401) or connector token revoked: app remains usable; prompt reconnection, never redirect away mid-edit.
 - Partial SSE failure: event `turn.failed` and preserve saved input; never mark complete.
 - Malformed model JSON: safe fallback, do not blindly persist a grade or execute visuals.

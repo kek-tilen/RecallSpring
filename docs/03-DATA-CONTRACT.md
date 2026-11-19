@@ -2,7 +2,7 @@
 
 ## Data protection invariants
 
-- App persists notes, imports, prompts, user answers, AI feedback and scheduler events; no reliance on ChatGPT-hosted history.
+- App persists notes, imports, prompts, user answers, AI feedback and scheduler events; no reliance on provider-hosted chat history (in Mode A the chat transcript stays in the learner's Claude account; the learning record is in RecallSpring).
 - Source documents are never overwritten by AI text. Keep SHA-256 content hash and explicit extraction status.
 - Every acknowledged user action is committed transactionally before return. AI output is a derived, fallible record.
 - Learning evidence is append-only; destructive user-visible operations use versioned soft-delete and audit trail.
@@ -14,7 +14,10 @@
 | Table | Required attributes and constraints |
 |---|---|
 | `users` | `id`, local account identity, password hash (Argon2id), login settings, timestamps |
-| `ai_connections` | `id`, owner, provider `siwc`, connection state, selected model, **reference to protected local credentials only**, no raw tokens in DB logs |
+| `ai_connections` | `id`, owner, provider (`anthropic_api`, `siwc`, `openai_compatible`, `mock`), connection state, **reference to protected server-side secret only**, limits (USD monthly / daily request %), background-AI consent; no raw keys or tokens in DB or logs |
+| `ai_routing` | owner, task (`tutor/question_generation/evaluation/concept_extraction`), provider, model, optional course/session override |
+| `ai_usage_ledger` | owner, provider, model, task, request id, input/output/cache tokens, estimated cost (USD, pricing-table version), status, timestamp |
+| `connector_tokens` | owner, label, token hash, scopes (`connector`), created/last_used/revoked timestamps |
 | `courses` | `id`, owner, title, description, `long_term_retention` bool, status |
 | `syllabus_items` | `id`, course, title, parent, position, expected coverage, optional exam weighting |
 | `exams` | `id`, course, date/timezone, title, status, goal priority |
@@ -27,7 +30,7 @@
 | `study_sessions` | `id`, owner, course/topic, mode (`new_learning/review`), timestamps, checkpoint |
 | `messages` | `id`, session, role, content, source refs, visual block IDs, status; separately from attempts |
 | `questions` | `id`, topic/concepts, Bloom level 1–6, prompt, answer rubric, source refs, difficulty, provenance, generated_at |
-| `attempts` | `id`, question, user, session, **exact raw answer**, answer mode (`closed_notes/open_notes`), submitted_at, idempotency key unique, status |
+| `attempts` | `id`, question, user, session, **exact raw answer**, kind (`answer/dont_know/skip`), answer mode (`closed_notes/open_notes`), `captured_via` (`app_ui/answer_form/assistant_transcription`), submitted_at, idempotency key unique, status |
 | `assessments` | `id`, attempt, evaluator/model/version, grade 0–4 or NULL, rubric subscores, feedback, evidence, uncertainty, status (`final/provisional/ungraded`), created_at |
 | `mastery_state` | user/concept key, evidence_count, last_success_at, estimated level band, confidence low/medium/high, last recomputed_at |
 | `review_state` | user/concept key, interval_days, last_review_at, due_at, consecutive_successes, lapse_count, scheduling policy version |

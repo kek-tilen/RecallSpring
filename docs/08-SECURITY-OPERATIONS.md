@@ -40,11 +40,11 @@ ufw status verbose
 
 ## Security controls
 
-**Identity:** single-user app private login (Argon2id, 2FA optional but recommended, secure HttpOnly SameSite cookies, session expiry), distinct from ChatGPT OAuth. Rate-limit login and consent requests, CSRF protection on state-changing routes, no public account sign-up. CORS closed by default. Restrict admin actions to authenticated owner.
+**Identity:** single-user app private login (Argon2id, 2FA optional but recommended, secure HttpOnly SameSite cookies, session expiry), distinct from any AI provider connection or connector token. Rate-limit login and consent requests, CSRF protection on state-changing routes, no public account sign-up. CORS closed by default. Restrict admin actions to authenticated owner.
 
 **Files:** MIME sniffing, extension allowlist, max upload size (proposed 30 MiB file, 250 MiB per initial library, tune for disk), path traversal defense, no inline active HTML/SVG, malware scanning as availability permits, no arbitrary archive extraction, CPU and memory quotas for PDF parser, never execute document scripts. Source text is untrusted prompt content and cannot override tutor rules.
 
-**AI:** no secrets in browser. SIWC private credential files only in protected owner-controlled runtime path, chmod 0600, app-user ownership; do not inadvertently back them up to third-party provider or project repository. Rotate/disconnect appropriately. Confirm the exact self-hosted VM method in the current official guide; do not fabricate OAuth redirects. No transcript sharing with other users. Implement model request concurrency bound, timeout, quota error handling and separate background AI consent.
+**AI:** no secrets in browser. Provider secrets (Anthropic API key, SIWC credential files) only in a protected owner-controlled runtime path, chmod 0600 / owner-only ACL on Windows, app-user ownership, written atomically; never in the database in plaintext, exports, logs or backups sent to third parties. Connector tokens are stored hashed, scoped to `connector`, revocable and shown once. Confirm the exact SIWC self-hosted VM method in the current official guide; do not fabricate OAuth redirects. No transcript sharing with other users. Implement model request concurrency bound, timeout, quota and USD-limit handling and separate background AI consent. A remote Claude connector (Claude web/mobile) needs public HTTPS plus OAuth on the MCP endpoint — deferred (desktop-only decision).
 
 **Observability:** structured request ids, metrics for error/latency/queue, sanitized logs; never log submitted source content, complete answers, prompt bodies or OAuth tokens by default. Provide audit records of deletion and grade overrides.
 
@@ -59,7 +59,7 @@ ufw status verbose
 ## Rollout stages with approval gates
 
 **Stage A — Offline/local development**: unit/integration tests, ephemeral Postgres, fake AI adapter, no ProtectedApp access.  
-**Stage B — Local AI feasibility**: validate SIWC OAuth and streams without production deployment.  
+**Stage B — Local AI feasibility**: validate the Claude Desktop connector locally; later SIWC OAuth/streams and, optionally, an Anthropic API key smoke test with a USD limit — all without production deployment.  
 **Stage C — Isolated VPS private deployment**: only after owner approval, disk/memory check, offsite backup; new project isolated, loopback only, without host Nginx change.  
 **Stage D — External HTTPS**: after approved DNS/FQDN and certificate plan, add *new* Nginx vhost, `nginx -t`, approved graceful reload, external TLS test.  
 **Stage E — Monitoring**: compare before/after ProtectedApp health, CPU/memory/disk, requests, uptime; roll back RecallSpring immediately if ProtectedApp degrades.
@@ -82,4 +82,4 @@ Owner-authorized rollback must stop/disable **only RecallSpring** services and r
 
 ## Security release blockers
 
-No secure auth, unencrypted public login, exposed DB port, missing offsite backup, failing restoration, unresolved SIWC eligibility, active prompt injection into tools, executable AI-generated HTML/JS, or ProtectedApp impact => **no production release**.
+No secure auth, unencrypted public login, exposed DB port, missing offsite backup, failing restoration, an enabled AI provider whose official terms or eligibility are unverified, active prompt injection into tools, executable AI-generated HTML/JS, or ProtectedApp impact => **no production release**.

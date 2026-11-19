@@ -2,7 +2,7 @@
 
 ## Principles
 
-Lightweight, modular, secure-by-default, self-hosted, single-user-first, no vendor lock-in of stored learning records, no LLM API keys, independently deployable without touching ProtectedApp.
+Lightweight, modular, secure-by-default, self-hosted, single-user-first, no vendor lock-in of stored learning records, pluggable AI with no mandatory paid usage, local-first, independently deployable without touching ProtectedApp.
 
 ## Recommended stack
 
@@ -17,7 +17,7 @@ Lightweight, modular, secure-by-default, self-hosted, single-user-first, no vend
 | Worker | Separate low-resource process using same backend image, PostgreSQL SKIP LOCKED job table | Avoid Redis; upload processing and deterministic tasks |
 | Document extraction | pypdf/PyMuPDF with license review, text/Markdown parsers | Local text extraction; OCR deliberately out-of-scope initially |
 | Visualization | React + SVG + vetted chart/diagram components | Render allowlisted JSON, not executable LLM code |
-| Model provider | Adapter over official SIWC user-authorized Responses API | No classic API keys; feature-gated by POC |
+| AI | MCP connector for the Claude app (Mode A) + `LLMProvider` adapters: Anthropic API (official SDK), SIWC, later OpenAI-compatible (Mode B) | Owner's Claude plan without API billing; providers swappable and feature-gated |
 | Infra | Docker Compose (`recallspring`) + existing host Nginx | Separate services and controlled resources |
 
 Do not hardcode exact package versions until dependency/security review; pin versions and lockfiles in the repository before release.
@@ -33,7 +33,9 @@ flowchart LR
   B --> F[(Private source files)]
   J[RecallSpring worker] --> D
   J --> F
-  B -->|consented SIWC inference| O[OpenAI Responses endpoint]
+  C[Claude Desktop on learner's computer] -->|MCP stdio| M[RecallSpring connector]
+  M -->|/api, scoped connector token| B
+  B -->|Mode B, user-initiated| O[In-app AI provider: Anthropic API / SIWC / custom]
   X[ProtectedApp frontend/backend] -. "No changes or shared compose" .- N
 ```
 
@@ -47,6 +49,7 @@ recallspring/
   apps/web/            # React PWA
   services/api/        # FastAPI, auth, upload, tutoring, sync
   services/worker/     # background ingestion + due-plan tasks
+  services/mcp/        # Claude connector (MCP server, thin API client)
   packages/contracts/  # OpenAPI-generated TS client, JSON schemas
   db/migrations/
   infra/compose.yml
@@ -62,6 +65,10 @@ recallspring/
 Target incremental idle consumption **under 1 GiB**, with bounded spikes. Suggested memory caps: frontend <=128 MiB, API <=512 MiB, worker <=256 MiB, PostgreSQL <=384 MiB; not additive guarantees. Use single API worker unless load proves need, cap upload size, cap inference concurrency to 1–2, and stream long outputs. Prefer multi-stage slim images and **build off VPS** to avoid massive Docker cache growth. Ingestion concurrency = 1. Disk gate: refuse production setup if free disk <10 GiB after owner-approved housekeeping and reserving space for logs/backups.
 
 No on-VPS local model; the VPS's limited RAM is insufficient for acceptable comparable tutoring on the same host.
+
+## Local-first operation
+
+Until a VPS deployment is approved, RecallSpring runs on the owner's computer: API on `127.0.0.1:4318`, web UI on `127.0.0.1:4317`, development PostgreSQL on `127.0.0.1:55432` (dev only; never published in production). Claude Desktop starts the connector as a local stdio process. Nothing listens on non-loopback interfaces.
 
 ## Networking and safe rollout
 
@@ -89,4 +96,4 @@ No on-VPS local model; the VPS's limited RAM is insufficient for acceptable comp
 
 ## Boundaries and future growth
 
-Implement provider adapters and document parsers behind interfaces so SIWC changes or additional source types do not force database redesign. Full-text search via Postgres initially; semantic embeddings/vector DB only if a demonstrated need arises and can work within user-selected AI authorization scope.
+Implement provider adapters and document parsers behind interfaces so provider changes (connector, SIWC, Anthropic API, custom LLMs) or additional source types do not force database redesign. Full-text search via Postgres initially; semantic embeddings/vector DB only if a demonstrated need arises and can work within user-selected AI authorization scope.
