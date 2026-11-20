@@ -47,6 +47,7 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/reviews/{id}/defer` | Record explicit defer |
 | GET | `/planner/today` | Deterministic ranked daily plan (`plan-v2`: `interests` and `focus` explained), optional `course_id` and `minutes` |
 | GET/PUT | `/settings/study` | Weekly minutes, maintenance share (0–50 %), past-paper style share (0–100 %), interest share (0–50 %, 0 = university first); GET also returns the current `focus` |
+| GET/POST | `/settings/backup` | Backup status (last good backup, what it holds, check, next, folder, size, failure; no secrets) / back up now (synchronous; `409 backup_busy`, `503 backup_failed` with the reason; audited) |
 | PUT | `/settings/focus` | `{course_id, until}`: one course or interest first until a day (≤ 60 days), `course_id` null ends it; audited |
 | POST | `/sync/push` | Idempotent offline outbox replay |
 | GET | `/sync/changes?cursor=` | Incremental account-scoped updates |

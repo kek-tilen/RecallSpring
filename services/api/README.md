@@ -26,7 +26,12 @@ cp .env.example .env          # then put the password from infra/.env into RS_DA
 .venv/Scripts/uvicorn recallspring_api.main:app --host 127.0.0.1 --port 4318
 .venv/Scripts/recallspring worker                  # second terminal: extracts uploaded sources (no model calls)
 .venv/Scripts/recallspring worker --once           # process queued jobs and exit
+.venv/Scripts/recallspring backup                  # database + uploaded files now, checked by a test restore
+.venv/Scripts/recallspring backup-status           # last backup, kept backups, folder
+.venv/Scripts/recallspring backup-restore --database <new name> --storage <empty folder>   # never overwrites
 ```
+
+The worker also makes a backup when the last good one is older than 24 hours (docs/08 → Backups).
 
 ## Sources and notes
 
@@ -54,7 +59,11 @@ Every mutating request needs the session cookie, an `X-CSRF-Token` header equal 
 | `RS_AI_EVALUATION_PROVIDER`, `RS_AI_QUESTION_PROVIDER` | `none` | `mock` for development; real adapters follow ADR-002 |
 | `RS_AI_TIMEOUT_SECONDS` | `90` | Provider call timeout |
 | `RS_DEFAULT_TIMEZONE` | `Europe/Ljubljana` | New users' timezone |
+| `RS_BACKUP_DIR` | `local-data/backups` | Same disk as the uploads by default: point it at another disk or a synced folder |
+| `RS_BACKUP_ENABLED`, `RS_BACKUP_INTERVAL_HOURS` | `true`, `24` | Automatic backups by the worker |
+| `RS_BACKUP_KEEP_DAILY`, `RS_BACKUP_KEEP_WEEKLY` | `7`, `4` | Newest backup per day / per week kept |
+| `RS_BACKUP_PG_BIN` | unset | Folder with `pg_dump`/`pg_restore` (else `PATH`, else the dev container in development) |
 
 ## Rollback notes
 
-Migrations are applied with `alembic upgrade head`; `alembic downgrade -1` reverts the latest. Revision `0001` is the initial schema: downgrading it drops all tables and data, so back up first. Later migrations must preserve data and be released separately from application changes.
+Migrations are applied with `alembic upgrade head`; `alembic downgrade -1` reverts the latest. Revision `0001` is the initial schema: downgrading it drops all tables and data, so back up first (`recallspring backup`). Later migrations must preserve data and be released separately from application changes.

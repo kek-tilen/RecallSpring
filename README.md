@@ -49,6 +49,10 @@ npm run build
 On Windows `scripts/start-local.ps1` starts the database, API and worker; run it with `-Restart` after updating the
 code. Then open `http://127.0.0.1:4318/` and sign in with your RecallSpring account.
 
+While the worker runs it backs up the database and your uploaded files once a day into `local-data/backups` (checked
+by a test restore; Settings → Backups). That folder is on the same disk: set `RS_BACKUP_DIR` to another disk or a
+synced folder for real protection. Restore steps: docs/08 → Backups.
+
 See `services/api/README.md` for configuration, the owner-account CLI and the demo seed.
 
 ## AI integration

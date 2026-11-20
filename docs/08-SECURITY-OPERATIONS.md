@@ -56,6 +56,56 @@ ufw status verbose
 - Document retention (e.g. 7 daily / 4 weekly / 3 monthly backups) is a proposal, not an owner-approved storage policy.
 - Never keep only backups on the same 38 GB root disk. Never include OAuth tokens unless explicitly planned in a secure user-controlled recovery method.
 
+### Implemented: automatic local backups (`backup.py`)
+
+What a backup holds: a `pg_dump` (custom format) of the whole RecallSpring database and a copy of every uploaded
+original (including soft-deleted sources, which can still be restored). Connector tokens are in the database only as
+hashes; no OAuth credential, `.env` file or password is copied. The page-render cache is left out (it is rebuilt).
+
+- **When:** the worker checks every 10 minutes and backs up when the last good backup is older than
+  `RS_BACKUP_INTERVAL_HOURS` (24); after a failure it waits an hour. *Back up now* in Settings → Backups and
+  `recallspring backup` make one at once. One backup at a time (PostgreSQL advisory lock). No model calls.
+- **Consistent:** row counts and the file list are read in the same REPEATABLE READ transaction whose snapshot
+  `pg_dump --snapshot` uses, so the backup describes one moment.
+- **Checked:** every backup is restored into a throwaway database `<db>_restore_check`, every table's row count must
+  match, then that database is dropped (never the real one; the name always ends in `_restore_check`). Without
+  permission to create databases (a hosted server) the dump is only read back, and Settings says so. Every file is
+  checked against its SHA-256 while it is copied.
+- **Where:** `RS_BACKUP_DIR`, default `local-data/backups` (gitignored), next to the uploaded files:
+  `snapshots/<YYYYMMDD-HHMMSS UTC>/{db.dump, manifest.json}`, `files/<user>/<ab>/<sha256>` (shared by all snapshots,
+  copied once) and `status.json`. Other files in that folder (e.g. hand-made `recallspring-pre-*.dump`) are never
+  touched.
+- **Kept:** the newest backup of each of the last `RS_BACKUP_KEEP_DAILY` (7) days and of the newest
+  `RS_BACKUP_KEEP_WEEKLY` (4) weeks; the newest is always kept. Files no kept backup needs are removed; if any
+  manifest cannot be read, every file is kept.
+- **Seen:** Settings → Backups (last backup, what it holds, check, next, folder, size); Today → Needs attention when
+  the last attempt failed, there is none yet, or none for two intervals; History lists backups started from the web
+  app; every attempt is audited (`backup.created`, `backup.failed`). Error messages never contain the database
+  password (redacted, 300 characters at most).
+- **Tools:** `pg_dump`/`pg_restore` from `RS_BACKUP_PG_BIN`, else `PATH`, else, in development and tests only,
+  `docker exec` into `RS_BACKUP_DOCKER_CONTAINER` (`recallspring-dev-db-1`, local socket, no password). Production
+  images must ship the client tools of the server's major version; the Docker socket is never mounted.
+- **Same disk:** the default folder protects against mistakes, a bad migration and a damaged database, not against a
+  broken disk or a lost computer. Settings warns while the backup folder is on the same disk as the uploads. Point
+  `RS_BACKUP_DIR` at another disk or a synced folder, or copy the folder elsewhere now and then. Backups are not
+  encrypted: keep them in places only you can read.
+
+#### Restore procedure (never overwrites)
+
+1. `recallspring backup-status` lists the backups (newest first).
+2. `recallspring backup-restore --database recallspring_restored --storage <empty folder>` (optionally
+   `--snapshot <name>`; default `latest`). It refuses the database RecallSpring uses, any database that exists, the
+   storage folder in use and any folder that is not empty. It restores, compares the row counts with the manifest,
+   copies the files with their checksums checked and prints what to change.
+3. Look at the restored copy if you like (e.g. start a second API on another port with the new
+   `RS_DATABASE_URL`/`RS_STORAGE_DIR`).
+4. To switch: stop RecallSpring (close the API and worker windows), set `RS_DATABASE_URL` (and
+   `RS_STORAGE_DIR`) in `services/api/.env`, run `alembic upgrade head`, start again (`scripts/start-local.ps1`). Keep the old database until you
+   are sure; switching back is the same edit.
+
+Still required before a VPS release: an encrypted copy **off the VPS** to an owner-approved destination (owner choice
+2 in docs/10) and a restore drill there; the local backups above do not replace it.
+
 ## Rollout stages with approval gates
 
 **Stage A — Offline/local development**: unit/integration tests, ephemeral Postgres, fake AI adapter, no ProtectedApp access.  
