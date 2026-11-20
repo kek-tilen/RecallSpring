@@ -137,6 +137,17 @@ describe("organisation helpers", () => {
   });
 });
 
+describe("source notes", () => {
+  it("explains extraction notes in plain words and keeps unknown ones", async () => {
+    const { parseNoteLabel } = await import("./format");
+    expect(parseNoteLabel("pictures_not_extracted:3")).toMatch(/^3 pictures inside the file are not part of the text/);
+    expect(parseNoteLabel("slides_without_text:2,5")).toBe("Slides with little or no text: 2, 5.");
+    expect(parseNoteLabel("hidden_sheets:1")).toBe("1 hidden sheet skipped.");
+    expect(parseNoteLabel("truncated")).toBe("Only the beginning was extracted because the file is very large.");
+    expect(parseNoteLabel("something_new:x")).toBe("something_new:x");
+  });
+});
+
 describe("duplicate exams", () => {
   it("groups entries that point at each other once", async () => {
     const { duplicateGroups } = await import("./components/ExamCleanup");

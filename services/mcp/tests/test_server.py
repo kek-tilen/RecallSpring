@@ -201,7 +201,7 @@ async def test_import_file_is_limited_to_allowed_folders_and_types(
         r2 = await client.call_tool("import_file", {"course_id": "c1", "path": str(script)})
         r3 = await client.call_tool("import_file", {"course_id": "c1", "path": str(allowed / "missing.pdf")})
     assert r1.is_error and "Only files inside these folders" in text_of(r1)
-    assert r2.is_error and "Only PDF, Markdown" in text_of(r2)
+    assert r2.is_error and "Only these files can be imported: PDF, Word (.docx)" in text_of(r2)
     assert r3.is_error and "File not found" in text_of(r3)
     assert api.requests == []  # nothing left the computer
 

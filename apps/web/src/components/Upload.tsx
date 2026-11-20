@@ -6,7 +6,13 @@ import { useCourses } from "../queries";
 import type { MaterialCategory, Source } from "../types";
 import { ErrorNote } from "./ui";
 
-const ACCEPT = ".pdf,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,application/pdf,text/markdown,text/plain,image/png,image/jpeg,image/webp";
+const OFFICE_MIME = "application/vnd.openxmlformats-officedocument";
+const ACCEPT = [
+  ".pdf,.docx,.pptx,.ppsx,.xlsx,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp",
+  "application/pdf,text/markdown,text/plain,image/png,image/jpeg,image/webp",
+  `${OFFICE_MIME}.wordprocessingml.document,${OFFICE_MIME}.presentationml.presentation`,
+  `${OFFICE_MIME}.presentationml.slideshow,${OFFICE_MIME}.spreadsheetml.sheet`,
+].join(",");
 const MAX_BYTES = 30 * 1024 * 1024;
 const CLAUDE_IMAGE_BYTES = 4_500_000; // Claude can look at images up to this size
 const MAX_SIDE = 2400; // plenty for handwriting; keeps phone photos small
@@ -126,9 +132,10 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
         onDragLeave={() => setOver(false)}
         onDrop={drop}
       >
-        <strong style={{ color: "var(--ink)" }}>Drop PDFs, text files or photos here</strong>
+        <strong style={{ color: "var(--ink)" }}>Drop lecture files, notes or photos here</strong>
         <span className="small">
-          PDF, Markdown, text, PNG, JPG or WebP, up to 30 MB. Large photos are shrunk so Claude can look at them.
+          PDF, Word, PowerPoint, Excel, Markdown, text, PNG, JPG or WebP, up to 30 MB. Large photos are shrunk so
+          Claude can look at them.
         </span>
         <button type="button" className="btn small" onClick={() => input.current?.click()} disabled={upload.isPending}>
           {upload.isPending ? "Uploading…" : "Choose files"}

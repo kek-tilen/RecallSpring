@@ -103,4 +103,4 @@ After updating RecallSpring, quit and restart Claude Desktop so it starts the ne
 | `No connector token found at …` | Run `recallspring connector-token` (step 2). |
 | `[401 connector_token_invalid]` | The token was revoked or replaced; create a new one. |
 | `[429 connector_daily_limit]` | Raise the limit percentage or continue tomorrow. |
-| Sources show `needs_attention`/`failed` | The worker is not running, or the PDF is scanned; paste the text instead. |
+| Sources show `needs_attention`/`failed` | The worker is not running, the PDF is scanned, or the slides are mostly pictures; paste the text or add photos instead. Old `.doc/.ppt/.xls` files: save them as `.docx/.pptx/.xlsx` first. |

@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router";
 import { API, get, request } from "../api";
 import { Async, Card, Empty, Highlighted, PageHead } from "../components/ui";
 import { Upload } from "../components/Upload";
-import { CATEGORY_LABEL, bytes, dateLabel, dateTime, plural } from "../format";
+import { CATEGORY_LABEL, COUNT_LABEL, SOURCE_KIND, bytes, dateLabel, dateTime, parseNoteLabel, plural } from "../format";
 import { courseTitles, useCourses, useSources } from "../queries";
 import type { MaterialCategory, SearchHit, Section, Source } from "../types";
 
@@ -22,7 +22,7 @@ export function StateChip({ state }: { state: Source["parse_state"] }) {
 
 export function SourceTable({ sources, titles }: { sources: Source[]; titles?: Record<string, string> }) {
   if (sources.length === 0) {
-    return <Empty title="No material yet">Drop a PDF, Markdown or text file, or ask Claude to import one from your computer.</Empty>;
+    return <Empty title="No material yet">Drop a PDF, Word, PowerPoint, Excel, Markdown or text file, or ask Claude to import one from your computer.</Empty>;
   }
   return (
     <div className="table-wrap">
@@ -303,7 +303,7 @@ export function SourcePage() {
                   <Card title="Extracted text">
                     <p className="muted small">
                       {s.parse_state === "failed"
-                        ? "Text couldn't be extracted. Try a text-based PDF or paste the content."
+                        ? s.parse_message ?? "Text couldn't be extracted. Try a text-based file or paste the content."
                         : "Extraction is running in the background."}
                     </p>
                   </Card>
@@ -312,11 +312,15 @@ export function SourcePage() {
               <Card title="Details">
                 <dl className="kv small">
                   <dt>Type</dt>
-                  <dd>{s.kind.toUpperCase()}</dd>
+                  <dd>{SOURCE_KIND[s.kind] ?? s.kind.toUpperCase()}</dd>
                   <dt>Size</dt>
                   <dd>{bytes(s.byte_size)}</dd>
-                  <dt>Pages</dt>
-                  <dd>{s.page_count ?? "—"}</dd>
+                  {COUNT_LABEL[s.kind] && (
+                    <>
+                      <dt>{COUNT_LABEL[s.kind]}</dt>
+                      <dd>{s.page_count ?? "—"}</dd>
+                    </>
+                  )}
                   <dt>Version</dt>
                   <dd>{s.version}</dd>
                   <dt>Added</dt>
@@ -333,7 +337,7 @@ export function SourcePage() {
                 {s.parse_notes.length > 0 && (
                   <ul className="small muted" style={{ marginTop: 12 }}>
                     {s.parse_notes.map((n, i) => (
-                      <li key={i}>{n}</li>
+                      <li key={i}>{parseNoteLabel(String(n))}</li>
                     ))}
                   </ul>
                 )}

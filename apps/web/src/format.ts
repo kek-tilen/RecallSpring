@@ -139,6 +139,44 @@ export function daysBetween(fromIso: string, toIso: string): number {
   return Math.round((Date.parse(toIso) - Date.parse(fromIso)) / 86_400_000);
 }
 
+export const SOURCE_KIND: Record<string, string> = {
+  pdf: "PDF",
+  docx: "Word",
+  pptx: "PowerPoint",
+  xlsx: "Excel",
+  markdown: "Markdown",
+  text: "Text",
+  image: "Photo",
+};
+
+/** What the page count means for each kind (Word and text files have no fixed pages). */
+export const COUNT_LABEL: Record<string, string> = { pdf: "Pages", pptx: "Slides", xlsx: "Sheets" };
+
+/** Extraction notes from the server, in plain words. Unknown notes are shown as they are. */
+export function parseNoteLabel(note: string): string {
+  const [code, value = ""] = note.split(/:(.*)/s, 2) as [string, string?];
+  const list = value.split(",").join(", ");
+  switch (code) {
+    case "pictures_not_extracted": {
+      const n = Number(value);
+      const verb = n === 1 ? "is" : "are";
+      return `${plural(n, "picture")} inside the file ${verb} not part of the text. Claude can't see them; add a photo or screenshot when one matters.`;
+    }
+    case "pages_without_text":
+      return `Pages without text (possibly scanned): ${list}.`;
+    case "slides_without_text":
+      return `Slides with little or no text: ${list}.`;
+    case "hidden_sheets":
+      return `${plural(Number(value), "hidden sheet")} skipped.`;
+    case "truncated":
+      return "Only the beginning was extracted because the file is very large.";
+    case "image":
+      return "Photo: no text is extracted. Claude can look at it on request.";
+    default:
+      return note;
+  }
+}
+
 export const CATEGORY_LABEL: Record<string, string> = {
   material: "Lecture material",
   notes: "My notes",

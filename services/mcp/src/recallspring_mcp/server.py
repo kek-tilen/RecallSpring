@@ -59,11 +59,14 @@ Start of every study session in a course:
    only section IDs you received. Explain the feedback and the next review dates RecallSpring returned.
 6. End with record_session_summary. Update the target when the learner reports a result (update_study_target).
 
-Building the library (only when the learner asks): create_course; import_file for a PDF/Markdown/text file or a
-photo (.png/.jpg/.webp) on this computer (it goes straight to RecallSpring, not through the chat) with a category
+Building the library (only when the learner asks): create_course; import_file for a PDF, Word (.docx),
+PowerPoint (.pptx), Excel (.xlsx), Markdown or text file or a photo (.png/.jpg/.webp) on this computer (it goes
+straight to RecallSpring, not through the chat) with a category
 (material, notes, exercises, past_paper); add_text_source only for short pasted text; then read the sections and
 create_concepts linked to the section IDs that support them. Images have no extracted text: look at one with
 view_image only when it helps (e.g. the learner's handwritten notes or solved exercises in the outline).
+Slides are cited as "slide N" (speaker notes included), Word documents by heading, spreadsheets by rows. Pictures
+inside Office files are not extracted: never describe a diagram you have not seen; ask for a photo or screenshot.
 Planning a semester: organise_courses files courses under university / faculty / semester.
 
 Simulations answered in the RecallSpring web app: when the learner says they solved one (or gives its ID), use
@@ -306,7 +309,8 @@ async def search_sources(query: str, course_id: str | None = None) -> str:
 
 @mcp.tool(annotations=READ)
 async def get_source_section(section_id: str) -> str:
-    """Full text of one citable section (a PDF page or a Markdown/text section) with its citation label."""
+    """Full text of one citable section (a PDF page, a slide, a Word/Markdown section or spreadsheet rows) with
+    its citation label."""
     s = await get_client().get(f"/sections/{section_id}")
     return learner_material(
         s["text"], section_id=s["id"], citation=s["citation_label"], source=s["filename"], page=s.get("page")
@@ -435,7 +439,14 @@ async def record_session_summary(session_id: str, summary: str) -> str:
 # ---------------------------------------------------------------- building the library
 
 
-IMPORT_EXTENSIONS = {".pdf", ".md", ".markdown", ".txt", ".png", ".jpg", ".jpeg", ".webp"}
+IMPORT_EXTENSIONS = {
+    *(".pdf", ".md", ".markdown", ".txt", ".png", ".jpg", ".jpeg", ".webp"),
+    *(".docx", ".pptx", ".ppsx", ".xlsx"),
+}
+OLD_OFFICE = {".doc", ".ppt", ".pps", ".xls", ".docm", ".pptm", ".xlsm", ".rtf"}
+SUPPORTED = (
+    "PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), Markdown (.md), text (.txt) and photos (.png, .jpg, .webp)"
+)
 MAX_IMPORT_BYTES = 30 * 1024 * 1024
 
 
@@ -455,8 +466,13 @@ def _allowed_file(path: str) -> Path:
     roots = [r.resolve() for r in import_roots() if r.exists()]
     if not any(resolved.is_relative_to(root) for root in roots):
         raise ToolError("Only files inside these folders can be imported: " + ", ".join(str(r) for r in roots))
+    if resolved.suffix.lower() in OLD_OFFICE:
+        raise ToolError(
+            "This Office format can't be imported (old .doc/.ppt/.xls or macro-enabled). Ask the learner to open it "
+            "and save it as .docx, .pptx or .xlsx (or export a PDF), then import that file."
+        )
     if not resolved.is_file() or resolved.suffix.lower() not in IMPORT_EXTENSIONS:
-        raise ToolError("Only PDF, Markdown (.md), plain text (.txt) and images (.png, .jpg, .webp) can be imported.")
+        raise ToolError(f"Only these files can be imported: {SUPPORTED}.")
     if resolved.stat().st_size > MAX_IMPORT_BYTES:
         raise ToolError("The file is larger than 30 MB.")
     return resolved
@@ -490,8 +506,9 @@ async def import_file(
     path: str,
     category: Literal["material", "notes", "exercises", "past_paper", "other"] = "material",
 ) -> str:
-    """Import a PDF, Markdown, text file or a photo (.png/.jpg/.webp) from this computer into a course, then wait
-    for text extraction (images have none). category: material (lecture slides, script), notes (the learner's own
+    """Import a PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), Markdown or text file, or a photo
+    (.png/.jpg/.webp), from this computer into a course, then wait for text extraction (images have none; pictures
+    inside Office files are not extracted). category: material (lecture slides, script), notes (the learner's own
     notes), exercises (solved tasks), past_paper (old kolokvij/exam). The file is sent directly to RecallSpring and
     does not pass through the chat. Allowed: files in the learner's Documents, Downloads or Desktop folders.
     Returns the extraction status and the citable section IDs/labels."""
