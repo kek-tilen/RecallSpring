@@ -253,6 +253,16 @@ export interface TimelineTarget extends Target {
   duplicates: string[];
 }
 
+export interface UploadLimits {
+  document_bytes: number;
+  text_bytes: number;
+  image_bytes: number;
+  library_bytes: number;
+  library_used_bytes: number;
+  page_renderer_available: boolean;
+  extensions: { document: string[]; text: string[]; image: string[] };
+}
+
 export interface DeletedTarget {
   id: string;
   name: string;

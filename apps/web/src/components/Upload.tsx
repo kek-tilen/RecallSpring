@@ -2,18 +2,18 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState, type DragEvent } from "react";
 import { request } from "../api";
 import { bytes } from "../format";
-import { useCourses } from "../queries";
+import { useCourses, useUploadLimits } from "../queries";
 import type { MaterialCategory, Source } from "../types";
 import { ErrorNote } from "./ui";
 
-const OFFICE_MIME = "application/vnd.openxmlformats-officedocument";
-const ACCEPT = [
-  ".pdf,.docx,.pptx,.ppsx,.xlsx,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp",
-  "application/pdf,text/markdown,text/plain,image/png,image/jpeg,image/webp",
-  `${OFFICE_MIME}.wordprocessingml.document,${OFFICE_MIME}.presentationml.presentation`,
-  `${OFFICE_MIME}.presentationml.slideshow,${OFFICE_MIME}.spreadsheetml.sheet`,
-].join(",");
-const MAX_BYTES = 30 * 1024 * 1024;
+// Until the server's list has loaded (it also lists code files); the server checks every file again.
+const FALLBACK_ACCEPT =
+  ".pdf,.docx,.pptx,.ppsx,.xlsx,.odt,.odp,.ods,.md,.markdown,.txt,.csv,.tsv,.srt,.vtt,.ipynb,.tex,.png,.jpg,.jpeg,.webp";
+const MB = 1024 * 1024;
+
+function extension(name: string): string {
+  return (/\.[^.]+$/.exec(name)?.[0] ?? "").toLowerCase();
+}
 const CLAUDE_IMAGE_BYTES = 4_500_000; // Claude can look at images up to this size
 const MAX_SIDE = 2400; // plenty for handwriting; keeps phone photos small
 
@@ -54,7 +54,18 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
   const [localError, setLocalError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
+  const limits = useUploadLimits();
   const chosen = fixedCourse ?? (courseId || courses.data?.[0]?.id || "");
+  const groups = limits.data?.extensions;
+  const accept = groups ? [...groups.document, ...groups.text, ...groups.image].join(",") : FALLBACK_ACCEPT;
+
+  /** Documents may be large (pictures, scans); text files need far less. Photos are shrunk before upload. */
+  function limitFor(file: File): number | null {
+    const l = limits.data;
+    if (file.type.startsWith("image/")) return null;
+    if (!l) return 100 * MB;
+    return l.extensions.text.includes(extension(file.name)) ? l.text_bytes : l.document_bytes;
+  }
 
   const upload = useMutation({
     mutationFn: async (files: File[]) => {
@@ -74,6 +85,7 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
       void qc.invalidateQueries({ queryKey: ["sources"] });
       void qc.invalidateQueries({ queryKey: ["courses"] });
       void qc.invalidateQueries({ queryKey: ["dashboard"] });
+      void qc.invalidateQueries({ queryKey: ["upload-limits"] });
     },
   });
 
@@ -81,9 +93,15 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
     setLocalError(null);
     const files = Array.from(list ?? []);
     if (!files.length) return;
-    const tooBig = files.find((f) => f.size > MAX_BYTES);
+    const tooBig = files.find((f) => {
+      const limit = limitFor(f);
+      return limit !== null && f.size > limit;
+    });
     if (tooBig) {
-      setLocalError(`${tooBig.name} is ${bytes(tooBig.size)}; the limit is ${bytes(MAX_BYTES)}.`);
+      setLocalError(
+        `${tooBig.name} is ${bytes(tooBig.size)}; the limit for this type of file is ${bytes(limitFor(tooBig) ?? 0)}. ` +
+          "Split it, or compress the PDF (scans and pictures make files large; the text stays small).",
+      );
       return;
     }
     if (!chosen) {
@@ -134,8 +152,9 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
       >
         <strong style={{ color: "var(--ink)" }}>Drop lecture files, notes or photos here</strong>
         <span className="small">
-          PDF, Word, PowerPoint, Excel, Markdown, text, PNG, JPG or WebP, up to 30 MB. Large photos are shrunk so
-          Claude can look at them.
+          PDF, Word, PowerPoint, Excel, OpenDocument, Markdown, text, CSV, subtitles (.srt, .vtt), notebooks (.ipynb),
+          LaTeX, code, or photos. Up to {bytes(limits.data?.document_bytes ?? 100 * MB)} per document and{" "}
+          {bytes(limits.data?.text_bytes ?? 10 * MB)} per text file; large photos are shrunk so Claude can look at them.
         </span>
         <button type="button" className="btn small" onClick={() => input.current?.click()} disabled={upload.isPending}>
           {upload.isPending ? "Uploading…" : "Choose files"}
@@ -143,7 +162,7 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
         <input
           ref={input}
           type="file"
-          accept={ACCEPT}
+          accept={accept}
           multiple
           hidden
           onChange={(e) => {
@@ -152,6 +171,13 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
           }}
         />
       </div>
+      {limits.data && (
+        <span className="small muted">
+          Library: {bytes(limits.data.library_used_bytes)} of {bytes(limits.data.library_bytes)} used.
+          {!limits.data.page_renderer_available &&
+            " With LibreOffice installed on the RecallSpring computer, Claude can also look at whole slides and Word pages."}
+        </span>
+      )}
       {localError && <div className="notice warn">{localError}</div>}
       {upload.error && <ErrorNote error={upload.error} />}
       {done.length > 0 && !upload.isPending && (

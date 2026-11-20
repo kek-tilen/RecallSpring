@@ -85,6 +85,11 @@ export const STEPS: GuideStep[] = [
         note: "Photos of notes, notebook pages or solved exercises can also be dropped in Library. Claude looks at them when you ask.",
       },
       {
+        en: "Import the subtitles of the recorded lecture for [course]: [path to the .srt or .vtt file].",
+        sl: "Uvozi podnapise posnetega predavanja za [predmet]: [pot do datoteke .srt ali .vtt].",
+        note: "Also works for notebooks (.ipynb), LaTeX, code, CSV and OpenDocument files. Subtitles are cited by time, e.g. 05:00–10:00.",
+      },
+      {
         en: "The 1st kolokvij in [course] is [written or online], [minutes] minutes, [number] multiple-choice and [number] open questions, notes [allowed or not allowed].",
         sl: "1. kolokvij pri [predmet] je [pisni ali spletni], [minute] minut, [število] vprašanj izbirnega tipa in [število] odprtih, zapiski [dovoljeni ali niso dovoljeni].",
       },

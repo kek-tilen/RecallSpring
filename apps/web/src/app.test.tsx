@@ -148,6 +148,10 @@ describe("source notes", () => {
     );
     expect(parseNoteLabel("hidden_sheets:1")).toBe("1 hidden sheet skipped.");
     expect(parseNoteLabel("truncated")).toBe("Only the beginning was extracted because the file is very large.");
+    expect(parseNoteLabel("decoded_as:windows-1250")).toMatch(/^Read as Windows-1250/);
+    expect(parseNoteLabel("includes_not_resolved:2")).toBe(
+      "Includes 2 other files (\\input or \\include) that are not part of this one: upload them too.",
+    );
     expect(parseNoteLabel("something_new:x")).toBe("something_new:x");
   });
 });

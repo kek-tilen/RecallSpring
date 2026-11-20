@@ -17,6 +17,7 @@ import type {
   Source,
   StudySettings,
   TimelineTarget,
+  UploadLimits,
 } from "./types";
 
 export const keys = {
@@ -68,6 +69,8 @@ export const useConnector = () => useQuery({ queryKey: keys.connector, queryFn: 
 export const useGroups = () => useQuery({ queryKey: keys.groups, queryFn: () => get<Group[]>("/groups") });
 export const useDeletedTargets = () =>
   useQuery({ queryKey: ["targets", "deleted"], queryFn: () => get<DeletedTarget[]>("/targets/deleted") });
+export const useUploadLimits = () =>
+  useQuery({ queryKey: ["upload-limits"], queryFn: () => get<UploadLimits>("/sources/limits"), staleTime: 60_000 });
 export const useTargets = () => useQuery({ queryKey: keys.targets, queryFn: () => get<TimelineTarget[]>("/targets") });
 
 /** Everything that shows courses, groups or exams; call after any organisation change. */

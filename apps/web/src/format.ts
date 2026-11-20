@@ -62,7 +62,8 @@ export function longToday(): string {
 export function bytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  if (n < 1024 ** 3) return `${(n / 1024 / 1024).toFixed(n % (1024 * 1024) === 0 ? 0 : 1)} MB`;
+  return `${(n / 1024 ** 3).toFixed(n % 1024 ** 3 === 0 ? 0 : 1)} GB`;
 }
 
 export function plural(n: number, one: string, many = `${one}s`): string {
@@ -144,13 +145,30 @@ export const SOURCE_KIND: Record<string, string> = {
   docx: "Word",
   pptx: "PowerPoint",
   xlsx: "Excel",
+  odt: "Text document (ODF)",
+  odp: "Presentation (ODF)",
+  ods: "Spreadsheet (ODF)",
   markdown: "Markdown",
   text: "Text",
+  csv: "CSV table",
+  subtitles: "Subtitles",
+  notebook: "Notebook",
+  code: "Code",
+  latex: "LaTeX",
   image: "Photo",
 };
 
 /** What the page count means for each kind (Word and text files have no fixed pages). */
-export const COUNT_LABEL: Record<string, string> = { pdf: "Pages", pptx: "Slides", xlsx: "Sheets" };
+export const COUNT_LABEL: Record<string, string> = {
+  pdf: "Pages",
+  pptx: "Slides",
+  odp: "Slides",
+  xlsx: "Sheets",
+  ods: "Sheets",
+  csv: "Rows",
+  notebook: "Cells",
+  code: "Lines",
+};
 
 /** Extraction notes from the server, in plain words. Unknown notes are shown as they are. */
 export function parseNoteLabel(note: string): string {
@@ -174,6 +192,12 @@ export function parseNoteLabel(note: string): string {
       return "Only the beginning was extracted because the file is very large.";
     case "image":
       return "Photo: no text is extracted. Claude can look at it on request.";
+    case "decoded_as":
+      return "Read as Windows-1250 (Central European) text because the file is not UTF-8. If letters look wrong, save it as UTF-8 and upload it again.";
+    case "includes_not_resolved": {
+      const n = Number(value);
+      return `Includes ${plural(n, "other file")} (\\input or \\include) that ${n === 1 ? "is" : "are"} not part of this one: upload ${n === 1 ? "it" : "them"} too.`;
+    }
     default:
       return note;
   }
