@@ -52,6 +52,18 @@ class RecallSpringClient:
         clean = {k: v for k, v in params.items() if v is not None}
         return await self._send("GET", path, params=clean)
 
+    async def get_bytes(self, path: str) -> tuple[bytes, str]:
+        """Raw response body and its content type (images)."""
+        try:
+            response = await self._http.request("GET", path)
+        except httpx.TransportError as exc:
+            raise ConnectorError(
+                f"RecallSpring is not reachable at {self.api_url}. Start the RecallSpring API and try again."
+            ) from exc
+        if response.status_code >= 400:
+            raise ConnectorError(_error_message(response))
+        return response.content, response.headers.get("content-type", "application/octet-stream")
+
     async def post(self, path: str, payload: Any, idempotency_key: str | None = None) -> Any:
         headers = {"Idempotency-Key": idempotency_key or str(uuid.uuid4())}
         return await self._send("POST", path, json=payload, headers=headers)

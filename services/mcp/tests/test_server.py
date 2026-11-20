@@ -323,9 +323,48 @@ async def test_prompts_start_with_the_study_context() -> None:
     async with Client(mcp) as client:
         names = [p.name for p in (await client.list_prompts()).prompts]
         prompt = await client.get_prompt("start-studying", {"course": "KV"})
-    assert names == ["start-studying", "exam-overview"]
+    assert names == ["plan-semester", "start-studying", "exam-overview"]
     text = prompt.messages[0].content.text
     assert "get_study_context" in text and "1st kolokvij" in text and "KV" in text
+
+
+async def test_plan_semester_prompt_plans_before_learning() -> None:
+    async with Client(mcp) as client:
+        prompt = await client.get_prompt("plan-semester", {"semester": "5. semester"})
+    text = prompt.messages[0].content.text
+    assert "5. semester" in text and "Do not teach or quiz here" in text
+    for tool in ("organise_courses", "import_file", "set_study_target", "record_exam_profile", "get_study_plan"):
+        assert tool in text
+
+
+async def test_view_image_returns_the_picture_and_refuses_other_content(api: FakeApi) -> None:
+    png = bytes.fromhex("89504e470d0a1a0a") + b"0" * 20
+    api.routes[("GET", "/sources/img1/image")] = lambda _r: httpx.Response(
+        200, content=png, headers={"content-type": "image/png"}
+    )
+    api.routes[("GET", "/sources/txt1/image")] = lambda _r: httpx.Response(
+        200, content=b"<html>", headers={"content-type": "text/html"}
+    )
+    async with Client(mcp) as client:
+        result = await client.call_tool("view_image", {"source_id": "img1"})
+        refused = await client.call_tool("view_image", {"source_id": "txt1"})
+    image = next(c for c in result.content if c.type == "image")
+    assert image.mime_type == "image/png" and image.data
+    assert refused.is_error
+
+
+async def test_simulations_to_grade_and_organising_courses(api: FakeApi) -> None:
+    api.route("GET", "/quizzes", body=[{"id": "q1", "status": "submitted", "pending_items": 1}])
+    api.route("POST", "/courses/organise", body={"placed_in": "UM › FERI › 5. semester", "courses": ["KV"]})
+    async with Client(mcp) as client:
+        listed = await client.call_tool("list_simulations", {"needs_grading": True})
+        organised = await client.call_tool(
+            "organise_courses", {"course_ids": ["c1"], "semester": "5. semester", "faculty": "FERI", "university": "UM"}
+        )
+    assert "q1" in text_of(listed) and api.requests[0].url.params["needs_grading"] == "true"
+    sent = json.loads(api.requests[1].content)
+    assert sent == {"course_ids": ["c1"], "semester": "5. semester", "faculty": "FERI", "university": "UM"}
+    assert "5. semester" in text_of(organised)
 
 
 # ---------------------------------------------------------------- learning first
