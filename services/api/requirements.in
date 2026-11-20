@@ -13,4 +13,5 @@ httpx
 tzdata
 pypdf
 pypdfium2  # renders PDF pages as images for Claude (BSD-3/Apache-2.0, PDFium)
+pillow  # converts TIFF/BMP and oversized pictures for Claude, in the isolated render process (MIT-CMU)
 python-multipart
