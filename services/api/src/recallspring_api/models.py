@@ -112,7 +112,7 @@ class AuthSession(Base):
 
 
 # Course colours are identity markers from a fixed, validated palette (apps/web/src/styles.css); never free CSS.
-COURSE_COLORS = ("teal", "blue", "violet", "rose", "orange", "olive", "slate", "brown")
+COURSE_COLORS = ("blue", "orange", "aqua", "yellow", "magenta", "green", "violet", "red")
 MATERIAL_CATEGORIES = ("material", "notes", "exercises", "past_paper", "other")
 
 
@@ -164,7 +164,7 @@ class Course(Base):
     __table_args__ = (
         CheckConstraint("status IN ('active','completed','archived')", name="status"),
         CheckConstraint(
-            "color IS NULL OR color IN ('teal','blue','violet','rose','orange','olive','slate','brown')", name="color"
+            "color IS NULL OR color IN ('blue','orange','aqua','yellow','magenta','green','violet','red')", name="color"
         ),
     )
 

@@ -49,12 +49,14 @@ class CourseOut(_Out):
     description: str | None
     long_term_retention: bool
     status: str
+    color: str | None = None
+    group_id: uuid.UUID | None = None
     revision: int
     created_at: datetime
     updated_at: datetime
 
 
-CourseColor = Literal["teal", "blue", "violet", "rose", "orange", "olive", "slate", "brown"]
+CourseColor = Literal["blue", "orange", "aqua", "yellow", "magenta", "green", "violet", "red"]
 MaterialCategory = Literal["material", "notes", "exercises", "past_paper", "other"]
 
 

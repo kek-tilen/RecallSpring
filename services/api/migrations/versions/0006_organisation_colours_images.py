@@ -54,7 +54,7 @@ def upgrade() -> None:
     op.add_column('sources', sa.Column('category', sa.String(length=20), server_default='material', nullable=False))
     # ### end Alembic commands ###
     # Added by hand: autogenerate does not detect new or changed CHECK constraints on existing tables.
-    op.create_check_constraint(op.f('ck_courses_color'), 'courses', "color IS NULL OR color IN ('teal','blue','violet','rose','orange','olive','slate','brown')")
+    op.create_check_constraint(op.f('ck_courses_color'), 'courses', "color IS NULL OR color IN ('blue','orange','aqua','yellow','magenta','green','violet','red')")
     op.create_check_constraint(op.f('ck_sources_category'), 'sources', "category IN ('material','notes','exercises','past_paper','other')")
     op.drop_constraint(op.f('ck_sources_kind'), 'sources', type_='check')
     op.create_check_constraint(op.f('ck_sources_kind'), 'sources', "kind IN ('pdf','markdown','text','image')")
