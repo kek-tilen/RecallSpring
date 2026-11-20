@@ -86,6 +86,9 @@ class User(Base):
     )
     maintenance_percent: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="15", default=15)
     style_percent: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="75", default=75)
+    # Share of each day kept for personal interests. 0 = university first: interests only get the time left after
+    # today's course work, and only while every exam is on track.
+    interest_percent: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0", default=0)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
 
@@ -93,6 +96,7 @@ class User(Base):
         CheckConstraint("connector_limit_percent BETWEEN 1 AND 100", name="connector_limit_percent"),
         CheckConstraint("maintenance_percent BETWEEN 0 AND 50", name="maintenance_percent"),
         CheckConstraint("style_percent BETWEEN 0 AND 100", name="style_percent"),
+        CheckConstraint("interest_percent BETWEEN 0 AND 50", name="interest_percent"),
     )
 
 
@@ -146,22 +150,29 @@ class CourseGroup(Base):
 
 
 class Course(Base):
+    """A university course (``kind`` 'course', planned by its exams) or a personal interest ('interest': learning
+    without a deadline, e.g. data analysis in free time, planned after university work)."""
+
     __tablename__ = "courses"
 
     id: Mapped[uuid.UUID] = _pk()
     user_id: Mapped[uuid.UUID] = _owner()
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, server_default="course", default="course")
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     long_term_retention: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="active")
     group_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("course_groups.id"), index=True)
     color: Mapped[str | None] = mapped_column(String(20))
+    # The learner chose to concentrate on this course or interest until this day (inclusive); at most one at a time.
+    focus_until: Mapped[date | None] = mapped_column(Date)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
+        CheckConstraint("kind IN ('course','interest')", name="kind"),
         CheckConstraint("status IN ('active','completed','archived')", name="status"),
         CheckConstraint(
             "color IS NULL OR color IN ('blue','orange','aqua','yellow','magenta','green','violet','red')", name="color"
