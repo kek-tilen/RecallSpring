@@ -3,9 +3,9 @@ import { useEffect, useState, type FormEvent } from "react";
 import { request } from "../api";
 import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
 import { Link } from "react-router";
-import { dateLabel, dateTime } from "../format";
-import { keys, useConnector, useSession, useStudySettings } from "../queries";
-import type { ConnectorSettings, ConnectorToken, StudySettings } from "../types";
+import { bytes, dateLabel, dateTime, plural } from "../format";
+import { keys, useBackup, useConnector, useSession, useStudySettings } from "../queries";
+import type { BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -242,6 +242,100 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
   );
 }
 
+const CHECK_LABEL: Record<NonNullable<BackupStatus["last"]>["check"], string> = {
+  restored: "Restored into a test database; every table matched",
+  listed: "Dump read back (no permission for a test restore)",
+  none: "Not checked (turned off in the server settings)",
+};
+
+function BackupPanel({ b }: { b: BackupStatus }) {
+  const qc = useQueryClient();
+  const run = useMutation({
+    mutationFn: () => request<BackupStatus>("/settings/backup", { method: "POST", json: {} }),
+    onSuccess: (v) => {
+      qc.setQueryData(keys.backup, v);
+      void qc.invalidateQueries({ queryKey: keys.dashboard });
+    },
+    onError: () => {
+      void qc.invalidateQueries({ queryKey: keys.backup });
+      void qc.invalidateQueries({ queryKey: keys.dashboard });
+    },
+  });
+  const last = b.last;
+  return (
+    <div className="stack" style={{ gap: 14 }}>
+      <p className="small">
+        A copy of your study records and uploaded files.{" "}
+        {b.enabled
+          ? `RecallSpring makes one every ${b.interval_hours} hours while it runs and keeps the newest of each of the last ${b.keep_daily} days and ${b.keep_weekly} weeks.`
+          : "Automatic backups are turned off in the server settings; you can still back up here."}
+      </p>
+      {b.last_error && (
+        <div className="notice bad" role="alert">
+          <strong>The last backup failed{b.last_error.at ? ` (${dateTime(b.last_error.at)})` : ""}.</strong> {b.last_error.message}
+        </div>
+      )}
+      {!b.tools && (
+        <div className="notice bad" role="alert">
+          pg_dump was not found, so no backup can be made. Install the PostgreSQL client tools or set RS_BACKUP_PG_BIN (docs/08 → Backups).
+        </div>
+      )}
+      <dl className="kv">
+        <dt>Last backup</dt>
+        <dd>{b.last_success_at ? dateTime(b.last_success_at) : "Never"}</dd>
+        {last && (
+          <>
+            <dt>Records</dt>
+            <dd>
+              {plural(last.rows, "row")} in {plural(last.tables, "table")} ({bytes(last.dump_bytes)})
+            </dd>
+            <dt>Uploaded files</dt>
+            <dd>
+              {plural(last.files, "file")} ({bytes(last.files_bytes)})
+              {last.files_missing > 0 && <span className="chip warn"> {last.files_missing} missing from storage</span>}
+            </dd>
+            <dt>Check</dt>
+            <dd>{CHECK_LABEL[last.check]}</dd>
+          </>
+        )}
+        <dt>Next</dt>
+        <dd>
+          {!b.enabled ? "Only when you back up here" : b.next_due === "now" || !b.next_due ? "As soon as the RecallSpring worker runs" : dateTime(b.next_due)}
+        </dd>
+        <dt>Kept</dt>
+        <dd>
+          {plural(b.snapshots.length, "backup")}, {bytes(b.disk_bytes)}
+        </dd>
+        <dt>Folder</dt>
+        <dd className="tiny" style={{ wordBreak: "break-all" }}>
+          {b.location}
+        </dd>
+      </dl>
+      {b.same_disk_as_storage && (
+        <div className="notice warn small">
+          Backups are on the same disk as RecallSpring. They protect against mistakes and a damaged database, not against a broken
+          disk or a lost computer. Set RS_BACKUP_DIR to another disk or a synced folder, or copy this folder elsewhere now and then.
+        </div>
+      )}
+      {run.error && <ErrorNote error={run.error} />}
+      {run.isSuccess && !run.isPending && (
+        <div className="notice small" role="status">
+          Backed up and checked.
+        </div>
+      )}
+      <div>
+        <button type="button" className="btn" onClick={() => run.mutate()} disabled={run.isPending || !b.tools}>
+          {run.isPending ? "Backing up…" : "Back up now"}
+        </button>
+      </div>
+      <p className="tiny muted">
+        Restoring never overwrites anything: <code>recallspring backup-restore --database &lt;new name&gt;</code> creates a new database
+        from a backup, then you choose to switch (docs/08 → Backups).
+      </p>
+    </div>
+  );
+}
+
 type Theme = "system" | "light" | "dark";
 
 function readTheme(): Theme {
@@ -284,10 +378,11 @@ function ThemePicker() {
 export function SettingsPage() {
   const study = useStudySettings();
   const connector = useConnector();
+  const backup = useBackup();
   const session = useSession();
   return (
     <div className="page">
-      <PageHead title="Settings" sub="Study time, the Claude connector and how RecallSpring looks. Every change is recorded in History." />
+      <PageHead title="Settings" sub="Study time, the Claude connector, backups and how RecallSpring looks. Every change is recorded in History." />
       <div className="grid cols-2" style={{ alignItems: "start" }}>
         <div className="stack" style={{ gap: 16 }}>
           <Card title="Study time">
@@ -307,9 +402,14 @@ export function SettingsPage() {
             </dl>
           </Card>
         </div>
-        <Card title="Claude connector">
-          <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
-        </Card>
+        <div className="stack" style={{ gap: 16 }}>
+          <Card title="Claude connector">
+            <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
+          </Card>
+          <Card title="Backups">
+            <Async q={backup}>{(b) => <BackupPanel b={b} />}</Async>
+          </Card>
+        </div>
       </div>
     </div>
   );

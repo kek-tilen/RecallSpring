@@ -363,11 +363,41 @@ export interface Plan {
 }
 
 export interface AttentionItem {
-  kind: "source" | "quiz" | "answers" | "duplicates";
+  kind: "source" | "quiz" | "answers" | "duplicates" | "backup";
   id: string | null;
   course_id: string | null;
   title: string;
   text: string | null;
+}
+
+export interface BackupStatus {
+  enabled: boolean;
+  location: string;
+  same_disk_as_storage: boolean;
+  interval_hours: number;
+  keep_daily: number;
+  keep_weekly: number;
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_error: { code: string; message: string; at: string | null } | null;
+  last: {
+    snapshot: string;
+    reason: string;
+    tables: number;
+    rows: number;
+    files: number;
+    files_copied: number;
+    files_missing: number;
+    files_bytes: number;
+    dump_bytes: number;
+    check: "restored" | "listed" | "none";
+    removed_snapshots: number;
+    seconds: number;
+  } | null;
+  next_due: string | null;
+  snapshots: string[];
+  disk_bytes: number;
+  tools: string | null;
 }
 
 export interface Dashboard {

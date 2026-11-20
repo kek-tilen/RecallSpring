@@ -18,6 +18,7 @@ import type {
   StudySettings,
   TimelineTarget,
   UploadLimits,
+  BackupStatus,
 } from "./types";
 
 export const keys = {
@@ -37,6 +38,7 @@ export const keys = {
   reviews: ["reviews"] as const,
   studySettings: ["settings", "study"] as const,
   connector: ["settings", "connector"] as const,
+  backup: ["settings", "backup"] as const,
 };
 
 export const useSession = () =>
@@ -64,6 +66,7 @@ export const useNotes = (courseId?: string) =>
 export const useHistory = () => useQuery({ queryKey: keys.history, queryFn: () => get<HistoryRow[]>("/history", { limit: 300 }) });
 export const useStudySettings = () =>
   useQuery({ queryKey: keys.studySettings, queryFn: () => get<StudySettings>("/settings/study") });
+export const useBackup = () => useQuery({ queryKey: keys.backup, queryFn: () => get<BackupStatus>("/settings/backup") });
 export const useConnector = () => useQuery({ queryKey: keys.connector, queryFn: () => get<ConnectorSettings>("/settings/connector") });
 
 export const useGroups = () => useQuery({ queryKey: keys.groups, queryFn: () => get<Group[]>("/groups") });
