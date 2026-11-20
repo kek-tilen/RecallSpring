@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { EventList } from "./History";
 import { Upload } from "../components/Upload";
 import { Async, Card, Empty, PageHead, StudyChip } from "../components/ui";
+import { WeekCard } from "./Week";
 import { dateLabel, longToday, plural } from "../format";
 import { useDashboard } from "../queries";
 import type { AttentionItem, PlanItem, TargetCapacity } from "../types";
@@ -178,6 +179,7 @@ export function HomePage() {
                       </ul>
                     )}
                   </Card>
+                  <WeekCard />
                   <Card title="What RecallSpring holds">
                     <div className="stats">
                       {(

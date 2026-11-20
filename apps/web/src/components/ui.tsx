@@ -139,7 +139,7 @@ export function GradeChip({ grade, status }: { grade: number | null | undefined;
 interface Segment {
   label: string;
   value: number;
-  step: number;
+  step: number | "w"; // 0-3 along the ramp; "w" marks a warning (weak)
 }
 
 /** Ordinal stacked meter (one hue, light → dark) with an always-visible legend carrying the counts. */

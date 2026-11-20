@@ -370,6 +370,113 @@ export interface AttentionItem {
   text: string | null;
 }
 
+export type ReadinessState = "not_studied" | "weak" | "not_practised" | "developing" | "solid";
+export type ReadinessCounts = Record<ReadinessState, number>;
+
+export interface ReadinessConcept {
+  id: string;
+  term: string;
+  state: ReadinessState;
+  band: Band;
+  last_grade: number | null;
+  lapses: number;
+  due: boolean;
+  next_review: string | null;
+  difficulty: number;
+  exam_weight: number | null;
+  citations: string[];
+  feedback: {
+    attempt_id: string;
+    answered_at: string;
+    grade: number | null;
+    status: string;
+    question: string;
+    gaps: string[];
+    remediation: string | null;
+  } | null;
+}
+
+export interface ExamReadiness {
+  policy_version: string;
+  generated_at: string;
+  target: {
+    id: string;
+    name: string;
+    kind: string;
+    status: string;
+    due_date: string;
+    days_left: number;
+    scope_description: string;
+    course: { id: string; title: string; color: CourseColor | null };
+  };
+  summary: ReadinessCounts & { concepts: number; due: number; ready_percent: number; remaining_minutes: number };
+  capacity: { status: "ok" | "tight" | "at_risk"; remaining_minutes: number; available_minutes: number; message: string } | null;
+  groups: {
+    kind: "topic" | "source" | "none";
+    id: string | null;
+    title: string;
+    pages: string | null;
+    counts: ReadinessCounts;
+    concepts: ReadinessConcept[];
+  }[];
+  weakest: {
+    id: string;
+    term: string;
+    group: string;
+    last_grade: number | null;
+    reason: string;
+    gaps: string[];
+    remediation: string | null;
+    citations: string[];
+  }[];
+  simulations: QuizSummary[];
+  next_steps: string[];
+  note: string;
+}
+
+export interface WeekReview {
+  policy_version: string;
+  generated_at: string;
+  week: { start: string; end: string; weeks_ago: number; is_current: boolean; days_counted: number };
+  planned_minutes: number;
+  session_minutes: number;
+  sessions: { timed: number; untimed: number };
+  activity: {
+    answers: number;
+    graded: number;
+    concepts_studied: number;
+    concepts_known: number;
+    simulations: number;
+    notes: number;
+    materials: number;
+    active_days: string[];
+  };
+  grades: { count: number; average: number | null; previous_average: number | null; distribution: number[] };
+  courses: {
+    id: string;
+    title: string;
+    color: CourseColor | null;
+    kind: CourseKind;
+    answers: number;
+    graded: number;
+    average_grade: number | null;
+    concepts_studied: number;
+  }[];
+  reviews: { overdue: number; due_next_7_days: number } | null;
+  exams: (ReadinessCounts & {
+    id: string;
+    name: string;
+    course_id: string;
+    course_title: string;
+    course_color: CourseColor | null;
+    due_date: string;
+    days_left: number;
+    concepts: number;
+  })[];
+  summary: string[];
+  note: string;
+}
+
 export interface BackupStatus {
   enabled: boolean;
   location: string;

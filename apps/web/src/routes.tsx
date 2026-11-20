@@ -12,9 +12,11 @@ import { HomePage } from "./pages/Home";
 import { LibraryPage, SourcePage } from "./pages/Library";
 import { LoginPage } from "./pages/Login";
 import { NotePage, NotesPage } from "./pages/Notes";
+import { ReadinessPage } from "./pages/Readiness";
 import { ReviewPage } from "./pages/Review";
 import { SettingsPage } from "./pages/Settings";
 import { SimulationPage, SimulationsPage } from "./pages/Simulations";
+import { WeekPage } from "./pages/Week";
 import { useSession } from "./queries";
 
 function RequireSession() {
@@ -55,6 +57,8 @@ export const router = createBrowserRouter([
           { path: "courses", element: <CoursesPage /> },
           { path: "courses/:courseId", element: <CoursePage /> },
           { path: "exams", element: <ExamsPage /> },
+          { path: "exams/:targetId", element: <ReadinessPage /> },
+          { path: "week", element: <WeekPage /> },
           { path: "concepts/:conceptId", element: <ConceptPage /> },
           { path: "review", element: <ReviewPage /> },
           { path: "simulations", element: <SimulationsPage /> },

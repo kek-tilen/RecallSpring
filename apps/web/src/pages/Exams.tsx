@@ -323,7 +323,10 @@ export function ExamsPage() {
                             <div className="tiny muted">{t.days_left >= 0 ? `in ${plural(t.days_left, "day")}` : "passed"}</div>
                           </td>
                           <td>
-                            <strong>{t.name}</strong> <span className="muted small">{TARGET_KIND[t.kind] ?? t.kind}</span>
+                            <Link to={`/exams/${t.id}`} style={{ fontWeight: 600 }}>
+                              {t.name}
+                            </Link>{" "}
+                            <span className="muted small">{TARGET_KIND[t.kind] ?? t.kind}</span>
                             {t.duplicates.length > 0 && <span className="chip warn" style={{ marginLeft: 8 }}>Possible duplicate</span>}
                             <div className="small muted pre">{t.scope_description}</div>
                           </td>
@@ -340,9 +343,14 @@ export function ExamsPage() {
                             </span>
                           </td>
                           <td>
-                            <button type="button" className="btn small" onClick={() => setEditing(t)}>
-                              Edit
-                            </button>
+                            <span className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                              <Link to={`/exams/${t.id}`} className="btn small">
+                                Readiness
+                              </Link>
+                              <button type="button" className="btn small" onClick={() => setEditing(t)}>
+                                Edit
+                              </button>
+                            </span>
                           </td>
                         </tr>
                       ))}

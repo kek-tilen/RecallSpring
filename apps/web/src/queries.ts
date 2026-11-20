@@ -19,6 +19,8 @@ import type {
   TimelineTarget,
   UploadLimits,
   BackupStatus,
+  ExamReadiness,
+  WeekReview,
 } from "./types";
 
 export const keys = {
@@ -39,6 +41,8 @@ export const keys = {
   studySettings: ["settings", "study"] as const,
   connector: ["settings", "connector"] as const,
   backup: ["settings", "backup"] as const,
+  readiness: (id: string) => ["targets", id, "readiness"] as const,
+  week: (weeksAgo: number) => ["week", weeksAgo] as const,
 };
 
 export const useSession = () =>
@@ -66,6 +70,10 @@ export const useNotes = (courseId?: string) =>
 export const useHistory = () => useQuery({ queryKey: keys.history, queryFn: () => get<HistoryRow[]>("/history", { limit: 300 }) });
 export const useStudySettings = () =>
   useQuery({ queryKey: keys.studySettings, queryFn: () => get<StudySettings>("/settings/study") });
+export const useReadiness = (id: string) =>
+  useQuery({ queryKey: keys.readiness(id), queryFn: () => get<ExamReadiness>(`/targets/${id}/readiness`) });
+export const useWeek = (weeksAgo: number) =>
+  useQuery({ queryKey: keys.week(weeksAgo), queryFn: () => get<WeekReview>("/overview/week", { weeks_ago: weeksAgo }) });
 export const useBackup = () => useQuery({ queryKey: keys.backup, queryFn: () => get<BackupStatus>("/settings/backup") });
 export const useConnector = () => useQuery({ queryKey: keys.connector, queryFn: () => get<ConnectorSettings>("/settings/connector") });
 

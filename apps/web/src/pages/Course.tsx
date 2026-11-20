@@ -301,6 +301,9 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
               ) : (
                 <span className={t.status === "passed" ? "chip good" : "chip"}>{t.status}</span>
               )}
+              <Link to={`/exams/${t.id}`} className="btn small">
+                Readiness
+              </Link>
               <button type="button" className="btn small" onClick={() => setEditing(t)}>
                 Edit
               </button>
