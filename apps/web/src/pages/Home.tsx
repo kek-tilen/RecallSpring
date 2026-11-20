@@ -88,6 +88,17 @@ export function HomePage() {
                 <div className="stack" style={{ gap: 20 }}>
                   <Card title="Today's plan" meta={`${d.plan.planned_minutes} min`}>
                     {d.plan.message && <p className="notice small" style={{ marginBottom: 12 }}>{d.plan.message}</p>}
+                    {d.plan.focus && (
+                      <p className="notice small" style={{ marginBottom: 12 }}>
+                        {d.plan.focus.message}
+                      </p>
+                    )}
+                    {d.plan.interests && !d.plan.focus && (
+                      <p className="notice small muted" style={{ marginBottom: 12 }}>
+                        {d.plan.interests.message}{" "}
+                        <Link to="/settings">Change in Settings</Link>
+                      </p>
+                    )}
                     {d.plan.items.length === 0 ? (
                       <p className="muted">You're caught up. Continue a topic or browse your library.</p>
                     ) : (
@@ -101,6 +112,11 @@ export function HomePage() {
                                   {item.term}
                                 </Link>
                                 <StudyChip status={item.study_status} />
+                                {item.focus ? (
+                                  <span className="chip solid">Focus</span>
+                                ) : (
+                                  item.course_kind === "interest" && <span className="chip">Interest</span>
+                                )}
                               </div>
                               <div className="why">
                                 {item.course_title}

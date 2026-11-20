@@ -189,6 +189,44 @@ export const STEPS: GuideStep[] = [
     check: "Review lists what is due today and next; you can snooze a review there.",
   },
   {
+    id: "interests",
+    title: "Learn things outside university",
+    where: "Interest chat",
+    why:
+      "An interest is something you learn in your free time, without an exam: data analysis, machine learning, a " +
+      "language. Your courses come first: interests get the time left while every exam is on track, unless you keep " +
+      "a share of each day for them or focus on one for a while. Shortcut: choose Add an interest in Claude's + menu.",
+    prompts: [
+      {
+        en: "Add a personal interest: [topic]. It is not for university. My goal is [goal].",
+        sl: "Dodaj osebno zanimanje: [tema]. Ni za faks. Moj cilj je [cilj].",
+      },
+      {
+        en: "This chat is for my interest [topic]. Start studying.",
+        sl: "Ta klepet je za moje zanimanje [tema]. Začniva z učenjem.",
+      },
+      {
+        en: "University comes first: plan [topic] only when my exams are on track.",
+        sl: "Faks ima prednost: [tema] načrtuj samo, ko so moji izpiti na dobri poti.",
+        note: "This is the default.",
+      },
+      {
+        en: "Keep [20] % of each day for my interests.",
+        sl: "Vsak dan obdrži [20] % časa za moja zanimanja.",
+      },
+      {
+        en: "Until [date] I want to focus on [topic].",
+        sl: "Do [datum] se želim posvetiti [tema].",
+        note: "A focus puts it first; Today shows if an exam gets tight because of it.",
+      },
+      {
+        en: "End the focus; university first again.",
+        sl: "Končaj fokus; spet ima prednost faks.",
+      },
+    ],
+    check: "Courses lists your interests under Interests; Today says how much time they get and why.",
+  },
+  {
     id: "update",
     title: "Keep the plan up to date",
     where: "Planning chat",

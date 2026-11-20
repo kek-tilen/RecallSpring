@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { request } from "../api";
+import { addDays, dateLabel, todayIso } from "../format";
 import { ORGANISATION_KEYS, useGroups } from "../queries";
 import type { CourseColor, CourseInfo, Group } from "../types";
 import { ErrorNote, Modal } from "./ui";
@@ -121,12 +122,16 @@ export function CourseDialog({ course, open, onClose }: { course: CourseInfo; op
   const [groupId, setGroupId] = useState(course.group_id ?? "");
   const [retain, setRetain] = useState(course.long_term_retention);
   const [archived, setArchived] = useState(course.status === "archived");
+  const [kind, setKind] = useState<CourseInfo["kind"]>(course.kind);
+  const [goal, setGoal] = useState(course.description ?? "");
   const save = useMutation({
     mutationFn: () => {
       const body: Record<string, unknown> = {};
       if (title.trim() !== course.title) body.title = title.trim();
       if (color !== course.color) body.color = color;
-      if ((groupId || null) !== course.group_id) body.group_id = groupId || null;
+      if (kind !== course.kind) body.kind = kind;
+      if (kind === "interest" && goal.trim() !== (course.description ?? "")) body.description = goal.trim() || null;
+      if (kind === "course" && (groupId || null) !== course.group_id) body.group_id = groupId || null;
       if (retain !== course.long_term_retention) body.long_term_retention = retain;
       if (archived !== (course.status === "archived")) body.archived = archived;
       return request<CourseInfo>(`/courses/${course.id}`, { method: "PATCH", json: body });
@@ -141,24 +146,45 @@ export function CourseDialog({ course, open, onClose }: { course: CourseInfo; op
     save.mutate();
   }
   return (
-    <Modal open={open} title="Edit course" onClose={onClose}>
+    <Modal open={open} title={kind === "interest" ? "Edit interest" : "Edit course"} onClose={onClose}>
       <form className="stack" onSubmit={submit}>
         <label className="field">
           Title
           <input type="text" value={title} maxLength={200} required onChange={(e) => setTitle(e.target.value)} />
         </label>
+        <label className="field">
+          Type
+          <select value={kind} onChange={(e) => setKind(e.target.value as CourseInfo["kind"])}>
+            <option value="course">University course: planned by its exams</option>
+            <option value="interest">Personal interest: no exam, no deadline</option>
+          </select>
+          {kind === "interest" && course.kind === "course" && (
+            <span className="hint">
+              It leaves its semester. Upcoming exams need a result, or must be cancelled or deleted first.
+            </span>
+          )}
+        </label>
+        {kind === "interest" && (
+          <label className="field">
+            Goal
+            <span className="hint">What you want to be able to do, in your own words. Claude teaches toward it.</span>
+            <textarea rows={3} maxLength={5000} value={goal} onChange={(e) => setGoal(e.target.value)} />
+          </label>
+        )}
         <div className="field">
           Colour
           <span className="hint">Marks this course on the exam timeline and in lists, always next to its name.</span>
           <ColorPicker value={color} onChange={setColor} />
         </div>
-        <GroupSelect
-          label="Semester"
-          emptyLabel="Not filed in a semester"
-          value={groupId}
-          onChange={setGroupId}
-          groups={groups.data ?? []}
-        />
+        {kind === "course" && (
+          <GroupSelect
+            label="Semester"
+            emptyLabel="Not filed in a semester"
+            value={groupId}
+            onChange={setGroupId}
+            groups={groups.data ?? []}
+          />
+        )}
         <label className="row small">
           <input type="checkbox" checked={retain} onChange={(e) => setRetain(e.target.checked)} />
           Keep reviewing it after the course ends (long-term memory)
@@ -178,6 +204,139 @@ export function CourseDialog({ course, open, onClose }: { course: CourseInfo; op
         </div>
       </form>
     </Modal>
+  );
+}
+
+/** A personal interest: something learned in free time, without an exam or deadline. */
+export function NewInterestDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const refresh = useInvalidateOrganisation();
+  const [title, setTitle] = useState("");
+  const [goal, setGoal] = useState("");
+  const save = useMutation({
+    mutationFn: () =>
+      request<CourseInfo>("/courses", {
+        method: "POST",
+        json: { title: title.trim(), kind: "interest", description: goal.trim() || null },
+      }),
+    onSuccess: () => {
+      refresh();
+      onClose();
+    },
+  });
+  return (
+    <Modal open={open} title="New interest" onClose={onClose}>
+      <form
+        className="stack"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate();
+        }}
+      >
+        <p className="small muted">
+          Something you learn in your free time, without an exam or deadline: data analysis, machine learning, a
+          language. Your courses come first unless you choose otherwise in Settings.
+        </p>
+        <label className="field">
+          Name
+          <input
+            type="text"
+            required
+            maxLength={200}
+            value={title}
+            placeholder="e.g. Data analysis"
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          Goal
+          <span className="hint">What you want to be able to do. You can also leave it empty and Claude asks.</span>
+          <textarea rows={3} maxLength={5000} value={goal} onChange={(e) => setGoal(e.target.value)} />
+        </label>
+        {save.error && <ErrorNote error={save.error} />}
+        <div className="row" style={{ justifyContent: "flex-end" }}>
+          <button type="button" className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn primary" disabled={save.isPending || !title.trim()}>
+            Add interest
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+export function isFocused(course: Pick<CourseInfo, "focus_until">): boolean {
+  return !!course.focus_until && course.focus_until >= todayIso();
+}
+
+/** Put one course or interest first in the plan until a day, or end that focus. */
+export function FocusControl({ course }: { course: Pick<CourseInfo, "id" | "title" | "status" | "focus_until"> }) {
+  const qc = useQueryClient();
+  const today = todayIso();
+  const [open, setOpen] = useState(false);
+  const [until, setUntil] = useState(addDays(today, 6));
+  const save = useMutation({
+    mutationFn: (courseId: string | null) =>
+      request<unknown>("/settings/focus", { method: "PUT", json: { course_id: courseId, until: courseId ? until : null } }),
+    onSuccess: () => {
+      setOpen(false);
+      for (const key of [["courses"], ["dashboard"], ["settings"]]) void qc.invalidateQueries({ queryKey: key });
+    },
+  });
+  if (course.status === "archived") return null;
+  if (isFocused(course)) {
+    return (
+      <span className="row small" style={{ gap: 8 }}>
+        <span className="chip solid">Focus until {dateLabel(course.focus_until ?? today)}</span>
+        <button type="button" className="btn small" onClick={() => save.mutate(null)} disabled={save.isPending}>
+          End focus
+        </button>
+        {save.error && <ErrorNote error={save.error} />}
+      </span>
+    );
+  }
+  return (
+    <>
+      <button type="button" className="btn" onClick={() => setOpen(true)}>
+        Focus on this
+      </button>
+      <Modal open={open} title={`Focus on ${course.title}`} onClose={() => setOpen(false)}>
+        <form
+          className="stack"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save.mutate(course.id);
+          }}
+        >
+          <p className="small">
+            It comes first in your plan until the day you choose; other courses and interests get the time that is
+            left. Today shows any exam that becomes tight or at risk because of it. There is one focus at a time, so
+            this replaces any other.
+          </p>
+          <label className="field">
+            Until
+            <input
+              type="date"
+              required
+              min={today}
+              max={addDays(today, 60)}
+              value={until}
+              onChange={(e) => setUntil(e.target.value)}
+            />
+          </label>
+          {save.error && <ErrorNote error={save.error} />}
+          <div className="row" style={{ justifyContent: "flex-end" }}>
+            <button type="button" className="btn" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+            <button type="submit" className="btn primary" disabled={save.isPending}>
+              Focus
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </>
   );
 }
 

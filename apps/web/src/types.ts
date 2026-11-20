@@ -23,11 +23,17 @@ export interface Progress {
 export type CourseColor = "blue" | "orange" | "aqua" | "yellow" | "magenta" | "green" | "violet" | "red";
 export type MaterialCategory = "material" | "notes" | "exercises" | "past_paper" | "other";
 
+export type CourseKind = "course" | "interest";
+
 export interface CourseInfo {
   id: string;
   title: string;
   description: string | null;
   status: string;
+  /** "interest": personal learning without exams or a deadline; its description is the learner's goal. */
+  kind: CourseKind;
+  /** The learner chose to concentrate on it until this day (inclusive). */
+  focus_until: string | null;
   color: CourseColor | null;
   group_id: string | null;
   long_term_retention: boolean;
@@ -312,6 +318,8 @@ export interface PlanItem {
   term: string;
   course_id: string;
   course_title: string;
+  course_kind: CourseKind;
+  focus: boolean;
   why_selected: string;
   estimated_minutes: number;
   target: string | null;
@@ -344,6 +352,14 @@ export interface Plan {
   targets: TargetCapacity[];
   message: string | null;
   note: string;
+  interests: {
+    policy: "university_first" | "share";
+    percent: number;
+    reserved_minutes: number;
+    planned_minutes: number;
+    message: string;
+  } | null;
+  focus: { course_id: string; course_title: string; kind: CourseKind; until: string; message: string } | null;
 }
 
 export interface AttentionItem {
@@ -366,6 +382,7 @@ export interface Course {
   title: string;
   description: string | null;
   status: string;
+  kind: CourseKind;
   color: CourseColor | null;
   group_id: string | null;
 }
@@ -440,4 +457,7 @@ export interface StudySettings {
   weekly_minutes: number[];
   maintenance_percent: number;
   style_percent: number;
+  /** Share of each day kept for interests; 0 = university first. */
+  interest_percent: number;
+  focus: { course_id: string; course_title: string; kind: CourseKind; until: string } | null;
 }

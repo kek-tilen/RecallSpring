@@ -2,7 +2,16 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
 import { request } from "../api";
-import { CourseDialog, CourseDot, GroupDialog, KIND_LABEL, cc, useInvalidateOrganisation } from "../components/organise";
+import {
+  CourseDialog,
+  CourseDot,
+  GroupDialog,
+  KIND_LABEL,
+  NewInterestDialog,
+  cc,
+  isFocused,
+  useInvalidateOrganisation,
+} from "../components/organise";
 import { Async, Confirm, Empty, ErrorNote, PageHead, StudyMeter } from "../components/ui";
 import { dateLabel, plural } from "../format";
 import { useCourseSummary, useGroups } from "../queries";
@@ -17,8 +26,9 @@ function CourseCard({ c }: { c: CourseSummary }) {
           <h3 className="row" style={{ gap: 8, overflowWrap: "anywhere" }}>
             <CourseDot color={c.color} />
             <Link to={`/courses/${c.id}`}>{c.title}</Link>
+            {isFocused(c) && <span className="chip solid">Focus until {dateLabel(c.focus_until ?? "")}</span>}
           </h3>
-          {c.description && <p className="muted small">{c.description}</p>}
+          {c.description && c.kind !== "interest" && <p className="muted small">{c.description}</p>}
         </div>
         <button type="button" className="btn small ghost" onClick={() => setEditing(true)} aria-label={`Edit ${c.title}`}>
           Edit
@@ -26,6 +36,16 @@ function CourseCard({ c }: { c: CourseSummary }) {
       </div>
       {c.status === "archived" ? (
         <div className="notice small muted">Archived{c.long_term_retention ? ": due reviews continue as maintenance." : "."}</div>
+      ) : c.kind === "interest" ? (
+        <div className="notice small">
+          {c.description ? (
+            <>
+              <strong>Goal:</strong> {c.description}
+            </>
+          ) : (
+            <span className="muted">No goal yet: Claude asks for it in your first session.</span>
+          )}
+        </div>
       ) : c.active_target ? (
         <div className="notice small">
           <strong>{c.active_target.name}</strong> on {dateLabel(c.active_target.due_date)} ·{" "}
@@ -139,9 +159,13 @@ export function CoursesPage() {
   const groups = useGroups();
   const [showArchived, setShowArchived] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [addingInterest, setAddingInterest] = useState(false);
   return (
     <div className="page">
-      <PageHead title="Courses" sub="Organised by university, faculty and semester. Each course shows its next exam and progress.">
+      <PageHead
+        title="Courses"
+        sub="Organised by university, faculty and semester, plus your own interests. Each shows its next exam or goal and progress."
+      >
         <label className="row small">
           <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
           Show archived
@@ -149,13 +173,18 @@ export function CoursesPage() {
         <button type="button" className="btn" onClick={() => setCreating(true)}>
           New university, faculty or semester
         </button>
+        <button type="button" className="btn" onClick={() => setAddingInterest(true)}>
+          New interest
+        </button>
       </PageHead>
       <Async q={q} lines={6}>
         {(courses) => {
           const all = groups.data ?? [];
           const known = new Set(all.map((g) => g.id));
           const roots = all.filter((g) => (!g.parent_id || !known.has(g.parent_id)) && (showArchived || g.status === "active"));
-          const loose = courses.filter((c) => (!c.group_id || !known.has(c.group_id)) && (showArchived || c.status !== "archived"));
+          const visible = (c: CourseSummary) => showArchived || c.status !== "archived";
+          const loose = courses.filter((c) => c.kind !== "interest" && (!c.group_id || !known.has(c.group_id)) && visible(c));
+          const interests = courses.filter((c) => c.kind === "interest" && visible(c));
           if (courses.length === 0 && all.length === 0) {
             return (
               <Empty title="No courses yet">
@@ -185,11 +214,36 @@ export function CoursesPage() {
                   </div>
                 </section>
               )}
+              <section className="group" aria-label="Interests">
+                <div className="group-head">
+                  <h2>
+                    <span className="kind">Interests</span>
+                    Outside university
+                  </h2>
+                  <button type="button" className="btn small ghost" onClick={() => setAddingInterest(true)}>
+                    Add interest
+                  </button>
+                </div>
+                {interests.length > 0 ? (
+                  <div className="grid cols-2">
+                    {interests.map((c) => (
+                      <CourseCard key={c.id} c={c} />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="small muted">
+                    Learn something in your free time, without an exam: data analysis, machine learning, a language.
+                    Your courses come first: interests get the time left while every exam is on track, unless you
+                    choose a share of each day in Settings or focus on one for a while.
+                  </p>
+                )}
+              </section>
             </div>
           );
         }}
       </Async>
       {creating && <GroupDialog open onClose={() => setCreating(false)} />}
+      {addingInterest && <NewInterestDialog open onClose={() => setAddingInterest(false)} />}
     </div>
   );
 }

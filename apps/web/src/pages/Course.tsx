@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { get } from "../api";
 import { Async, BandChip, BandMeter, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip, StudyMeter } from "../components/ui";
-import { CourseDialog, CourseDot, groupPath } from "../components/organise";
+import { CourseDialog, CourseDot, FocusControl, groupPath } from "../components/organise";
 import { TargetDialog } from "../components/TargetDialog";
 import { Upload } from "../components/Upload";
 import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, plural, relativeDay } from "../format";
@@ -36,6 +36,8 @@ export function CoursePage() {
       <Async q={q} lines={8}>
         {(o) => {
           const active = o.targets.find((t) => t.id === o.active_target_id);
+          const isInterest = o.course.kind === "interest";
+          const tabs = TABS.filter((t) => !(isInterest && t.id === "targets"));
           const counts: Record<Tab, number | null> = {
             concepts: o.concepts.length,
             targets: o.targets.length,
@@ -51,18 +53,35 @@ export function CoursePage() {
                   <span className="row" style={{ gap: 10 }}>
                     <CourseDot color={o.course.color} />
                     {o.course.title}
+                    {isInterest && <span className="chip">Interest</span>}
                     {o.course.status === "archived" && <span className="chip">Archived</span>}
                   </span>
                 }
-                sub={[groupPath(groups.data, o.course.group_id), o.course.description].filter(Boolean).join(" · ") || undefined}
+                sub={
+                  isInterest
+                    ? "Personal interest: no exam, no deadline."
+                    : [groupPath(groups.data, o.course.group_id), o.course.description].filter(Boolean).join(" · ") || undefined
+                }
                 crumbs={[{ to: "/courses", label: "Courses" }]}
               >
+                <FocusControl course={o.course} />
                 <button type="button" className="btn" onClick={() => setEditCourse(true)}>
-                  Edit course
+                  {isInterest ? "Edit interest" : "Edit course"}
                 </button>
               </PageHead>
               {editCourse && <CourseDialog course={o.course} open onClose={() => setEditCourse(false)} />}
               <div className="grid cols-2">
+                {isInterest ? (
+                  <Card title="Goal" tint>
+                    {o.course.description ? (
+                      <p className="small pre">{o.course.description}</p>
+                    ) : (
+                      <p className="small muted">
+                        No goal yet. Claude asks for it at the start of a session, or add it with Edit interest.
+                      </p>
+                    )}
+                  </Card>
+                ) : (
                 <Card title="Next exam" tint>
                   {active ? (
                     <div className="stack" style={{ gap: 6 }}>
@@ -79,6 +98,7 @@ export function CoursePage() {
                     <p className="small muted">No exam or kolokvij is set. Claude asks for it at the start of a study session.</p>
                   )}
                 </Card>
+                )}
                 <Card title="Progress" tint>
                   <div className="stack">
                     <StudyMeter progress={o.progress} />
@@ -89,7 +109,7 @@ export function CoursePage() {
               </div>
 
               <nav className="tabs" aria-label="Course sections">
-                {TABS.map((t) => (
+                {tabs.map((t) => (
                   <Link key={t.id} to={`?tab=${t.id}`} aria-current={tab === t.id ? "page" : undefined} replace>
                     {t.label}
                     {counts[t.id] !== null && <span className="n">{counts[t.id]}</span>}
@@ -98,7 +118,7 @@ export function CoursePage() {
               </nav>
 
               {tab === "concepts" && <ConceptsTab o={o} />}
-              {tab === "targets" && <TargetsTab targets={o.targets} activeId={o.active_target_id} courseId={o.course.id} />}
+              {tab === "targets" && !isInterest && <TargetsTab targets={o.targets} activeId={o.active_target_id} courseId={o.course.id} />}
               {tab === "materials" && (
                 <div className="stack" style={{ gap: 20 }}>
                   <MaterialsView sources={o.sources} courseId={o.course.id} />

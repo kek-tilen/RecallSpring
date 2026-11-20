@@ -43,9 +43,10 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
   onDeleted?: (target: Target) => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const courses = useCourses();
+  const allCourses = useCourses();
+  const courseList = allCourses.data?.filter((c) => c.kind !== "interest"); // interests have no exams
   const [course, setCourse] = useState(target?.course_id ?? courseId ?? "");
-  const chosenCourse = course || courses.data?.[0]?.id || "";
+  const chosenCourse = course || courseList?.[0]?.id || "";
   const sources = useSources(chosenCourse || undefined);
   const refresh = useInvalidateOrganisation();
   const [name, setName] = useState(target?.name ?? "1. kolokvij");
@@ -143,7 +144,7 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
           <label className="field">
             Course
             <select value={chosenCourse} onChange={(e) => setCourse(e.target.value)} required>
-              {courses.data?.map((c) => (
+              {courseList?.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.title}
                 </option>

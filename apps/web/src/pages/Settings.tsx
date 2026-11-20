@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { request } from "../api";
 import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
-import { dateTime } from "../format";
+import { Link } from "react-router";
+import { dateLabel, dateTime } from "../format";
 import { keys, useConnector, useSession, useStudySettings } from "../queries";
 import type { ConnectorSettings, ConnectorToken, StudySettings } from "../types";
 
@@ -13,11 +14,12 @@ function StudyForm({ initial }: { initial: StudySettings }) {
   const [minutes, setMinutes] = useState(initial.weekly_minutes);
   const [maintenance, setMaintenance] = useState(initial.maintenance_percent);
   const [style, setStyle] = useState(initial.style_percent);
+  const [interest, setInterest] = useState(initial.interest_percent);
   const save = useMutation({
     mutationFn: () =>
       request<StudySettings>("/settings/study", {
         method: "PUT",
-        json: { weekly_minutes: minutes, maintenance_percent: maintenance, style_percent: style },
+        json: { weekly_minutes: minutes, maintenance_percent: maintenance, style_percent: style, interest_percent: interest },
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.studySettings });
@@ -25,7 +27,10 @@ function StudyForm({ initial }: { initial: StudySettings }) {
     },
   });
   const dirty =
-    minutes.join() !== initial.weekly_minutes.join() || maintenance !== initial.maintenance_percent || style !== initial.style_percent;
+    minutes.join() !== initial.weekly_minutes.join() ||
+    maintenance !== initial.maintenance_percent ||
+    style !== initial.style_percent ||
+    interest !== initial.interest_percent;
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -64,6 +69,29 @@ function StudyForm({ initial }: { initial: StudySettings }) {
         <span className="hint">Share of simulation questions in the style of your old papers; the rest go deeper.</span>
         <input type="range" min={0} max={100} step={5} value={style} onChange={(e) => setStyle(Number(e.target.value))} />
       </label>
+      <label className="field">
+        Interests: {interest === 0 ? "university first" : `${interest}% of each day`}
+        <span className="hint">
+          {interest === 0
+            ? "Your interests get only the time left after today's course work, and only while every exam is on track."
+            : "This share of each day is kept for your interests, even when an exam is tight; exam checks count only the rest."}
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={50}
+          step={5}
+          value={interest}
+          aria-valuetext={interest === 0 ? "University first" : `${interest} percent`}
+          onChange={(e) => setInterest(Number(e.target.value))}
+        />
+      </label>
+      {initial.focus && (
+        <div className="notice small">
+          Focus: <strong>{initial.focus.course_title}</strong> comes first until {dateLabel(initial.focus.until)}.{" "}
+          <Link to={`/courses/${initial.focus.course_id}`}>Open it to end the focus.</Link>
+        </div>
+      )}
       {save.error && <ErrorNote error={save.error} />}
       <div className="row">
         <button type="submit" className="btn primary" disabled={!dirty || save.isPending}>
