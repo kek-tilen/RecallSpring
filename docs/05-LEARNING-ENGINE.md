@@ -110,6 +110,41 @@ Review should persist after exams to address owner's reported forgetting. Long-t
 
 Show: due today/this week, topics with repeated misconceptions, covered vs uncovered syllabus, most recent evidence by concept and upcoming exams. Do **not** display unwarranted precision about memory or ranking. A confidence descriptor must explicitly say 'Estimated from practice, not a guarantee of recall'.
 
+### Implemented: exam readiness (`readiness-v1`)
+
+Deterministic, no model calls; recomputed on every request from the review states and assessments already stored.
+
+- Every concept in a target's scope gets one state, in this order of precedence:
+  - `not_studied`: no learning evidence yet (learn it first);
+  - `not_practised`: studied or marked known, but no graded answer yet;
+  - `weak`: mastery band `emerging`, a lapse, or a last effective grade of 0-2;
+  - `solid`: mastery band `reliable`;
+  - `developing`: everything else ("Getting there").
+- Concepts are grouped by the material they come from: syllabus topics first, then files in upload order (first
+  linked section), then "Not linked to material". Each concept shows its last grade, whether a review is due, the
+  past-paper weight and up to two citations.
+- **Weakest**: up to 5 weak concepts, ordered by last grade, lapses and past-paper weight, each with a plain reason
+  and the gaps and tip from the feedback of its last answer (a human correction wins). Diagnostic quizzes are left
+  out.
+- **Next steps** follow the learning-first order: learn what is not studied (in material order, with a per-day pace),
+  strengthen the weakest, answer one question on studied but unpractised concepts, open due reviews, and suggest a
+  timed simulation when the exam is 10 days away or less, at least half the scope is studied and no simulation was
+  submitted in the last 7 days.
+- The time check (`capacity`) is the planner's own (`plan-v2`) for each course's active target; later targets show a
+  rough estimate of minutes left instead.
+- The page and the connector say it plainly: estimated from answers so far, not a prediction of the grade.
+
+### Implemented: weekly review (`week-v1`)
+
+- Monday to Sunday in the learner's time zone, this week or up to 52 weeks back.
+- Planned minutes are the learner's availability for the days so far; study time counts only study sessions closed
+  with a summary (each capped at 4 hours), so it can be less than the real time.
+- Answers, graded answers, concepts studied or marked known, simulations, notes and materials; active days; average
+  effective grade with the previous week's average and the 0-4 distribution; a per-course breakdown.
+- For the current week: overdue reviews, reviews due in the next 7 days, and exams in the next 21 days with their
+  readiness counts.
+- `summary` holds plain sentences built from these numbers only; Claude starts its weekly review from them.
+
 ## Example behavior
 
 User uploads material on cell respiration, writes own explanation, asks for Bloom 4 practice. Tutor asks for similarities/differences between glycolysis and the citric acid cycle, grounded in uploaded sections. Answer saved. AI identifies a missing relationship, shows source excerpt and an optional flow visual. System records a partial grade, schedules a short follow-up and links the weak concept. A week later, the daily review mixes this with a distinct related concept instead of repeating identical flashcards.

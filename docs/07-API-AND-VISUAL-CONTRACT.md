@@ -46,6 +46,8 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | GET | `/reviews/due` | Due queue and reasons |
 | POST | `/reviews/{id}/defer` | Record explicit defer |
 | GET | `/planner/today` | Deterministic ranked daily plan (`plan-v2`: `interests` and `focus` explained), optional `course_id` and `minutes` |
+| GET | `/targets/{id}/readiness` | Exam readiness (`readiness-v1`): every concept in scope with its state, grouped by material; weakest concepts with the gaps from their last feedback; next steps; time check; simulations (404 for someone else's target) |
+| GET | `/overview/week?weeks_ago=0..52` | Weekly review (`week-v1`), Monday to Sunday in the learner's time zone: planned vs. recorded study time, activity, grade average and trend, per course, overdue reviews and exams in the next 21 days (current week only), plain summary sentences |
 | GET/PUT | `/settings/study` | Weekly minutes, maintenance share (0–50 %), past-paper style share (0–100 %), interest share (0–50 %, 0 = university first); GET also returns the current `focus` |
 | GET/POST | `/settings/backup` | Backup status (last good backup, what it holds, check, next, folder, size, failure; no secrets) / back up now (synchronous; `409 backup_busy`, `503 backup_failed` with the reason; audited) |
 | PUT | `/settings/focus` | `{course_id, until}`: one course or interest first until a day (≤ 60 days), `course_id` null ends it; audited |
@@ -95,6 +97,8 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `get_quiz_results` | read | Answers (as learner material), keys, rubrics, pending open answers, points |
 | `record_assessments` | append | Batch grading, all or nothing |
 | `get_study_plan` | read | `plan-v2`, optional `course_id` (course or interest, no priority rules) or none (overview with `interests` and `focus`), capacity per active target |
+| `get_exam_readiness` | read | `GET /connector/readiness?target_id=` or `?course_id=` (that course's active target; `409 no_upcoming_exam`, `422 target_or_course_required`): the readiness view with less per concept (id, term, state, last grade, due, exam weight) |
+| `get_weekly_review` | read | `GET /connector/week?weeks_ago=`: the weekly review, same as the web page |
 | `open_summary_form` | UI | MCP App `ui://recallspring/summary`: the learner summarises the chunk just taught |
 | `save_learning_summary` | append, app-only | `POST /connector/learning`: exact summary as a note, concepts become `studied` |
 | `mark_concepts_known` | audited update | `POST /connector/concepts/known`: learner self-report with reason |

@@ -65,6 +65,17 @@ Dropzone with progress, duplicates indicator, type/size constraints, extraction 
 
 Course coverage, due forecasts, recurring misconceptions, evidence per topic, exam-date planning. Avoid mastery percentages unless they are clearly labeled approximations with evidence. `Learning history` should show exactly when an answer was saved, evaluated, scheduled and corrected.
 
+Implemented:
+
+- **Exam readiness** (`/exams/:id`, linked from Exams and the course's Exams tab): a five-part bar (Not studied
+  yet, Weak, Studied not practised, Getting there, Solid; weak uses the warning colour, the rest the green ramp)
+  with a legend and counts, the time check, next steps, the weakest concepts with what was missing in their last
+  answer and where to read again, simulations, and the material groups as collapsible blocks (open while anything
+  in them is not yet "Getting there" or "Solid"). It ends with "not a prediction of your grade".
+- **Weekly review** (`/week`, and a "This week" card on Today): plain summary sentences, numbers, a 0-4 grade
+  distribution as a labelled table, per course, reviews, exams in the next three weeks; earlier weeks one click
+  back.
+
 ## Visual learning principle
 
 **Use a visual only when it simplifies a concept.** Supported v1 blocks:

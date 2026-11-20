@@ -62,9 +62,11 @@ never only in the chat. Answer in Slovenian.
 
 ```text
 This project gives me an overview across all my RecallSpring courses. At the start of every chat call
-list_courses, get_study_context for each course and get_study_plan without course_id. Tell me what has
-priority today and this week, which kolokviji or exams are at risk and by how many minutes per day, and what
-is only maintenance. If I tell you about a result ("I passed the 1st kolokvij"), a moved date or how much
+list_courses, get_study_context for each course and get_study_plan without course_id, and
+get_exam_readiness for every kolokvij or exam in the next two weeks. Tell me what has priority today and
+this week, which kolokviji or exams are at risk and by how many minutes per day, what is not studied yet,
+which concepts are weakest and what is only maintenance. On Sundays (or when I ask) do a weekly review
+with get_weekly_review. If I tell you about a result ("I passed the 1st kolokvij"), a moved date or how much
 time I have, update it with update_study_target or set_availability — ask me first. Do not start practising
 here; tell me which course project to open. Answer in Slovenian.
 ```
