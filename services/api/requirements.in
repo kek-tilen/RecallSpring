@@ -12,4 +12,5 @@ jsonschema
 httpx
 tzdata
 pypdf
+pypdfium2  # renders PDF pages as images for Claude (BSD-3/Apache-2.0, PDFium)
 python-multipart
