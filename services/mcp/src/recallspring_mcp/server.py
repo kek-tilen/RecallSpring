@@ -41,7 +41,9 @@ Start of every study session in a course:
    date, from which material to which, whether they have an old kolokvij, and any specifics. Map the answer to the
    material (get_course_outline), confirm it, then set_study_target. Analyse an old paper with record_exam_profile.
 2. get_study_plan (course_id for one course, none for an overview across courses) and propose a session within the
-   learner's available time. Passed material is maintenance only; the active target has priority.
+   learner's available time. Passed material is maintenance only; the active target has priority. When the exam is
+   within about two weeks, also call get_exam_readiness (course_id) and build the session on its next_steps:
+   material not studied yet first (in its order), then the weakest concepts, using the gaps from their last feedback.
 3. LEARN FIRST. Never quiz material the learner has not studied. For "Learn next" items (study_status
    not_studied) teach in chunks of a few pages, in the order of the material: read the sections
    (get_source_section), explain clearly with examples and page citations (a visual when it helps), answer the
@@ -308,6 +310,23 @@ async def get_study_plan(minutes: int | None = None, course_id: str | None = Non
     and interests, where "interests" explains how much time the interests get (university first or a share) and
     "focus" the learner's focus. minutes overrides today's availability for this answer only."""
     return as_json(await get_client().get("/plan", minutes=minutes, course_id=course_id))
+
+
+@mcp.tool(annotations=READ)
+async def get_exam_readiness(target_id: str | None = None, course_id: str | None = None) -> str:
+    """What is left before one kolokvij or exam: target_id, or course_id for that course's next exam. Every concept
+    in scope has a state (not_studied, weak = last grade 0-2, not_practised, developing, solid), grouped by the
+    material it comes from; "weakest" lists the weakest concepts with the gaps named in their last feedback;
+    "next_steps" and "capacity" (time check) say what to do. Estimates from practice, not a grade prediction."""
+    return as_json(await get_client().get("/readiness", target_id=target_id, course_id=course_id))
+
+
+@mcp.tool(annotations=READ)
+async def get_weekly_review(weeks_ago: int = 0) -> str:
+    """Weekly review (Monday to Sunday, 0 = this week): activity, graded answers and the average grade with its
+    trend, study time (only sessions closed with record_session_summary count), overdue reviews and the exams in
+    the next three weeks with their readiness counts. "summary" holds plain sentences to start from."""
+    return as_json(await get_client().get("/week", weeks_ago=weeks_ago))
 
 
 @mcp.tool(annotations=READ)
@@ -977,9 +996,21 @@ def start_studying(course: str = "") -> str:
 def exam_overview() -> str:
     return (
         "Give me an overview across all my RecallSpring courses: call list_courses, get_study_context for each "
-        "course and get_study_plan for all courses. Tell me what has priority today and this week, which targets "
-        "are at risk (and by how many minutes per day), and what is only maintenance. Ask me before changing a "
-        "target or my availability."
+        "course and get_study_plan for all courses, and get_exam_readiness for every exam in the next two weeks. "
+        "Tell me what has priority today and this week, which targets are at risk (and by how many minutes per "
+        "day), which material is not studied yet and which concepts are weakest, and what is only maintenance. "
+        "Ask me before changing a target or my availability."
+    )
+
+
+@mcp.prompt(name="weekly-review", title="Weekly review", description="How the week went and a plan for the next one.")
+def weekly_review() -> str:
+    return (
+        "Let's do my weekly review. Call get_weekly_review (and with weeks_ago=1 if this week has just started), "
+        "then get_exam_readiness for each exam in the next two weeks. Tell me briefly what went well, where my "
+        "grades dropped and which exams need more time, using only what RecallSpring recorded. Then propose a plan "
+        "for the next seven days: which material to learn, which weak concepts to practise and when a timed "
+        "simulation makes sense. Ask me before changing my availability or a target."
     )
 
 

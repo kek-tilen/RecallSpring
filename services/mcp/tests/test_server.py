@@ -323,7 +323,7 @@ async def test_prompts_start_with_the_study_context() -> None:
     async with Client(mcp) as client:
         names = [p.name for p in (await client.list_prompts()).prompts]
         prompt = await client.get_prompt("start-studying", {"course": "KV"})
-    assert names == ["plan-semester", "add-interest", "start-studying", "exam-overview"]
+    assert names == ["plan-semester", "add-interest", "start-studying", "exam-overview", "weekly-review"]
     text = prompt.messages[0].content.text
     assert "get_study_context" in text and "1st kolokvij" in text and "KV" in text
 
@@ -446,6 +446,23 @@ async def test_instructions_and_quiz_tool_put_learning_first() -> None:
     )
     assert "mark_concepts_known" in tools
     assert "not studied yet first" in prompt.messages[0].content.text
+
+
+async def test_readiness_and_weekly_review_tools(api: FakeApi) -> None:
+    api.route("GET", "/readiness", 200, {"summary": {"weak": 1}, "next_steps": ["Strengthen 1 weak concept"]})
+    api.route("GET", "/week", 200, {"summary": ["Active on 2 of 5 days"]})
+    async with Client(mcp) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        await client.call_tool("get_exam_readiness", {"course_id": "c1"})
+        await client.call_tool("get_weekly_review", {"weeks_ago": 1})
+        prompt = await client.get_prompt("weekly-review", {})
+        instructions = client.instructions or ""
+    sent = [(r.url.path.removeprefix("/api/v1/connector"), dict(r.url.params)) for r in api.requests]
+    assert sent == [("/readiness", {"course_id": "c1"}), ("/week", {"weeks_ago": "1"})]
+    assert "gaps" in tools["get_exam_readiness"].description and tools["get_weekly_review"].annotations.read_only_hint
+    assert "get_exam_readiness" in instructions
+    text = prompt.messages[0].content.text
+    assert "get_weekly_review" in text and "get_exam_readiness" in text
 
 
 async def test_interest_tools_call_their_routes(api: FakeApi) -> None:
