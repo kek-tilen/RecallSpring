@@ -106,10 +106,10 @@ def _attr(el: ET.Element | None, name: str) -> str | None:
     return None
 
 
-def _rel_id(el: ET.Element) -> str | None:
-    """The r:id attribute (relationships namespace), distinct from a plain numeric ``id``."""
+def _rel_id(el: ET.Element, name: str = "id") -> str | None:
+    """An r:id / r:embed attribute (relationships namespace), distinct from a plain numeric ``id``."""
     for key, value in el.attrib.items():
-        if key.endswith("}id") and "relationships" in key:
+        if key.endswith("}" + name) and "relationships" in key:
             return value
     return None
 
@@ -219,6 +219,83 @@ def check_package(path: Path, kind: str) -> None:
         package.close()
 
 
+# ---------------------------------------------------------------- pictures
+
+# A picture: (its element, relationship id, alt text). Text markers ("[picture 3]") and view_page number pictures
+# with the same list, so a marker always names the same image.
+PictureRef = tuple[ET.Element, str, str | None]
+_WORD_SHAPES = frozenset({"drawing", "pict"})
+_SLIDE_SHAPES = frozenset({"sp", "pic", "graphicFrame", "grpSp", "cxnSp"})
+
+
+_FILE_NAME = re.compile(r"(?i).+\.(png|jpe?g|gif|bmp|emf|wmf|tiff?|svg|webp)")
+
+
+def _alt_text(text: str | None) -> str | None:
+    """Alt text the author wrote; a bare file name ("image1.png") says nothing and is dropped."""
+    text = " ".join((text or "").split())[:150]
+    return None if not text or _FILE_NAME.fullmatch(text) else text
+
+
+def _picture_refs(root: ET.Element | None, shapes: frozenset[str]) -> list[PictureRef]:
+    """Embedded pictures in document order, skipping fallback copies and deleted content."""
+    out: list[PictureRef] = []
+    alt: list[str | None] = [None]
+
+    def visit(el: ET.Element) -> None:
+        for child in el:
+            name = _local(child.tag)
+            if name in ("Fallback", "del", "moveFrom"):
+                continue
+            if name in shapes:
+                alt[0] = None
+            if name in ("docPr", "cNvPr"):
+                alt[0] = _alt_text(child.get("descr") or child.get("title")) or alt[0]
+            elif name in ("blip", "imagedata"):
+                rid = _rel_id(child, "embed") if name == "blip" else _rel_id(child)
+                if rid:
+                    out.append((child, rid, alt[0]))
+            visit(child)
+
+    if root is not None:
+        visit(root)
+    return out
+
+
+def _image_part(rels: dict[str, tuple[str, str]], rid: str) -> str | None:
+    typ, target = rels.get(rid, ("", ""))
+    return target if typ.endswith("/image") else None
+
+
+def picture_marker(number: int, alt: str | None) -> str:
+    return f"[picture {number}: {alt}]" if alt else f"[picture {number}]"
+
+
+def docx_pictures(package: Package) -> list[tuple[str | None, str | None]]:
+    """(package path, alt text) of each picture in a Word document, numbered from 1 in this order."""
+    main = package.main_part("docx")
+    rels = package.rels(main)
+    return [(_image_part(rels, rid), alt) for _, rid, alt in _picture_refs(package.xml(main), _WORD_SHAPES)]
+
+
+def presentation_slides(package: Package) -> list[str]:
+    """Slide parts in presentation order (not file order)."""
+    main = package.main_part("pptx")
+    rels = package.rels(main)
+    slide_list = _child(package.xml(main), "sldIdLst")
+    return [rels[rid][1] for el in _children(slide_list, "sldId") if (rid := _rel_id(el)) in rels]
+
+
+def slide_pictures(
+    package: Package, part: str, slide: ET.Element | None = None, rels: dict[str, tuple[str, str]] | None = None
+) -> list[tuple[str | None, str | None]]:
+    """(package path, alt text) of the pictures on one slide (backgrounds excluded), numbered from 1."""
+    slide = package.xml(part) if slide is None else slide
+    rels = package.rels(part) if rels is None else rels
+    tree = _child(_child(slide, "cSld"), "spTree")
+    return [(_image_part(rels, rid), alt) for _, rid, alt in _picture_refs(tree, _SLIDE_SHAPES)]
+
+
 # ---------------------------------------------------------------- Word
 
 
@@ -288,6 +365,7 @@ class _Word:
         self.truncated = False
         self.note_refs: dict[tuple[str, str], str] = {}  # (kind, id) -> marker, in order of appearance
         self.last_was_list = False
+        self.pictures: dict[int, tuple[int, str | None]] = {}  # id(element) -> (number, alt text)
 
     # -- blocks
     def _add(self, text: str, list_item: bool = False) -> None:
@@ -345,6 +423,8 @@ class _Word:
                 out.append(self.note_refs[key])
             elif name == "txbxContent":
                 boxes.append(child)  # text boxes become their own paragraphs after this one
+            elif name in ("blip", "imagedata") and id(child) in self.pictures:
+                out.append(picture_marker(*self.pictures[id(child)]))
             else:
                 self.inline(child, out, boxes)
 
@@ -419,17 +499,25 @@ def extract_docx(package: Package, version: str) -> Result:
     main = package.main_part("docx")
     rels = package.rels(main)
     word = _Word(_docx_styles(package.xml(_target(rels, "/styles"))))
-    word.walk(_child(package.xml(main), "body"))
+    root = package.xml(main)
+    refs = _picture_refs(root, _WORD_SHAPES)
+    word.pictures = {id(el): (number, alt) for number, (el, _, alt) in enumerate(refs, start=1)}
+    word.walk(_child(root, "body"))
     word.notes(package, rels)
     notes = _media_note(package, "docx") + (["truncated"] if word.truncated else [])
     if not any(lines for _, lines in word.blocks):
         return Result("failed", version, error_code="no_extractable_text", notes=notes)
+    all_text = "\n".join(line for _, lines in word.blocks for line in lines)
+    only_pictures = not re.search(r"\w", _MARKER.sub("", all_text))
+    if only_pictures:
+        notes.append("pictures_only")
     if word.headings:
         sections = sections_from_blocks(word.blocks, "\n\n", preface="Start of document")
     else:  # no headings at all: numbered parts, like a plain text file
         body = normalize("\n\n".join(line for _, lines in word.blocks for line in lines))
         sections = _with_offsets([Section(0, f"Part {i + 1}", t) for i, t in enumerate(_split_long(body, 3000))])
-    return Result("needs_attention" if word.truncated else "ready", version, sections, notes=notes)
+    status = "needs_attention" if word.truncated or only_pictures else "ready"
+    return Result(status, version, sections, notes=notes)
 
 
 # ---------------------------------------------------------------- PowerPoint
@@ -503,11 +591,7 @@ def _smartart(root: ET.Element | None) -> list[str]:
 
 
 def extract_pptx(package: Package, version: str, max_pages: int) -> Result:
-    main = package.main_part("pptx")
-    rels = package.rels(main)
-    presentation = package.xml(main)
-    slide_list = _child(presentation, "sldIdLst")
-    slides = [rels[rid][1] for el in _children(slide_list, "sldId") if (rid := _rel_id(el)) in rels]
+    slides = presentation_slides(package)
     if len(slides) > max_pages:
         return Result("failed", version, error_code="too_many_pages", page_count=len(slides))
     sections: list[Section] = []
@@ -536,6 +620,9 @@ def extract_pptx(package: Package, version: str, max_pages: int) -> Result:
             empty.append(number)
         parts = [f"# {title}"] if title else []
         parts += [slide_text] if slide_text else []
+        pictures = slide_pictures(package, part, slide, slide_rels)
+        markers = [picture_marker(i, alt) for i, (_, alt) in enumerate(pictures, start=1)]
+        parts += ["\n".join(markers)] if markers else []
         notes_text = normalize("\n".join(notes["title"] + notes["body"]))
         parts += [f"Speaker notes:\n{notes_text}"] if notes_text else []
         text = normalize("\n\n".join(parts))
@@ -778,13 +865,16 @@ def extract_xlsx(package: Package, version: str, max_pages: int) -> Result:
 # ---------------------------------------------------------------- entry point
 
 
+_MARKER = re.compile(r"\[picture \d+(?::[^\]]*)?\]")
+
+
 def _media_note(package: Package, kind: str) -> list[str]:
     count = package.media_count(kind)
     return [f"pictures_not_extracted:{count}"] if count else []
 
 
 def extract(path: Path, kind: str, max_pages: int) -> Result:
-    version = f"{EXTRACTOR_VERSION}/{kind}-stdlib"
+    version = f"{EXTRACTOR_VERSION}/{kind}-stdlib-2"  # -2: picture markers
     try:
         package = Package(path)
     except PackageError as exc:

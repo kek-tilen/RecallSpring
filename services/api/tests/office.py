@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import io
+import struct
 import zipfile
+import zlib
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 P = "http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -12,6 +14,22 @@ S = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
 DGM = "http://schemas.openxmlformats.org/drawingml/2006/diagram"
+WP = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+PIC = "http://schemas.openxmlformats.org/drawingml/2006/picture"
+V = "urn:schemas-microsoft-com:vml"
+
+
+def _png_1px() -> bytes:
+    def chunk(tag: bytes, body: bytes) -> bytes:
+        return struct.pack(">I", len(body)) + tag + body + struct.pack(">I", zlib.crc32(tag + body) & 0xFFFFFFFF)
+
+    header = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    pixels = zlib.compress(b"\x00\x80\x90\xa0")
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
+
+
+PNG_1PX = _png_1px()
+EMF = b"\x01\x00\x00\x00" + b"\x00" * 36 + b" EMF" + b"\x00" * 40
 REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
 CT = "application/vnd.openxmlformats-officedocument."
 DOCX_MAIN = CT + "wordprocessingml.document.main+xml"
@@ -60,16 +78,37 @@ def style(style_id: str, name: str, based_on: str | None = None, outline: int | 
     return f'<w:style w:type="paragraph" w:styleId="{style_id}"><w:name w:val="{name}"/>{based}{ppr}</w:style>'
 
 
+def word_picture(rid: str, descr: str | None = None, with_fallback: bool = True) -> str:
+    """An inline picture as Word writes it, with the legacy VML copy in mc:Fallback (which must not count)."""
+    alt = f' descr="{descr}"' if descr else ""
+    drawing = (
+        f'<w:drawing><wp:inline><wp:docPr id="1" name="Picture 1"{alt}/><a:graphic><a:graphicData>'
+        f'<pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="image.png"/></pic:nvPicPr>'
+        f'<pic:blipFill><a:blip r:embed="{rid}"/></pic:blipFill></pic:pic></a:graphicData></a:graphic>'
+        "</wp:inline></w:drawing>"
+    )
+    if not with_fallback:
+        return f"<w:r>{drawing}</w:r>"
+    fallback = f'<w:pict><v:shape><v:imagedata r:id="{rid}"/></v:shape></w:pict>'
+    return (
+        f'<w:r><mc:AlternateContent><mc:Choice Requires="wps">{drawing}</mc:Choice>'
+        f"<mc:Fallback>{fallback}</mc:Fallback></mc:AlternateContent></w:r>"
+    )
+
+
 def docx(
     body: str,
     styles: str = "",
     footnotes: str | None = None,
     pictures: int = 0,
     prolog: str = "",
+    images: dict[str, tuple[str, bytes]] | None = None,
 ) -> bytes:
+    """``images``: relationship id -> (file name in word/media, bytes), for word_picture(rid)."""
     doc = (
         f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>{prolog}'
-        f'<w:document xmlns:w="{W}" xmlns:r="{R}" xmlns:mc="{MC}"><w:body>{body}<w:sectPr/></w:body></w:document>'
+        f'<w:document xmlns:w="{W}" xmlns:r="{R}" xmlns:mc="{MC}" xmlns:wp="{WP}" xmlns:a="{A}" '
+        f'xmlns:pic="{PIC}" xmlns:v="{V}"><w:body>{body}<w:sectPr/></w:body></w:document>'
     )
     parts: dict[str, str | bytes] = {
         "word/document.xml": doc,
@@ -81,6 +120,9 @@ def docx(
         items.append(("rId2", "footnotes", "footnotes.xml"))
     for i in range(pictures):
         parts[f"word/media/image{i + 1}.png"] = b"\x89PNG\r\n\x1a\n"
+    for rid, (name, data) in (images or {}).items():
+        parts[f"word/media/{name}"] = data
+        items.append((rid, "image", f"media/{name}"))
     parts["word/_rels/document.xml.rels"] = rels(*items)
     return package("word/document.xml", DOCX_MAIN, parts)
 
@@ -101,8 +143,10 @@ def shape(paragraphs: list[str] | list[tuple[str, int]], placeholder: str | None
     )
 
 
-def picture() -> str:
-    return '<p:pic><p:nvPicPr><p:cNvPr id="3" name="pic"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr></p:pic>'
+def picture(rid: str | None = None, descr: str | None = None) -> str:
+    alt = f' descr="{descr}"' if descr else ""
+    fill = f'<p:blipFill><a:blip r:embed="{rid}"/></p:blipFill>' if rid else ""
+    return f'<p:pic><p:nvPicPr><p:cNvPr id="3" name="pic"{alt}/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>{fill}</p:pic>'
 
 
 def table(rows: list[list[str]]) -> str:
@@ -128,6 +172,7 @@ def pptx(
     order: list[int] | None = None,
     notes: dict[int, str] | None = None,
     smartart: dict[int, list[str]] | None = None,
+    media: dict[int, dict[str, tuple[str, bytes]]] | None = None,
 ) -> bytes:
     """``slides`` are spTree contents stored as slide1.xml, slide2.xml, ...; ``order`` lists the file numbers in
     presentation order (default: file order); ``notes``/``smartart`` are keyed by file number."""
@@ -152,6 +197,9 @@ def pptx(
             parts[f"ppt/diagrams/data{number}.xml"] = (
                 f'<dgm:dataModel xmlns:dgm="{DGM}" xmlns:a="{A}"><dgm:ptLst>{pts}</dgm:ptLst></dgm:dataModel>'
             )
+        for rid, (name, data) in ((media or {}).get(number) or {}).items():
+            parts[f"ppt/media/{name}"] = data
+            items.append((rid, "image", f"../media/{name}"))
         items.append(("rId9", "hyperlink", "https://example.invalid/"))  # external targets must be ignored
         parts[f"ppt/slides/_rels/slide{number}.xml.rels"] = rels(*items).replace(
             'Target="https://example.invalid/"', 'Target="https://example.invalid/" TargetMode="External"'

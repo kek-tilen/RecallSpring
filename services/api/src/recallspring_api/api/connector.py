@@ -5,6 +5,7 @@ Source and note text is returned marked as untrusted learner material; the MCP s
 
 from __future__ import annotations
 
+import base64
 import uuid
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -22,6 +23,7 @@ from ..connector_auth import connector_ctx, connector_write_ctx
 from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, replay_if_seen
 from ..errors import ApiError
+from ..ingest import visuals
 from ..ingest.storage import blob_path
 from ..models import (
     Assessment,
@@ -998,3 +1000,84 @@ def source_image(source_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Se
     if not path.is_file():
         raise ApiError(410, "original_missing", "The original file is no longer available.")
     return Response(path.read_bytes(), media_type=source.mime_type, headers={"Cache-Control": "private, no-store"})
+
+
+VISUAL_ERRORS = {
+    "page_required": (422, "Give the page number (PDF) or the slide number (PowerPoint)."),
+    "picture_required": (
+        422,
+        "Word documents have no fixed pages: give picture=N, as shown by [picture N] in the document's text.",
+    ),
+    "page_out_of_range": (422, "There is no such page or slide. This file has {count}."),
+    "picture_out_of_range": (422, "There is no picture with that number here."),
+    "no_pictures": (
+        404,
+        "This slide has no embedded pictures. Shapes, SmartArt and charts can't be shown as an image: their text "
+        "is in the slide's section; for the drawing itself ask the learner for a screenshot or a PDF export.",
+    ),
+    "no_visuals": (409, "Only PDF pages and pictures inside Word or PowerPoint files can be viewed this way."),
+    "pdf_encrypted": (409, "This PDF is password-protected, so its pages can't be shown."),
+    "pdf_unreadable": (422, "This PDF could not be opened to show its pages."),
+    "render_failed": (422, "This page could not be rendered."),
+    "office_unreadable": (422, "This file could not be opened to show its pictures."),
+    "document_too_large": (422, "This file is too large to open safely."),
+    "unsafe_document": (422, "This file contains XML features RecallSpring never reads."),
+    "content_does_not_match_type": (422, "This file could not be opened to show its pictures."),
+    "render_timeout": (504, "Showing this page took too long. Try again, or ask the learner for a screenshot."),
+    "render_crashed": (502, "Showing this page failed unexpectedly. You can retry."),
+}
+SKIP_REASONS = {
+    "vector_drawing": "a vector drawing (EMF/WMF/SVG) that can't be shown; ask the learner for a screenshot",
+    "unsupported_format": "a picture format that can't be shown (e.g. TIFF or BMP); ask for a screenshot",
+    "too_large": "too large to send to Claude; ask the learner for a screenshot",
+    "limit": "not sent in this call (at most 4 pictures per call); ask for it with picture=N",
+    "missing": "the file has no data for it",
+}
+
+
+def _visual_error(code: str, count: int) -> ApiError:
+    status, message = VISUAL_ERRORS.get(code, (422, "This could not be shown."))
+    return ApiError(status, code, message.format(count=count), {"count": count})
+
+
+@router.get("/sources/{source_id}/visual")
+def source_visual(
+    source_id: uuid.UUID,
+    page: int | None = Query(None, ge=1, le=100_000),
+    picture: int | None = Query(None, ge=1, le=100_000),
+    ctx: Ctx = Depends(connector_ctx),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """A PDF page rendered as an image, or the pictures inside a PowerPoint slide or Word document, so Claude can
+    look at scanned pages, diagrams and formulas. Rendering runs in a separate, time-limited process."""
+    source = owned(db, Source, source_id, ctx.user.id)
+    if source.kind not in ("pdf", "pptx", "docx"):
+        raise _visual_error("no_visuals", 0)
+    path = blob_path(source.storage_key)
+    if not path.is_file():
+        raise ApiError(410, "original_missing", "The original file is no longer available.")
+    settings = get_settings()
+    try:
+        result = visuals.run(
+            source.kind,
+            path,
+            page or 0,
+            picture or 0,
+            isolation=settings.extraction_isolation,
+            timeout=settings.extraction_timeout_seconds,
+        )
+    except visuals.VisualFailure as exc:
+        raise _visual_error(exc.code, 0) from exc
+    if result.error:
+        raise _visual_error(result.error, result.count)
+    return {
+        "source_id": str(source.id),
+        "filename": source.filename,
+        "kind": source.kind,
+        "count": result.count,
+        "images": [
+            {"label": v.label, "mime": v.mime, "alt": v.alt, "data": base64.b64encode(v.data).decode("ascii")}
+            for v in result.images
+        ],
+        "skipped": [{"label": s.label, "reason": s.reason, "message": SKIP_REASONS[s.reason]} for s in result.skipped],
+    }

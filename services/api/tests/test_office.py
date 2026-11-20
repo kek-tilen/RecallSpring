@@ -111,7 +111,9 @@ def test_word_without_headings_uses_numbered_parts_and_reports_pictures(tmp_path
 def test_word_with_only_pictures_fails_honestly(owner_api: Api) -> None:
     source, sections = uploaded(owner_api, "scan.docx", docx(para(), pictures=1))
     assert source["parse_state"] == "failed" and source["parse_error"] == "no_extractable_text"
-    assert source["parse_message"] == "This document has no text (only pictures?). Paste the content or export a PDF."
+    assert source["parse_message"] == (
+        "This document has no text or pictures RecallSpring can read. Export it as PDF: Claude can look at its pages."
+    )
     assert sections == []
 
 
@@ -150,7 +152,10 @@ def test_picture_only_slides_need_attention_and_are_named(owner_api: Api) -> Non
     content = pptx([shape(["Uvod v celično biologijo"], "title"), picture(), shape(["Hvala"]) + picture()])
     source, sections = uploaded(owner_api, "slike.pptx", content)
     assert source["parse_state"] == "needs_attention"
-    assert source["parse_message"] == "Many slides have little or no text (pictures only?): 2, 3."
+    assert (
+        source["parse_message"]
+        == "Many slides have little or no text: 2, 3. Claude can look at the pictures on them on request."
+    )
     assert [s["citation_label"] for s in sections] == ["slide 1", "slide 3"]  # nothing is invented for slide 2
 
 

@@ -36,6 +36,7 @@
 | Web app edits exams/kolokviji (drag on a timeline or type a date, result, scope) and course colours from a fixed validated palette; simulations can be answered in the web app, open answers wait for Claude (ID to copy) | Approved 2026-11-20 |
 | Photos of notes, notebooks and exercises are kept as material (PNG/JPG/WebP, no OCR); Claude looks at them on request via the connector (≤ 4.5 MB; the web app shrinks larger photos before upload) | Approved 2026-11-20 |
 | Word (.docx), PowerPoint (.pptx/.ppsx) and Excel (.xlsx) files are material like PDFs: text only, read with the standard library (no Office/LibreOffice on the server, macros never run); cited as `slide N` (with speaker notes), `§ Heading` or `Sheet, rows a–b`; pictures inside are not extracted and the app says so; old binary, macro-enabled and template formats are refused with a "save as" hint | Approved 2026-11-20 |
+| Claude looks at what text can't carry, on request: PDF pages rendered as images (pypdfium2/PDFium, permissive licence), pictures on slides and in Word files (`[picture N]` markers), passed on unchanged when PNG/JPEG/GIF/WebP; no OCR, no server-side image decoding; Claude may transcribe scanned pages into a labelled text source when the learner asks | Approved 2026-11-20 |
 | Calendar: exams export as an .ics download (no public subscription URL while local-only) | Approved 2026-11-20 |
 | Sharing with others | Deferred (owner in chat) |
 | Several chats share one learner's records: a second course with the same title or a second exam that matches a live one (same name, or same type and date) is refused (409) and Claude updates the existing one; existing duplicates are flagged and merged in the web app; exams are soft-deleted only from the web app (restorable 30 days; purge job not built yet) | Approved 2026-11-20 |
@@ -46,7 +47,7 @@
 
 - Single-user app first; app login uses local credentials (Argon2id + optional TOTP) independent of any AI provider, no public self-signup.
 - Deployment subdomain not chosen. Do not buy/register a domain or issue certificates automatically. Remote Claude connector (web/mobile) waits for domain + HTTPS.
-- Supported material: PDF with extractable text, Word/PowerPoint/Excel (Office Open XML), Markdown/plain text and photos; OCR and audio are later features.
+- Supported material: PDF (scanned pages viewable by Claude as images), Word/PowerPoint/Excel (Office Open XML), Markdown/plain text and photos; OCR and audio are later features.
 - Device sync = the browser's offline draft outbox plus sync to the RecallSpring server; no automatic filesystem mirroring.
 - Backend FastAPI/Python, React/TypeScript, PostgreSQL and Docker Compose based on resource and developer productivity; can change only with documented rationale (ADR-001).
 - Default spaced intervals and mastery bands are an explainable heuristic, not a scientific certification (ADR-003).

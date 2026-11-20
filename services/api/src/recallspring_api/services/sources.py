@@ -19,7 +19,9 @@ from ..schemas import SectionOut, SourceOut
 from .events import learning_event
 
 PARSE_MESSAGES = {
-    "no_extractable_text": "Text couldn't be extracted. Try a text-based PDF or paste the content.",
+    "no_extractable_text": (
+        "No text could be extracted (scanned?). Claude can still look at the pages on request, or paste the content."
+    ),
     "pdf_encrypted": "This PDF is password-protected. Remove the protection or paste the content.",
     "pdf_unreadable": "This PDF could not be read. It may be damaged; export it again or paste the content.",
     "too_many_pages": "This file has too many pages, slides or sheets. Split it into smaller files.",
@@ -34,8 +36,13 @@ PARSE_MESSAGES = {
 
 # Per kind, where the generic message would point to the wrong fix.
 KIND_PARSE_MESSAGES = {
-    ("no_extractable_text", "docx"): "This document has no text (only pictures?). Paste the content or export a PDF.",
-    ("no_extractable_text", "pptx"): "These slides have no text (only pictures?). Add photos of the slides instead.",
+    ("no_extractable_text", "docx"): (
+        "This document has no text or pictures RecallSpring can read. Export it as PDF: Claude can look at its pages."
+    ),
+    ("no_extractable_text", "pptx"): (
+        "These slides have no text or pictures RecallSpring can read. Export them as PDF: Claude can look at whole "
+        "slides then."
+    ),
     ("no_extractable_text", "xlsx"): "This spreadsheet has no visible cells with values.",
 }
 
@@ -83,10 +90,17 @@ def parse_message(source: Source) -> str | None:
         messages = []
         if "pages_without_text" in notes:
             pages = notes["pages_without_text"].replace(",", ", ")
-            messages.append(f"Some pages have no extractable text (possibly scanned): {pages}.")
+            messages.append(
+                f"Some pages have no extractable text (possibly scanned): {pages}. "
+                "Claude can look at these pages on request."
+            )
         if "slides_without_text" in notes:
             slides = notes["slides_without_text"].replace(",", ", ")
-            messages.append(f"Many slides have little or no text (pictures only?): {slides}.")
+            messages.append(
+                f"Many slides have little or no text: {slides}. Claude can look at the pictures on them on request."
+            )
+        if "pictures_only" in notes:
+            messages.append("This document has only pictures. Claude can look at them on request.")
         if "truncated" in notes:
             messages.append("The file is very large, so only its beginning was extracted. Split it to get the rest.")
         return " ".join(messages) or None
