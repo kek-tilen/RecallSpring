@@ -111,6 +111,40 @@ class AuthSession(Base):
 # --------------------------------------------------------------------------- courses
 
 
+# Course colours are identity markers from a fixed, validated palette (apps/web/src/styles.css); never free CSS.
+COURSE_COLORS = ("teal", "blue", "violet", "rose", "orange", "olive", "slate", "brown")
+MATERIAL_CATEGORIES = ("material", "notes", "exercises", "past_paper", "other")
+
+
+class CourseGroup(Base):
+    """Organisation tree above courses: university → faculty → semester (any level may be skipped).
+
+    Archiving a semester archives its courses; nothing is deleted and archiving can be undone."""
+
+    __tablename__ = "course_groups"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("course_groups.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="active", default="active")
+    starts_on: Mapped[date | None] = mapped_column(Date)
+    ends_on: Mapped[date | None] = mapped_column(Date)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('university','faculty','semester','other')", name="kind"),
+        CheckConstraint("status IN ('active','archived')", name="status"),
+        CheckConstraint("parent_id IS NULL OR parent_id <> id", name="not_own_parent"),
+    )
+
+
 class Course(Base):
     __tablename__ = "courses"
 
@@ -120,12 +154,19 @@ class Course(Base):
     description: Mapped[str | None] = mapped_column(Text)
     long_term_retention: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="active")
+    group_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("course_groups.id"), index=True)
+    color: Mapped[str | None] = mapped_column(String(20))
     revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    __table_args__ = (CheckConstraint("status IN ('active','completed','archived')", name="status"),)
+    __table_args__ = (
+        CheckConstraint("status IN ('active','completed','archived')", name="status"),
+        CheckConstraint(
+            "color IS NULL OR color IN ('teal','blue','violet','rose','orange','olive','slate','brown')", name="color"
+        ),
+    )
 
 
 class SyllabusItem(Base):
@@ -408,6 +449,7 @@ class Source(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     storage_key: Mapped[str] = mapped_column(String(200), nullable=False)
     origin: Mapped[str] = mapped_column(String(20), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False, server_default="material", default="material")
     duplicate_of_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sources.id"))
     parse_state: Mapped[str] = mapped_column(String(20), nullable=False)
     parse_error: Mapped[str | None] = mapped_column(String(60))
@@ -422,8 +464,9 @@ class Source(Base):
 
     __table_args__ = (
         Index("ix_sources_user_sha256", "user_id", "sha256"),
-        CheckConstraint("kind IN ('pdf','markdown','text')", name="kind"),
+        CheckConstraint("kind IN ('pdf','markdown','text','image')", name="kind"),
         CheckConstraint("origin IN ('upload','paste')", name="origin"),
+        CheckConstraint("category IN ('material','notes','exercises','past_paper','other')", name="category"),
         CheckConstraint(
             "parse_state IN ('pending','processing','ready','needs_attention','failed')", name="parse_state"
         ),
