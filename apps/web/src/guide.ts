@@ -115,6 +115,11 @@ export const STEPS: GuideStep[] = [
         sl: "Razloži bolj preprosto, s primerom.",
       },
       {
+        en: "Look at page [number] of [file]: it is scanned. Explain the diagram on it.",
+        sl: "Poglej stran [številka] v [datoteka]: je skenirana. Razloži diagram na njej.",
+        note: "Claude can see scanned PDF pages, pictures on slides and pictures in Word files ([picture N] in the text).",
+      },
+      {
         en: "I already know [topic] from the lectures. Mark it as known.",
         sl: "[tema] že poznam s predavanj. Označi jo kot znano.",
       },

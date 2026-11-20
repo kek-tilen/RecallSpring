@@ -353,6 +353,44 @@ async def test_view_image_returns_the_picture_and_refuses_other_content(api: Fak
     assert refused.is_error
 
 
+async def test_view_page_shows_pages_and_pictures_and_explains_what_it_cannot_show(api: FakeApi) -> None:
+    import base64
+
+    png = base64.b64encode(bytes.fromhex("89504e470d0a1a0a") + b"0" * 20).decode()
+    seen: list[str] = []
+
+    def visual(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url.query, "ascii"))
+        return httpx.Response(
+            200,
+            json={
+                "source_id": "s1",
+                "filename": "Predavanje 3.pptx",
+                "kind": "pptx",
+                "count": 12,
+                "images": [
+                    {"label": "slide 5, picture 1", "mime": "image/png", "alt": "Celica", "data": png},
+                    {"label": "slide 5, picture 2", "mime": "image/jpeg", "alt": None, "data": png},
+                ],
+                "skipped": [{"label": "slide 5, picture 3", "reason": "vector_drawing", "message": "a vector drawing"}],
+            },
+        )
+
+    api.routes[("GET", "/sources/s1/visual")] = visual
+    api.route(
+        "GET", "/sources/s2/visual", 404, {"code": "no_pictures", "message": "This slide has no embedded pictures."}
+    )
+    async with Client(mcp) as client:
+        shown = await client.call_tool("view_page", {"source_id": "s1", "page": 5})
+        none = await client.call_tool("view_page", {"source_id": "s2", "page": 1})
+    assert seen == ["page=5"]
+    assert [c.type for c in shown.content] == ["text", "image", "image"]
+    assert [c.mime_type for c in shown.content[1:]] == ["image/png", "image/jpeg"]
+    assert "slide 5, picture 1 (alt text: Celica)" in text_of(shown)
+    assert "slide 5, picture 3: a vector drawing" in text_of(shown)
+    assert none.is_error and "no embedded pictures" in text_of(none)
+
+
 async def test_simulations_to_grade_and_organising_courses(api: FakeApi) -> None:
     api.route("GET", "/quizzes", body=[{"id": "q1", "status": "submitted", "pending_items": 1}])
     api.route("POST", "/courses/organise", body={"placed_in": "UM › FERI › 5. semester", "courses": ["KV"]})

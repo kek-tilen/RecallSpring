@@ -160,12 +160,14 @@ export function parseNoteLabel(note: string): string {
     case "pictures_not_extracted": {
       const n = Number(value);
       const verb = n === 1 ? "is" : "are";
-      return `${plural(n, "picture")} inside the file ${verb} not part of the text. Claude can't see them; add a photo or screenshot when one matters.`;
+      return `${plural(n, "picture")} inside the file ${verb} not part of the text. Claude can look at ${n === 1 ? "it" : "them"} on request.`;
     }
     case "pages_without_text":
-      return `Pages without text (possibly scanned): ${list}.`;
+      return `Pages without text (possibly scanned): ${list}. Claude can look at them on request.`;
     case "slides_without_text":
-      return `Slides with little or no text: ${list}.`;
+      return `Slides with little or no text: ${list}. Claude can look at their pictures on request.`;
+    case "pictures_only":
+      return "Only pictures, no text. Claude can look at them on request.";
     case "hidden_sheets":
       return `${plural(Number(value), "hidden sheet")} skipped.`;
     case "truncated":
