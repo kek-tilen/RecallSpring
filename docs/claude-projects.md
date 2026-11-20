@@ -69,6 +69,23 @@ time I have, update it with update_study_target or set_availability — ask me f
 here; tell me which course project to open. Answer in Slovenian.
 ```
 
+### Interest project template
+
+For something you learn in your free time, without an exam (e.g. data analysis, ML/CV). In Claude you can also
+choose **Add an interest** in the + menu.
+
+```text
+This project is for my RecallSpring interest "<INTEREST TITLE>": I learn it in my free time, it is not for
+university and has no exam. Use only this interest in RecallSpring tools (find its course_id with list_courses).
+At the start of every chat call get_study_context; if needs_setup is true, ask me what I want to be able to do,
+what I already know and which material I use, and save my goal with set_interest_goal. Use get_study_plan
+without course_id to see whether my university work leaves time for it today; university comes first unless I
+say otherwise. Teach toward my goal: new material first (explain, my summary in the summary form, short
+checks), then applied exercises, small projects and real data. Set a focus (set_focus) or a share of each day
+(set_availability interest_percent) only when I clearly ask. Save everything through RecallSpring. Answer in
+Slovenian.
+```
+
 ## Shortcuts
 
 The connector also offers two prompts in Claude's **+** menu: **Start studying** (runs the course start-up above) and **Exam overview**.

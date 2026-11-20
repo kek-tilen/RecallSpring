@@ -45,8 +45,9 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/assessments/{id}/challenge` | Record disagreement/correction request |
 | GET | `/reviews/due` | Due queue and reasons |
 | POST | `/reviews/{id}/defer` | Record explicit defer |
-| GET | `/planner/today` | Deterministic ranked daily plan (`plan-v1`), optional `course_id` and `minutes` |
-| GET/PUT | `/settings/study` | Weekly minutes, maintenance share (0–50 %), past-paper style share (0–100 %) |
+| GET | `/planner/today` | Deterministic ranked daily plan (`plan-v2`: `interests` and `focus` explained), optional `course_id` and `minutes` |
+| GET/PUT | `/settings/study` | Weekly minutes, maintenance share (0–50 %), past-paper style share (0–100 %), interest share (0–50 %, 0 = university first); GET also returns the current `focus` |
+| PUT | `/settings/focus` | `{course_id, until}`: one course or interest first until a day (≤ 60 days), `course_id` null ends it; audited |
 | POST | `/sync/push` | Idempotent offline outbox replay |
 | GET | `/sync/changes?cursor=` | Incremental account-scoped updates |
 | POST | `/exports` | Export job, user initiated |
@@ -75,7 +76,9 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `submit_chat_answer` | append | Fallback when the form cannot render: `captured_via = assistant_transcription` |
 | `record_assessment` | append | Once per attempt; validated against `assessment.schema.json`; evidence refs that are not real sections of the question's course are dropped and a final grade becomes `provisional`; returns the next review date and reason |
 | `record_session_summary` | append | Once per session |
-| `create_course` | append | New course (`POST /connector/courses`) |
+| `create_course` | append | New course (`POST /connector/courses`); `kind: "interest"` for personal learning without exams, description = goal |
+| `set_interest_goal` | audited update | The learner's goal for an interest (`POST /connector/courses/{id}/goal`) |
+| `set_focus` | audited update | Only on the learner's clear request: one course or interest first until a day; null ends it (`POST /connector/focus`) |
 | `import_file` | append | Local file read by the connector process (allowed folders and types only) and uploaded with the same checks as the web upload; waits for extraction |
 | `add_text_source` | append | Pasted text as a source |
 | `get_source_status` | read | Extraction state and section IDs/labels (no text) |
@@ -84,13 +87,13 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `set_study_target`, `update_study_target` | append / audited update | Kolokvij or exam with verbatim scope description, resolved scope, specifics; status passed/failed, moved date |
 | `record_exam_profile` | append | Item types, Bloom mix, topic weights (0.5–2.0) and short examples from past papers |
 | `set_concept_difficulty` | audited update | Difficulty 1–5; Claude's estimate never overrides a learner rating |
-| `set_availability` | audited update | Weekly minutes or a one-day override |
+| `set_availability` | audited update | Weekly minutes, a one-day override, or the interest share (`interest_percent`, 0 = university first) |
 | `create_quiz` | append | Simulation of 1–30 items: `mcq` (options A–H, hidden key) or `open` (hidden rubric), style `past_paper`/`deeper` |
 | `open_quiz` | UI | MCP App `ui://recallspring/quiz` (no keys or rubrics before submission; time limit starts on first open) |
 | `save_quiz_draft`, `submit_quiz` | append, app-only | Draft autosave; one-transaction submission idempotent by `client_request_id`; MCQ graded from the key |
 | `get_quiz_results` | read | Answers (as learner material), keys, rubrics, pending open answers, points |
 | `record_assessments` | append | Batch grading, all or nothing |
-| `get_study_plan` | read | `plan-v1`, optional `course_id` (course) or none (overview), capacity per active target |
+| `get_study_plan` | read | `plan-v2`, optional `course_id` (course or interest, no priority rules) or none (overview with `interests` and `focus`), capacity per active target |
 | `open_summary_form` | UI | MCP App `ui://recallspring/summary`: the learner summarises the chunk just taught |
 | `save_learning_summary` | append, app-only | `POST /connector/learning`: exact summary as a note, concepts become `studied` |
 | `mark_concepts_known` | audited update | `POST /connector/concepts/known`: learner self-report with reason |

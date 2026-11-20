@@ -86,6 +86,22 @@ Suggested baseline weighted priority: overdue duration capped, low recent eviden
 - RecallSpring refuses Claude's practice on unstudied concepts. A learner who already knows a topic says so (self-report, audited) or asks for a diagnostic pre-test, which never affects reviews and marks shown concepts as known.
 - The plan shows `Learn next` items with the pages to study, then `Practice`, `Review due`, `Strengthen` and `Maintain`.
 
+### Implemented: interests, university first and focus (ADR-007, `plan-v2`)
+
+- An **interest** is a course of kind `interest`: personal learning without exams or a deadline (e.g. data analysis
+  or computer vision in free time). Its goal (the learner's own words) replaces the exam; it is not filed under a
+  semester; materials, concepts, learning sessions, practice and reviews work as for courses.
+- **University first** (default, interest share 0 %): interests get only the minutes left after today's course work,
+  and only while every exam of a university course is on track (`ok`). When an exam is `tight` or `at_risk` the
+  whole day goes to the courses, and the plan's `interests.message` names the exam.
+- **A share of each day** (1-50 %, the learner's choice): kept for interests first; exam capacity checks count only
+  the rest of the day.
+- **Focus** (the learner's clear request): one course or interest comes first until a day (at most 60 days, one at a
+  time); other work gets the time left; capacity checks of other courses do not count the focus days, and
+  `focus.message` names exams that are tight or at risk meanwhile.
+- A plan for one course or interest (`course_id`) applies no priority rules. Without interests and focus `plan-v2`
+  equals `plan-v1`.
+
 ## Long-term learning
 
 Review should persist after exams to address owner's reported forgetting. Long-term targets prioritize fundamentals and inter-topic transfer. Default schedule and concept importance can be adjusted by user with natural-language commands, but modifications always pass through typed server actions and audit.
