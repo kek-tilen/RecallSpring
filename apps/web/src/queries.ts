@@ -7,6 +7,7 @@ import type {
   CourseOverview,
   CourseSummary,
   Dashboard,
+  Group,
   HistoryRow,
   Note,
   QuizSummary,
@@ -14,6 +15,7 @@ import type {
   SessionInfo,
   Source,
   StudySettings,
+  TimelineTarget,
 } from "./types";
 
 export const keys = {
@@ -28,6 +30,8 @@ export const keys = {
   sources: (courseId?: string) => ["sources", courseId ?? "all"] as const,
   notes: (courseId?: string) => ["notes", courseId ?? "all"] as const,
   history: ["history"] as const,
+  groups: ["groups"] as const,
+  targets: ["targets"] as const,
   reviews: ["reviews"] as const,
   studySettings: ["settings", "study"] as const,
   connector: ["settings", "connector"] as const,
@@ -59,6 +63,12 @@ export const useHistory = () => useQuery({ queryKey: keys.history, queryFn: () =
 export const useStudySettings = () =>
   useQuery({ queryKey: keys.studySettings, queryFn: () => get<StudySettings>("/settings/study") });
 export const useConnector = () => useQuery({ queryKey: keys.connector, queryFn: () => get<ConnectorSettings>("/settings/connector") });
+
+export const useGroups = () => useQuery({ queryKey: keys.groups, queryFn: () => get<Group[]>("/groups") });
+export const useTargets = () => useQuery({ queryKey: keys.targets, queryFn: () => get<TimelineTarget[]>("/targets") });
+
+/** Everything that shows courses, groups or exams; call after any organisation change. */
+export const ORGANISATION_KEYS = [["courses"], ["groups"], ["targets"], ["dashboard"], ["history"]] as const;
 
 export function courseTitles(courses: Course[] | undefined): Record<string, string> {
   return Object.fromEntries((courses ?? []).map((c) => [c.id, c.title]));

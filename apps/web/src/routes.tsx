@@ -5,6 +5,7 @@ import { setTimezone } from "./format";
 import { ConceptPage } from "./pages/Concept";
 import { CoursePage } from "./pages/Course";
 import { CoursesPage } from "./pages/Courses";
+import { ExamsPage } from "./pages/Exams";
 import { GuidePage } from "./pages/Guide";
 import { HistoryPage } from "./pages/History";
 import { HomePage } from "./pages/Home";
@@ -53,6 +54,7 @@ export const router = createBrowserRouter([
           { index: true, element: <HomePage /> },
           { path: "courses", element: <CoursesPage /> },
           { path: "courses/:courseId", element: <CoursePage /> },
+          { path: "exams", element: <ExamsPage /> },
           { path: "concepts/:conceptId", element: <ConceptPage /> },
           { path: "review", element: <ReviewPage /> },
           { path: "simulations", element: <SimulationsPage /> },

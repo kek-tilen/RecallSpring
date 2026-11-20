@@ -32,6 +32,11 @@
 | Default study time 60 min weekdays / 90 min weekends; maintenance share 15 % | Approved 2026-11-19 |
 | Kolokvij simulations in a RecallSpring form (MCQ + open), stored in RecallSpring; Claude's own chat widgets do not count as evidence | Approved 2026-11-19 |
 | Claude Projects: one per course + one Overview project (templates in `docs/claude-projects.md`) | Approved 2026-11-19 |
+| Organisation: university › faculty › semester groups; archiving a semester archives its courses (reversible), archived courses keep due reviews as maintenance when long-term retention is on | Approved 2026-11-20 |
+| Web app edits exams/kolokviji (drag on a timeline or type a date, result, scope) and course colours from a fixed validated palette; simulations can be answered in the web app, open answers wait for Claude (ID to copy) | Approved 2026-11-20 |
+| Photos of notes, notebooks and exercises are kept as material (PNG/JPG/WebP, no OCR); Claude looks at them on request via the connector (≤ 4.5 MB; the web app shrinks larger photos before upload) | Approved 2026-11-20 |
+| Calendar: exams export as an .ics download (no public subscription URL while local-only) | Approved 2026-11-20 |
+| Sharing with others | Deferred (owner in chat) |
 | Web app = overview of everything stored (plan, courses, exams, concepts, reviews, simulations, material, notes, history, settings) in the Sage Study palette; studying stays in Claude. Served same-origin by the API from `apps/web/dist` with a strict CSP | Approved 2026-11-19 |
 | Learning first: teach new material (explain, own-words summary, short checks) before practice or simulations; server refuses practice on unstudied concepts; diagnostics only on request and never affect reviews | Approved 2026-11-19 (ADR-006) |
 

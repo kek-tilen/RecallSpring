@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
+import { CopyButton } from "../components/Copy";
 import { Card, PageHead } from "../components/ui";
 import { GOOD_TO_KNOW, SEMESTER_TEMPLATE, STEPS, type GuidePrompt, type PromptLang } from "../guide";
 
@@ -9,33 +10,6 @@ function readLang(): PromptLang {
   } catch {
     return "en";
   }
-}
-
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
-  const [state, setState] = useState<"idle" | "done" | "failed">("idle");
-  return (
-    <button
-      type="button"
-      className="btn small"
-      onClick={() =>
-        void copyText(text).then((ok) => {
-          setState(ok ? "done" : "failed");
-          window.setTimeout(() => setState("idle"), 1800);
-        })
-      }
-    >
-      {state === "done" ? "Copied" : state === "failed" ? "Select and copy" : label}
-    </button>
-  );
 }
 
 /** Placeholders in [brackets] are highlighted so it is clear what to replace. Rendered as text only. */

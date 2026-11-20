@@ -6,6 +6,7 @@ import { useDashboard, useSession } from "../queries";
 const NAV = [
   { to: "/", label: "Home", end: true },
   { to: "/courses", label: "Courses" },
+  { to: "/exams", label: "Exams" },
   { to: "/review", label: "Review" },
   { to: "/simulations", label: "Simulations" },
   { to: "/library", label: "Library" },

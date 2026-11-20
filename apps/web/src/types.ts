@@ -20,12 +20,35 @@ export interface Progress {
   concepts: number;
 }
 
-export interface CourseSummary {
+export type CourseColor = "blue" | "orange" | "aqua" | "yellow" | "magenta" | "green" | "violet" | "red";
+export type MaterialCategory = "material" | "notes" | "exercises" | "past_paper" | "other";
+
+export interface CourseInfo {
   id: string;
   title: string;
   description: string | null;
   status: string;
+  color: CourseColor | null;
+  group_id: string | null;
+  long_term_retention: boolean;
   created_at: string;
+}
+
+export interface Group {
+  id: string;
+  parent_id: string | null;
+  kind: "university" | "faculty" | "semester" | "other";
+  name: string;
+  position: number;
+  status: "active" | "archived";
+  starts_on: string | null;
+  ends_on: string | null;
+  archived_at: string | null;
+  courses: number;
+}
+
+export interface CourseSummary extends CourseInfo {
+  group_path: string[];
   active_target: { id: string; kind: string; name: string; due_date: string; days_left: number; status: string } | null;
   progress: Progress;
   sources: number;
@@ -73,6 +96,15 @@ export interface TargetProfile {
   created_at: string;
 }
 
+export interface ScopeItem {
+  kind: string;
+  source_id?: string;
+  filename?: string | null;
+  pages?: [number, number];
+  topic_id?: string;
+  concept_id?: string;
+}
+
 export interface Target {
   id: string;
   kind: string;
@@ -83,7 +115,7 @@ export interface Target {
   result: string | null;
   goal: string | null;
   scope_description: string;
-  scope: { kind: string; filename?: string | null; pages?: [number, number]; concept_id?: string }[];
+  scope: ScopeItem[];
   notes: string | null;
   concepts_in_scope: number;
   profile: TargetProfile | null;
@@ -97,6 +129,7 @@ export interface Source {
   mime_type: string;
   byte_size: number;
   origin: string;
+  category: MaterialCategory;
   duplicate_of_id: string | null;
   parse_state: "pending" | "processing" | "ready" | "needs_attention" | "failed";
   parse_message: string | null;
@@ -123,7 +156,7 @@ export interface QuizSummary {
 }
 
 export interface CourseOverview {
-  course: { id: string; title: string; description: string | null; status: string; created_at: string };
+  course: CourseInfo;
   active_target_id: string | null;
   targets: Target[];
   progress: Progress;
@@ -208,8 +241,20 @@ export interface QuizItemView {
   source_refs?: string[];
 }
 
+export interface TimelineTarget extends Target {
+  course_id: string;
+  course_title: string;
+  course_color: CourseColor | null;
+  course_status: string;
+  revision: number;
+}
+
 export interface QuizView {
   quiz_id: string;
+  opened_at?: string | null;
+  deadline?: string | null;
+  draft?: Record<string, { option?: string | null; text?: string | null; dont_know?: boolean }>;
+  draft_saved_at?: string | null;
   course_id: string;
   title: string;
   status: "open" | "submitted";
@@ -295,6 +340,9 @@ export interface Course {
   id: string;
   title: string;
   description: string | null;
+  status: string;
+  color: CourseColor | null;
+  group_id: string | null;
 }
 
 export interface Note {

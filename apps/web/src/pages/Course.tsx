@@ -3,12 +3,14 @@ import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { get } from "../api";
 import { Async, BandChip, BandMeter, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip, StudyMeter } from "../components/ui";
+import { CourseDialog, CourseDot, groupPath } from "../components/organise";
+import { TargetDialog } from "../components/TargetDialog";
 import { Upload } from "../components/Upload";
 import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, plural, relativeDay } from "../format";
-import { useCourseOverview } from "../queries";
+import { useCourseOverview, useGroups } from "../queries";
 import type { AttemptRow, ConceptRow, CourseOverview, StudyStatus, Target, TargetProfile } from "../types";
 import { NewNoteButton, NoteList } from "./Notes";
-import { SourceTable } from "./Library";
+import { MaterialsView } from "./Library";
 import { QuizTable } from "./Simulations";
 
 const TABS = [
@@ -26,6 +28,8 @@ export function CoursePage() {
   const [params] = useSearchParams();
   const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "concepts") as Tab;
   const q = useCourseOverview(courseId);
+  const groups = useGroups();
+  const [editCourse, setEditCourse] = useState(false);
 
   return (
     <div className="page">
@@ -42,7 +46,22 @@ export function CoursePage() {
           };
           return (
             <>
-              <PageHead title={o.course.title} sub={o.course.description} crumbs={[{ to: "/courses", label: "Courses" }]} />
+              <PageHead
+                title={
+                  <span className="row" style={{ gap: 10 }}>
+                    <CourseDot color={o.course.color} />
+                    {o.course.title}
+                    {o.course.status === "archived" && <span className="chip">Archived</span>}
+                  </span>
+                }
+                sub={[groupPath(groups.data, o.course.group_id), o.course.description].filter(Boolean).join(" · ") || undefined}
+                crumbs={[{ to: "/courses", label: "Courses" }]}
+              >
+                <button type="button" className="btn" onClick={() => setEditCourse(true)}>
+                  Edit course
+                </button>
+              </PageHead>
+              {editCourse && <CourseDialog course={o.course} open onClose={() => setEditCourse(false)} />}
               <div className="grid cols-2">
                 <Card title="Next exam" tint>
                   {active ? (
@@ -79,10 +98,10 @@ export function CoursePage() {
               </nav>
 
               {tab === "concepts" && <ConceptsTab o={o} />}
-              {tab === "targets" && <TargetsTab targets={o.targets} activeId={o.active_target_id} />}
+              {tab === "targets" && <TargetsTab targets={o.targets} activeId={o.active_target_id} courseId={o.course.id} />}
               {tab === "materials" && (
                 <div className="stack" style={{ gap: 20 }}>
-                  <SourceTable sources={o.sources} />
+                  <MaterialsView sources={o.sources} courseId={o.course.id} />
                   <Card title="Add material">
                     <Upload courseId={o.course.id} />
                   </Card>
@@ -213,27 +232,59 @@ function TopicWeights({ value }: { value: TargetProfile["topic_weights"] }) {
 
 const GOAL: Record<string, string> = { long_term: "Remember it long-term", exam_only: "Only for this exam" };
 
-function TargetsTab({ targets, activeId }: { targets: Target[]; activeId: string | null }) {
+function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; activeId: string | null; courseId: string }) {
+  const [editing, setEditing] = useState<Target | null>(null);
+  const [adding, setAdding] = useState(false);
+  const dialogs = (
+    <>
+      {editing && (
+        <TargetDialog key={editing.id} target={{ ...editing, course_id: courseId }} open onClose={() => setEditing(null)} />
+      )}
+      {adding && <TargetDialog courseId={courseId} open onClose={() => setAdding(false)} />}
+    </>
+  );
   if (targets.length === 0) {
     return (
-      <Empty title="No exams or kolokviji yet">
-        At the start of a study session Claude asks what you prepare for and records it here.
-      </Empty>
+      <>
+        <Empty title="No exams or kolokviji yet">
+          Add one here, or Claude asks what you prepare for at the start of a study session and records it.
+          <div style={{ marginTop: 10 }}>
+            <button type="button" className="btn primary" onClick={() => setAdding(true)}>
+              Add exam
+            </button>
+          </div>
+        </Empty>
+        {dialogs}
+      </>
     );
   }
   return (
     <div className="stack" style={{ gap: 16 }}>
+      <div className="row" style={{ justifyContent: "flex-end" }}>
+        <Link to="/exams" className="btn">
+          Timeline
+        </Link>
+        <button type="button" className="btn primary" onClick={() => setAdding(true)}>
+          Add exam
+        </button>
+      </div>
+      {dialogs}
       {targets.map((t) => (
         <Card
           key={t.id}
           title={t.name}
           meta={`${TARGET_KIND[t.kind] ?? t.kind} · ${dateLabel(t.due_date)}`}
           action={
-            t.id === activeId ? (
-              <span className="chip solid">Active</span>
-            ) : (
-              <span className={t.status === "passed" ? "chip good" : "chip"}>{t.status}</span>
-            )
+            <span className="row">
+              {t.id === activeId ? (
+                <span className="chip solid">Active</span>
+              ) : (
+                <span className={t.status === "passed" ? "chip good" : "chip"}>{t.status}</span>
+              )}
+              <button type="button" className="btn small" onClick={() => setEditing(t)}>
+                Edit
+              </button>
+            </span>
           }
         >
           <div className="stack">

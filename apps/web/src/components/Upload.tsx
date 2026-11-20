@@ -3,16 +3,46 @@ import { useRef, useState, type DragEvent } from "react";
 import { request } from "../api";
 import { bytes } from "../format";
 import { useCourses } from "../queries";
-import type { Source } from "../types";
+import type { MaterialCategory, Source } from "../types";
 import { ErrorNote } from "./ui";
 
-const ACCEPT = ".pdf,.md,.markdown,.txt,application/pdf,text/markdown,text/plain";
+const ACCEPT = ".pdf,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,application/pdf,text/markdown,text/plain,image/png,image/jpeg,image/webp";
 const MAX_BYTES = 30 * 1024 * 1024;
+const CLAUDE_IMAGE_BYTES = 4_500_000; // Claude can look at images up to this size
+const MAX_SIDE = 2400; // plenty for handwriting; keeps phone photos small
+
+/** Phone photos are often too large for Claude: shrink them in the browser (the server never decodes images). */
+async function shrinkImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/") || file.size <= CLAUDE_IMAGE_BYTES) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch {
+    return file; // keep the original if the browser cannot decode it
+  }
+}
+
+const CATEGORY_OPTIONS: [MaterialCategory, string][] = [
+  ["material", "Lecture material"],
+  ["notes", "My notes"],
+  ["exercises", "Exercises"],
+  ["past_paper", "Past papers"],
+  ["other", "Other"],
+];
 
 /** Drag-and-drop with click-to-browse. Extraction runs in the background worker; the list polls its state. */
 export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
   const courses = useCourses();
   const [courseId, setCourseId] = useState(fixedCourse ?? "");
+  const [category, setCategory] = useState<MaterialCategory>("material");
   const [over, setOver] = useState(false);
   const [done, setDone] = useState<Source[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -23,9 +53,11 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
   const upload = useMutation({
     mutationFn: async (files: File[]) => {
       const out: Source[] = [];
-      for (const file of files) {
+      for (const original of files) {
+        const file = await shrinkImage(original);
         const form = new FormData();
         form.set("course_id", chosen);
+        form.set("category", category);
         form.set("file", file);
         out.push(await request<Source>("/sources", { form }));
       }
@@ -75,6 +107,16 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
           </select>
         </label>
       )}
+      <label className="field">
+        File as
+        <select value={category} onChange={(e) => setCategory(e.target.value as MaterialCategory)}>
+          {CATEGORY_OPTIONS.map(([id, label]) => (
+            <option key={id} value={id}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
       <div
         className={over ? "dropzone over" : "dropzone"}
         onDragOver={(e) => {
@@ -84,8 +126,10 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
         onDragLeave={() => setOver(false)}
         onDrop={drop}
       >
-        <strong style={{ color: "var(--ink)" }}>Drop PDF, Markdown or text files here</strong>
-        <span className="small">Up to 30 MB each. Scanned PDFs without a text layer are flagged, never guessed.</span>
+        <strong style={{ color: "var(--ink)" }}>Drop PDFs, text files or photos here</strong>
+        <span className="small">
+          PDF, Markdown, text, PNG, JPG or WebP, up to 30 MB. Large photos are shrunk so Claude can look at them.
+        </span>
         <button type="button" className="btn small" onClick={() => input.current?.click()} disabled={upload.isPending}>
           {upload.isPending ? "Uploading…" : "Choose files"}
         </button>

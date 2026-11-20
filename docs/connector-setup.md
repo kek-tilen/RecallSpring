@@ -74,7 +74,7 @@ After the restart, RecallSpring appears in the chat's tools menu; Claude asks yo
 
 Start a chat and choose your model (Sonnet by default, Opus for demanding material).
 
-**First, build your library** (no web UI yet): *"Create a RecallSpring course 'Biology' and import C:\Users\me\Documents\lecture-1.pdf."* `import_file` sends the file straight from your disk to RecallSpring (it does not pass through the chat, so it does not use your Claude plan) and waits for extraction; only files in your Documents, Downloads or Desktop folders are allowed (`RS_IMPORT_ROOTS` overrides). Then: *"Propose the key concepts and link them to the sections."*
+**First, plan the semester:** choose **Plan semester** in Claude's **+** menu, or see the web app's Guide page. **Build your library**: *"Create a RecallSpring course 'Biology' and import C:\Users\me\Documents\lecture-1.pdf."* `import_file` sends the file straight from your disk to RecallSpring (it does not pass through the chat, so it does not use your Claude plan) and waits for extraction; only files in your Documents, Downloads or Desktop folders are allowed (`RS_IMPORT_ROOTS` overrides). Then: *"Propose the key concepts and link them to the sections."*
 
 **Then study**, for example *"Let's do today's RecallSpring review"* or *"Quiz me on glycolysis at Bloom 4 using my lecture notes."* Claude will:
 

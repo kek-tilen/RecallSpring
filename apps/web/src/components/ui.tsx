@@ -242,3 +242,30 @@ export function Highlighted({ text }: { text: string }) {
     </>
   );
 }
+
+/** Native modal dialog (focus trap, Escape to close) for forms. */
+export function Modal({ open, title, children, onClose, wide }: {
+  open: boolean;
+  title: string;
+  children: ReactNode;
+  onClose: () => void;
+  wide?: boolean;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open && !d.open) d.showModal();
+    if (!open && d.open) d.close();
+  }, [open]);
+  return (
+    <dialog ref={ref} onClose={onClose} aria-label={title} style={wide ? { maxWidth: "min(720px, calc(100vw - 32px))", width: "100%" } : { width: "100%" }}>
+      {open && (
+        <div className="stack">
+          <h2>{title}</h2>
+          {children}
+        </div>
+      )}
+    </dialog>
+  );
+}

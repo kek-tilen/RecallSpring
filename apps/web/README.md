@@ -4,6 +4,11 @@ The browser view of everything RecallSpring stores: today's plan, courses with t
 schedule, kolokvij simulations with answers and grades, your material and its extracted text, notes with
 revisions, the full learning history, and settings (study time, Claude connector limit and tokens, theme).
 
+It also organises: courses grouped by university › faculty › semester (archive a semester when it ends), course
+colours, an exam timeline where dates are moved by dragging (or arrow keys) with undo, a calendar (.ics) export,
+simulations answered in the browser (open answers wait for Claude; copy the ID), and photos of notes and
+exercises filed by category.
+
 Studying itself happens in Claude (Mode A). The web app is where you check, correct and organise what was saved.
 
 - React + TypeScript + Vite, TanStack Query, React Router. Sage Study tokens in `src/styles.css`, light first,

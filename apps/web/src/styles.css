@@ -1122,3 +1122,403 @@ pre.template {
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
 }
+
+/* ------------------------------------------------------------------ course colours
+   Validated categorical palette (dataviz reference: CVD-separated, light and dark steps). Colour only marks a
+   course next to its name, never alone. */
+
+:root {
+  --c-blue: #2a78d6;
+  --c-orange: #eb6834;
+  --c-aqua: #1baf7a;
+  --c-yellow: #eda100;
+  --c-magenta: #e87ba4;
+  --c-green: #008300;
+  --c-violet: #6250d6;
+  --c-red: #e34948;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --c-blue: #3987e5;
+    --c-orange: #d95926;
+    --c-aqua: #199e70;
+    --c-yellow: #c98500;
+    --c-magenta: #d55181;
+    --c-green: #0ca30c;
+    --c-violet: #9085e9;
+    --c-red: #e66767;
+  }
+}
+
+:root[data-theme="dark"] {
+  --c-blue: #3987e5;
+  --c-orange: #d95926;
+  --c-aqua: #199e70;
+  --c-yellow: #c98500;
+  --c-magenta: #d55181;
+  --c-green: #0ca30c;
+  --c-violet: #9085e9;
+  --c-red: #e66767;
+}
+
+.cc-blue {
+  --cc: var(--c-blue);
+}
+
+.cc-orange {
+  --cc: var(--c-orange);
+}
+
+.cc-aqua {
+  --cc: var(--c-aqua);
+}
+
+.cc-yellow {
+  --cc: var(--c-yellow);
+}
+
+.cc-magenta {
+  --cc: var(--c-magenta);
+}
+
+.cc-green {
+  --cc: var(--c-green);
+}
+
+.cc-violet {
+  --cc: var(--c-violet);
+}
+
+.cc-red {
+  --cc: var(--c-red);
+}
+
+.course-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cc, var(--border-strong));
+  flex: none;
+}
+
+.course-card {
+  border-left: 5px solid var(--cc, var(--border));
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--bg);
+  outline: 2px solid transparent;
+  background: var(--cc, var(--surface));
+  cursor: pointer;
+  padding: 0;
+}
+
+.swatch[aria-checked="true"] {
+  outline-color: var(--ink);
+}
+
+.swatch.none {
+  background: repeating-linear-gradient(45deg, var(--surface), var(--surface) 4px, var(--bg) 4px, var(--bg) 8px);
+  border-color: var(--border-strong);
+}
+
+/* ------------------------------------------------------------------ organisation tree */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.group-children {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-left: 18px;
+  border-left: 2px solid var(--border);
+}
+
+.group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.group-head h2,
+.group-head h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.kind {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.archived {
+  opacity: 0.7;
+}
+
+/* ------------------------------------------------------------------ exam timeline */
+
+.timeline-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+}
+
+.timeline {
+  position: relative;
+  display: grid;
+  grid-template-columns: 180px max-content;
+}
+
+.tl-label {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 52px;
+  background: var(--surface-elevated);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 0.9rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tl-label.head {
+  height: 40px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tl-track {
+  position: relative;
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  touch-action: pan-y;
+}
+
+.tl-week {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+
+.tl-axis {
+  position: relative;
+  height: 40px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.tl-month {
+  position: absolute;
+  top: 4px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border-strong);
+  height: 32px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.tl-today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--primary);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.tl-marker {
+  position: absolute;
+  top: 10px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 8px;
+  border-radius: 16px;
+  border: 2px solid var(--cc, var(--primary));
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: grab;
+  z-index: 3;
+  user-select: none;
+  touch-action: none;
+}
+
+.tl-marker .course-dot {
+  width: 10px;
+  height: 10px;
+}
+
+.tl-marker.dragging {
+  cursor: grabbing;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 18%);
+  z-index: 4;
+}
+
+.tl-marker.done {
+  opacity: 0.65;
+  border-style: dashed;
+}
+
+.tl-marker .tl-date {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: var(--radius-control);
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 20%);
+  z-index: 50;
+  font-size: 0.9rem;
+}
+
+.toast .btn {
+  min-height: 30px;
+  padding: 2px 10px;
+}
+
+/* ------------------------------------------------------------------ simulation form & gallery */
+
+.quiz-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.quiz-q {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg);
+}
+
+.quiz-q fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.choice {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--surface);
+}
+
+.choice input {
+  accent-color: var(--primary);
+}
+
+.sticky-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-decoration: none;
+  color: var(--ink);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.thumb img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.image-full {
+  max-width: 100%;
+  max-height: 80vh;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}

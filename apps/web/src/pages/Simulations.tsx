@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
+import { CopyButton } from "../components/Copy";
+import { AwaitingClaude, QuizForm } from "../components/QuizForm";
 import { Async, Card, Empty, GradeChip, PageHead } from "../components/ui";
 import { ATTEMPT_KIND, dateLabel, dateTime, gradedBy, plural } from "../format";
 import { courseTitles, useCourses, useQuiz, useQuizzes } from "../queries";
@@ -63,7 +65,7 @@ export function SimulationsPage() {
     <div className="page">
       <PageHead
         title="Simulations"
-        sub="Kolokvij simulations you answered in Claude's form. Multiple-choice is graded from the answer key, open answers by Claude."
+        sub="Kolokvij simulations. Answer open ones here or in Claude's form; multiple-choice is graded from the answer key, open answers by Claude."
       />
       <Async q={q}>{(quizzes) => <QuizTable quizzes={quizzes} titles={courseTitles(courses.data)} />}</Async>
     </div>
@@ -170,25 +172,33 @@ export function SimulationPage() {
                 )}
               </PageHead>
               {!submitted && (
-                <div className="notice warn">
-                  This simulation is still open. Answer it in Claude's form (ask Claude to open it again); answers and keys appear here after
-                  you submit.
-                </div>
+                <>
+                  <p className="small muted">
+                    Answer here or in Claude's form; both save to the same simulation. Answer keys appear after you submit.
+                  </p>
+                  <QuizForm key={quiz.quiz_id} quiz={quiz} />
+                </>
               )}
-              {quiz.note && <p className="small muted">{quiz.note}</p>}
+              {submitted && !!quiz.pending_items && <AwaitingClaude quiz={quiz} />}
+              {submitted && quiz.note && <p className="small muted">{quiz.note}</p>}
               {submitted && (
                 <label className="row small">
                   <input type="checkbox" checked={onlyMissed} onChange={(e) => setOnlyMissed(e.target.checked)} />
                   Show only questions without full points
                 </label>
               )}
-              <Card>
-                <ol className="list" style={{ listStyle: "none" }}>
-                  {items.map((i) => (
-                    <Item key={i.question_id} item={i} submitted={submitted} />
-                  ))}
-                </ol>
-              </Card>
+              {submitted && (
+                <Card>
+                  <ol className="list" style={{ listStyle: "none" }}>
+                    {items.map((i) => (
+                      <Item key={i.question_id} item={i} submitted={submitted} />
+                    ))}
+                  </ol>
+                </Card>
+              )}
+              <p className="tiny muted">
+                Simulation ID: <span className="nowrap">{quiz.quiz_id}</span> <CopyButton text={quiz.quiz_id} label="Copy ID" className="btn small ghost" />
+              </p>
             </>
           );
         }}

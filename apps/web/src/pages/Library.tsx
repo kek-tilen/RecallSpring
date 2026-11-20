@@ -1,12 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
-import { API, get } from "../api";
+import { API, get, request } from "../api";
 import { Async, Card, Empty, Highlighted, PageHead } from "../components/ui";
 import { Upload } from "../components/Upload";
-import { bytes, dateLabel, dateTime, plural } from "../format";
+import { CATEGORY_LABEL, bytes, dateLabel, dateTime, plural } from "../format";
 import { courseTitles, useCourses, useSources } from "../queries";
-import type { SearchHit, Section, Source } from "../types";
+import type { MaterialCategory, SearchHit, Section, Source } from "../types";
 
 const STATE: Record<Source["parse_state"], { tone: string; label: string }> = {
   pending: { tone: "chip", label: "Queued" },
@@ -30,6 +30,7 @@ export function SourceTable({ sources, titles }: { sources: Source[]; titles?: R
         <thead>
           <tr>
             <th>Material</th>
+            <th>Category</th>
             {titles && <th>Course</th>}
             <th>Text</th>
             <th>Pages</th>
@@ -41,12 +42,13 @@ export function SourceTable({ sources, titles }: { sources: Source[]; titles?: R
         <tbody>
           {sources.map((s) => (
             <tr key={s.id}>
-              <td>
+              <td style={{ minWidth: 200, overflowWrap: "anywhere" }}>
                 <Link to={`/library/${s.id}`} style={{ fontWeight: 600 }}>
                   {s.filename}
                 </Link>
                 {s.duplicate_of_id && <div className="tiny muted">Same file as another upload</div>}
               </td>
+              <td className="small nowrap">{CATEGORY_LABEL[s.category] ?? s.category}</td>
               {titles && <td className="small">{titles[s.course_id] ?? ""}</td>}
               <td>
                 <StateChip state={s.parse_state} />
@@ -114,14 +116,65 @@ function Search() {
   );
 }
 
+const CATEGORIES: MaterialCategory[] = ["material", "notes", "exercises", "past_paper", "other"];
+
+export function Gallery({ images, titles }: { images: Source[]; titles?: Record<string, string> }) {
+  return (
+    <div className="gallery">
+      {images.map((s) => (
+        <Link key={s.id} to={`/library/${s.id}`} className="thumb">
+          <img src={`${API}/sources/${s.id}/file`} alt={s.filename} loading="lazy" />
+          <span>{s.filename}</span>
+          {titles && <span className="muted tiny">{titles[s.course_id] ?? ""}</span>}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+/** Material of one course or of the whole library, filterable by category; photos shown as a gallery. */
+export function MaterialsView({ sources, titles, courseId }: { sources: Source[]; titles?: Record<string, string>; courseId?: string }) {
+  const [category, setCategory] = useState<MaterialCategory | "all">("all");
+  const counts = Object.fromEntries(CATEGORIES.map((c) => [c, sources.filter((s) => s.category === c).length]));
+  const shown = category === "all" ? sources : sources.filter((s) => s.category === category);
+  const images = shown.filter((s) => s.kind === "image");
+  const files = shown.filter((s) => s.kind !== "image");
+  return (
+    <div className="stack" style={{ gap: 16 }}>
+      <div className="row" role="group" aria-label="Filter by category">
+        <button type="button" className="chip chip-filter" aria-pressed={category === "all"} onClick={() => setCategory("all")}>
+          All {sources.length}
+        </button>
+        {CATEGORIES.filter((c) => counts[c]).map((c) => (
+          <button key={c} type="button" className="chip chip-filter" aria-pressed={category === c} onClick={() => setCategory(c)}>
+            {CATEGORY_LABEL[c]} {counts[c]}
+          </button>
+        ))}
+      </div>
+      {files.length > 0 || images.length === 0 ? <SourceTable sources={files} titles={titles} /> : null}
+      {images.length > 0 && (
+        <Card title="Photos" meta={plural(images.length, "image")}>
+          <Gallery images={images} titles={courseId ? undefined : titles} />
+          <p className="tiny muted" style={{ marginTop: 10 }}>
+            Photos have no extracted text. Claude looks at one when you ask (for example “look at my notes from lecture 3”).
+          </p>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export function LibraryPage() {
   const sources = useSources();
   const courses = useCourses();
   const titles = courseTitles(courses.data);
   return (
     <div className="page">
-      <PageHead title="Library" sub="Your original files and the text RecallSpring extracted from them. Claude cites these sections." />
-      <Async q={sources}>{(list) => <SourceTable sources={list} titles={titles} />}</Async>
+      <PageHead
+        title="Library"
+        sub="Lecture material, your notes and photos, exercises and past papers. Claude cites the extracted text and can look at your photos."
+      />
+      <Async q={sources}>{(list) => <MaterialsView sources={list} titles={titles} />}</Async>
       <div className="grid cols-2" style={{ alignItems: "start" }}>
         <Search />
         <Card title="Add material">
@@ -133,6 +186,37 @@ export function LibraryPage() {
 }
 
 const PAGE = 25;
+
+function CategorySelect({ source }: { source: Source }) {
+  const qc = useQueryClient();
+  const save = useMutation({
+    mutationFn: (category: MaterialCategory) =>
+      request<Source>(`/sources/${source.id}`, { method: "PATCH", json: { category } }),
+    onSuccess: (updated) => {
+      qc.setQueryData(["source", source.id], updated);
+      void qc.invalidateQueries({ queryKey: ["sources"] });
+      void qc.invalidateQueries({ queryKey: ["courses"] });
+    },
+  });
+  return (
+    <label>
+      <span className="sr-only">Category</span>
+      <select
+        className="inline-input"
+        value={source.category}
+        disabled={save.isPending}
+        onChange={(e) => save.mutate(e.target.value as MaterialCategory)}
+        aria-label="Category"
+      >
+        {CATEGORIES.map((c) => (
+          <option key={c} value={c}>
+            {CATEGORY_LABEL[c]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 export function SourcePage() {
   const { sourceId = "" } = useParams();
@@ -161,7 +245,8 @@ export function SourcePage() {
                 { to: `/courses/${s.course_id}?tab=materials`, label: titles[s.course_id] ?? "Course" },
               ]}
             >
-              <StateChip state={s.parse_state} />
+              {s.kind !== "image" && <StateChip state={s.parse_state} />}
+              <CategorySelect source={s} />
               <a className="btn small" href={`${API}/sources/${s.id}/file`} download>
                 Download original
               </a>
@@ -169,7 +254,16 @@ export function SourcePage() {
             <div className="split">
               <div className="stack">
                 {s.parse_message && <div className={s.parse_state === "failed" ? "notice bad" : "notice warn"}>{s.parse_message}</div>}
-                {sections.data ? (
+                {s.kind === "image" ? (
+                  <Card title="Photo">
+                    <img className="image-full" src={`${API}/sources/${s.id}/file`} alt={s.filename} />
+                    <p className="tiny muted" style={{ marginTop: 10 }}>
+                      {s.byte_size > 4_500_000
+                        ? "This photo is larger than 4.5 MB, so Claude cannot look at it. Upload a smaller copy."
+                        : "Claude can look at this photo when you ask in a chat of this course."}
+                    </p>
+                  </Card>
+                ) : sections.data ? (
                   <Card title="Extracted text" meta={`${plural(sections.data.total, "section")}`}>
                     <ol className="list" style={{ listStyle: "none" }}>
                       {sections.data.sections.map((sec) => (

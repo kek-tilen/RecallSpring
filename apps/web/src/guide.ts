@@ -53,12 +53,18 @@ export const STEPS: GuideStep[] = [
     where: "Planning chat",
     why:
       "Dates, scope, material and the type of each kolokvij let RecallSpring plan backwards from the deadline. " +
-      "Give what you know; anything can be added or changed later.",
+      "Give what you know; anything can be added or changed later. Shortcut: choose Plan semester in Claude's + menu " +
+      "and Claude asks you course by course.",
     prompts: [
       PLANNING_CHAT_START,
       {
         en: "My courses this semester are [course], [course] and [course]. Create them in RecallSpring.",
         sl: "Moji predmeti v tem semestru so [predmet], [predmet] in [predmet]. Ustvari jih v RecallSpringu.",
+      },
+      {
+        en: "File [course] and [course] under [university], [faculty], [semester].",
+        sl: "Predmeta [predmet] in [predmet] razvrsti pod [univerza], [fakulteta], [semester].",
+        note: "Courses then appear grouped by semester; archive a semester when it ends.",
       },
       {
         en: "Dates for [course]: 1st kolokvij on [date], 2nd kolokvij on [date], exam period from [date].",
@@ -74,6 +80,11 @@ export const STEPS: GuideStep[] = [
         note: "Files in Documents, Downloads or Desktop go straight to RecallSpring, not through the chat. You can also drop them in Library.",
       },
       {
+        en: "Import my handwritten notes for [course] as my notes: [path to the photo].",
+        sl: "Uvozi moje zapiske za [predmet] kot moje zapiske: [pot do fotografije].",
+        note: "Photos of notes, notebook pages or solved exercises can also be dropped in Library. Claude looks at them when you ask.",
+      },
+      {
         en: "The 1st kolokvij in [course] is [written or online], [minutes] minutes, [number] multiple-choice and [number] open questions, notes [allowed or not allowed].",
         sl: "1. kolokvij pri [predmet] je [pisni ali spletni], [minute] minut, [število] vprašanj izbirnega tipa in [število] odprtih, zapiski [dovoljeni ali niso dovoljeni].",
       },
@@ -86,7 +97,9 @@ export const STEPS: GuideStep[] = [
         sl: "Pokaži, kako si vsak kolokvij povezal z gradivom, in nato moj načrt za ta teden za vse predmete.",
       },
     ],
-    check: "Courses → a course → Exams shows each kolokvij with your words, the mapped material and the exam style.",
+    check:
+      "Exams shows every date on a timeline (drag one to move it) and downloads them to your calendar; Courses groups " +
+      "your courses by semester.",
   },
   {
     id: "learn",
@@ -131,6 +144,11 @@ export const STEPS: GuideStep[] = [
       {
         en: "Run a [30]-minute simulation of the 1st kolokvij in the style of the old paper.",
         sl: "Pripravi [30]-minutno simulacijo 1. kolokvija v slogu starega kolokvija.",
+      },
+      {
+        en: "I solved the simulation [title] in RecallSpring. Grade my open answers.",
+        sl: "Simulacijo [naslov] sem rešil v RecallSpringu. Oceni moje odprte odgovore.",
+        note: "Open simulations can be answered in Simulations too; the page gives you this message with the ID to copy.",
       },
       {
         en: "Grade my simulation and tell me what to repeat.",

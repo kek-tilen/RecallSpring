@@ -108,3 +108,31 @@ describe("guide", () => {
     }
   });
 });
+
+describe("organisation helpers", () => {
+  it("builds the university › faculty › semester path and survives a broken parent link", async () => {
+    const { groupPath } = await import("./components/organise");
+    const base = { position: 0, status: "active" as const, starts_on: null, ends_on: null, archived_at: null, courses: 0 };
+    const groups = [
+      { ...base, id: "u", parent_id: null, kind: "university" as const, name: "UM" },
+      { ...base, id: "f", parent_id: "u", kind: "faculty" as const, name: "FERI" },
+      { ...base, id: "s", parent_id: "f", kind: "semester" as const, name: "5. semester" },
+      { ...base, id: "x", parent_id: "missing", kind: "semester" as const, name: "Orphan" },
+    ];
+    expect(groupPath(groups, "s")).toBe("UM › FERI › 5. semester");
+    expect(groupPath(groups, "x")).toBe("Orphan");
+    expect(groupPath(groups, null)).toBe("");
+  });
+
+  it("moves calendar dates without timezone drift", async () => {
+    const { addDays, daysBetween } = await import("./format");
+    expect(addDays("2026-03-28", 2)).toBe("2026-03-30"); // across the spring DST change
+    expect(addDays("2026-12-30", 3)).toBe("2027-01-02");
+    expect(daysBetween("2026-11-20", "2026-12-01")).toBe(11);
+  });
+
+  it("gives Claude the simulation ID to grade", async () => {
+    const { gradingPrompt } = await import("./components/QuizForm");
+    expect(gradingPrompt({ title: "Simulation 1", quiz_id: "abc-123" })).toContain("(ID abc-123)");
+  });
+});

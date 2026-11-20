@@ -123,3 +123,26 @@ export const STUDY_SOURCE: Record<string, string> = {
 export const TARGET_KIND: Record<string, string> = { kolokvij: "Kolokvij", izpit: "Exam", other: "Other" };
 
 export const ATTEMPT_KIND: Record<string, string> = { answer: "Answered", dont_know: "I don't know", skip: "Skipped" };
+
+/** Today's calendar date (YYYY-MM-DD) in the learner's timezone. */
+export function todayIso(): string {
+  return dayKey(new Date()).split("/").reverse().join("-");
+}
+
+/** Calendar arithmetic on YYYY-MM-DD strings (timezone-free). */
+export function addDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+export function daysBetween(fromIso: string, toIso: string): number {
+  return Math.round((Date.parse(toIso) - Date.parse(fromIso)) / 86_400_000);
+}
+
+export const CATEGORY_LABEL: Record<string, string> = {
+  material: "Lecture material",
+  notes: "My notes",
+  exercises: "Exercises",
+  past_paper: "Past papers",
+  other: "Other",
+};
