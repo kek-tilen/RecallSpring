@@ -13,6 +13,7 @@ from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_s
 from ..errors import not_found
 from ..models import Concept, ConceptSource, Course, SourceSection, SyllabusItem
 from ..schemas import ConceptIn, ConceptOut, CourseIn, CourseOut, SyllabusItemIn, SyllabusItemOut
+from ..services.courses import ensure_new_title
 from ..services.events import learning_event
 from ..services.ownership import owned
 from ..services.sources import sections_in_course
@@ -33,6 +34,7 @@ def list_courses(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db))
 def create_course(payload: CourseIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)) -> JSONResponse:
     if replay := replay_if_seen(db, ctx, payload):
         return replay
+    ensure_new_title(db, ctx.user.id, payload.title)
     course = Course(user_id=ctx.user.id, **payload.model_dump())
     db.add(course)
     db.flush()

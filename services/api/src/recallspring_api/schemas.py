@@ -99,6 +99,10 @@ class GroupPatch(BaseModel):
     position: int | None = Field(default=None, ge=0, le=10_000)
 
 
+class MergeIn(BaseModel):
+    into_id: uuid.UUID
+
+
 class ArchiveIn(BaseModel):
     archived: bool
 

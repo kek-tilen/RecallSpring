@@ -17,7 +17,7 @@ from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
 from ..models import Course, CourseGroup, User
-from ..schemas import ArchiveIn, CoursePatch, GroupIn, GroupPatch, TargetIn, TargetUpdateIn
+from ..schemas import ArchiveIn, CoursePatch, GroupIn, GroupPatch, MergeIn, TargetIn, TargetUpdateIn
 from ..services import overview
 from ..services import targets as target_svc
 from ..services.events import audit
@@ -250,3 +250,45 @@ def update_target(
         return replay
     target = target_svc.update_target(db, ctx.user, target_id, payload, ctx.request_id, origin="web")
     return commit_with_response(db, ctx, payload, 200, target_view(db, target, _today(ctx.user)))
+
+
+RESTORE_DAYS = 30
+
+
+@router.get("/targets/deleted")
+def deleted_targets(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    """Exams deleted in the last 30 days, newest first, so they can be restored."""
+    return overview.deleted_targets(db, ctx.user, RESTORE_DAYS)
+
+
+@router.delete("/targets/{target_id}")
+def delete_target(
+    target_id: uuid.UUID, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Soft delete after the learner confirmed it in the app. Simulations, answers and grades are kept."""
+    if replay := replay_if_seen(db, ctx, {"delete": str(target_id)}):
+        return replay
+    target = target_svc.delete_target(db, ctx.user, target_id, ctx.request_id, clock.now())
+    body = {"deleted": target_view(db, target, _today(ctx.user)), "restorable_days": RESTORE_DAYS}
+    return commit_with_response(db, ctx, {"delete": str(target_id)}, 200, body)
+
+
+@router.post("/targets/{target_id}/restore")
+def restore_target(
+    target_id: uuid.UUID, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    if replay := replay_if_seen(db, ctx, {"restore": str(target_id)}):
+        return replay
+    target = target_svc.restore_target(db, ctx.user, target_id, ctx.request_id)
+    return commit_with_response(db, ctx, {"restore": str(target_id)}, 200, target_view(db, target, _today(ctx.user)))
+
+
+@router.post("/targets/{target_id}/merge")
+def merge_target(
+    target_id: uuid.UUID, payload: MergeIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Merge this duplicate into ``into_id`` (the exam to keep) and soft-delete it."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    kept = target_svc.merge_targets(db, ctx.user, target_id, payload.into_id, ctx.request_id, clock.now())
+    return commit_with_response(db, ctx, payload, 200, target_view(db, kept, _today(ctx.user)))

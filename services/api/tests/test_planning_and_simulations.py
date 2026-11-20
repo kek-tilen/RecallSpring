@@ -12,9 +12,9 @@ from .pdfs import make_pdf
 
 
 def course_with_concepts(
-    api: Api, c: ConnectorApi, terms: list[str], known: bool = False
+    api: Api, c: ConnectorApi, terms: list[str], known: bool = False, title: str = "Komunikacijska varnost"
 ) -> tuple[str, dict[str, str]]:
-    course = c.post("/courses", {"title": "Komunikacijska varnost"}).json()["id"]
+    course = c.post("/courses", {"title": title}).json()["id"]
     created = c.post(f"/courses/{course}/concepts", {"concepts": [{"term": t} for t in terms]}).json()["concepts"]
     ids = {x["term"]: x["id"] for x in created}
     if known:
@@ -99,7 +99,7 @@ def test_page_range_scope_resolves_to_concepts_on_those_pages(owner_api: Api, co
 
 def test_scope_must_belong_to_the_course(owner_api: Api, conn: ConnectorApi) -> None:
     course, _ = course_with_concepts(owner_api, conn, ["A"])
-    _, other_ids = course_with_concepts(owner_api, conn, ["B"])
+    _, other_ids = course_with_concepts(owner_api, conn, ["B"], title="Digitalna forenzika")
     r = conn.post(
         "/targets",
         {

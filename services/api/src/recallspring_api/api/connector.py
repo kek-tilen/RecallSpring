@@ -77,6 +77,7 @@ from ..services import overview
 from ..services import quizzes as quiz_svc
 from ..services import sources as source_svc
 from ..services import targets as target_svc
+from ..services.courses import ensure_new_title
 from ..services.events import audit, learning_event
 from ..services.learning import effective_status, mark, require_studied, save_summary
 from ..services.ownership import owned
@@ -503,6 +504,7 @@ def create_course(
 ) -> JSONResponse:
     if replay := replay_if_seen(db, ctx, payload):
         return replay
+    ensure_new_title(db, ctx.user.id, payload.title)
     course = Course(user_id=ctx.user.id, **payload.model_dump())
     db.add(course)
     db.flush()

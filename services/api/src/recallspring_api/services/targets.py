@@ -239,8 +239,53 @@ def scope_rows(
     return rows
 
 
+def normalise(name: str) -> str:
+    """Case-, space- and punctuation-insensitive form of a name ("1. Kolokvij " == "1 kolokvij")."""
+    return "".join(ch for ch in name.casefold() if ch.isalnum())
+
+
+def is_same_exam(a: StudyTarget, name: str, kind: str, due: date) -> bool:
+    """Two records describe the same exam when the names match, or the type and the date match."""
+    return normalise(a.name) == normalise(name) or (a.kind == kind and a.due_date == due)
+
+
+def find_duplicate(
+    db: Session, course_id: uuid.UUID, name: str, kind: str, due: date, exclude: uuid.UUID | None = None
+) -> StudyTarget | None:
+    for t in live_targets(db, course_id):
+        if t.id != exclude and t.status != "cancelled" and is_same_exam(t, name, kind, due):
+            return t
+    return None
+
+
+def duplicate_groups(targets: list[StudyTarget]) -> dict[uuid.UUID, list[uuid.UUID]]:
+    """For each live target, the other targets of the same course that look like the same exam."""
+    out: dict[uuid.UUID, list[uuid.UUID]] = {}
+    for a in targets:
+        if a.status == "cancelled":
+            continue
+        for b in targets:
+            if b.id != a.id and b.course_id == a.course_id and b.status != "cancelled":
+                if is_same_exam(b, a.name, a.kind, a.due_date):
+                    out.setdefault(a.id, []).append(b.id)
+    return out
+
+
+def _brief(t: StudyTarget) -> dict[str, Any]:
+    return {"id": str(t.id), "name": t.name, "kind": t.kind, "due_date": t.due_date.isoformat(), "status": t.status}
+
+
 def create_target(db: Session, user: User, payload: TargetIn, request_id: str, *, origin: str) -> StudyTarget:
-    owned(db, Course, payload.course_id, user.id)
+    course = owned(db, Course, payload.course_id, user.id, for_update=True)  # serialises parallel chats
+    existing = find_duplicate(db, course.id, payload.name, payload.kind, payload.due_date)
+    if existing is not None:
+        raise ApiError(
+            409,
+            "target_exists",
+            f"{course.title} already has {existing.name} on {existing.due_date.isoformat()} "
+            f"(target_id {existing.id}). Update that one instead of adding it again.",
+            {"existing": _brief(existing)},
+        )
     target = StudyTarget(
         user_id=user.id,
         course_id=payload.course_id,
@@ -302,3 +347,108 @@ def update_target(
         request_id=request_id,
     )
     return target
+
+
+def _owned_target(db: Session, user: User, target_id: uuid.UUID, *, deleted: bool = False) -> StudyTarget:
+    target = db.get(StudyTarget, target_id, with_for_update=True)
+    if target is None or target.user_id != user.id or (target.deleted_at is not None) != deleted:
+        raise ApiError(404, "not_found", "Study target not found.")
+    return target
+
+
+def delete_target(db: Session, user: User, target_id: uuid.UUID, request_id: str, now: Any) -> StudyTarget:
+    """Soft delete: hidden from plans, the timeline and Claude; restorable. Simulations and answers are kept."""
+    target = _owned_target(db, user, target_id)
+    target.deleted_at = now
+    target.revision += 1
+    db.flush()
+    audit(
+        db,
+        actor_id=user.id,
+        action="target.deleted",
+        target_type="study_target",
+        target_id=target.id,
+        details=_brief(target),
+        request_id=request_id,
+    )
+    return target
+
+
+def restore_target(db: Session, user: User, target_id: uuid.UUID, request_id: str) -> StudyTarget:
+    target = _owned_target(db, user, target_id, deleted=True)
+    target.deleted_at = None
+    target.revision += 1
+    db.flush()
+    audit(
+        db,
+        actor_id=user.id,
+        action="target.restored",
+        target_type="study_target",
+        target_id=target.id,
+        details=_brief(target),
+        request_id=request_id,
+    )
+    return target
+
+
+def merge_targets(
+    db: Session, user: User, source_id: uuid.UUID, into_id: uuid.UUID, request_id: str, now: Any
+) -> StudyTarget:
+    """Fold a duplicate into the target to keep: its exam profiles and simulations move over, its scope mapping is
+    used when the kept one has none, and its own words are added to the kept one's notes. The duplicate is then
+    soft-deleted (restorable)."""
+    if source_id == into_id:
+        raise ApiError(422, "same_target", "Choose two different exams to merge.")
+    source = _owned_target(db, user, source_id)
+    into = _owned_target(db, user, into_id)
+    if source.course_id != into.course_id:
+        raise ApiError(422, "different_courses", "Only exams of the same course can be merged.")
+    moved_profiles = 0
+    for profile in db.scalars(select(TargetProfile).where(TargetProfile.target_id == source.id)):
+        profile.target_id = into.id
+        moved_profiles += 1
+    moved_quizzes = 0
+    for quiz in db.scalars(select(Quiz).where(Quiz.target_id == source.id)):
+        quiz.target_id = into.id
+        moved_quizzes += 1
+    copied_scope = 0
+    if db.scalar(select(StudyTargetScope.id).where(StudyTargetScope.target_id == into.id).limit(1)) is None:
+        for row in db.scalars(select(StudyTargetScope).where(StudyTargetScope.target_id == source.id)):
+            db.add(
+                StudyTargetScope(
+                    target_id=into.id,
+                    kind=row.kind,
+                    source_id=row.source_id,
+                    page_from=row.page_from,
+                    page_to=row.page_to,
+                    syllabus_item_id=row.syllabus_item_id,
+                    concept_id=row.concept_id,
+                )
+            )
+            copied_scope += 1
+    extra = []
+    if source.scope_description.strip() and source.scope_description.strip() != into.scope_description.strip():
+        extra.append(f"Scope (from {source.name}): {source.scope_description.strip()}")
+    if source.notes and source.notes.strip() and source.notes.strip() not in (into.notes or ""):
+        extra.append(f"Notes (from {source.name}): {source.notes.strip()}")
+    if extra:
+        into.notes = "\n\n".join([*(p for p in [into.notes] if p), *extra])[:4000]
+    into.revision += 1
+    source.deleted_at = now
+    source.revision += 1
+    db.flush()
+    audit(
+        db,
+        actor_id=user.id,
+        action="target.merged",
+        target_type="study_target",
+        target_id=into.id,
+        details={
+            "merged": _brief(source),
+            "profiles_moved": moved_profiles,
+            "simulations_moved": moved_quizzes,
+            "scope_rows_copied": copied_scope,
+        },
+        request_id=request_id,
+    )
+    return into

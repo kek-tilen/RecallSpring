@@ -7,7 +7,7 @@ English and links to the records themselves.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -41,7 +41,7 @@ from .learning import effective_status
 from .quizzes import results_view
 from .reviews import effective_assessment
 from .sources import source_view
-from .targets import active_target, live_targets, target_view
+from .targets import active_target, duplicate_groups, live_targets, target_view
 
 
 def _review(state: ReviewState | None, now: datetime) -> dict[str, Any] | None:
@@ -561,14 +561,23 @@ def courses_summary(db: Session, user: User) -> list[dict[str, Any]]:
 
 
 def targets_timeline(db: Session, user: User) -> list[dict[str, Any]]:
-    """Every exam and kolokvij of courses that are not deleted, with the course's name and colour."""
+    """Every exam and kolokvij of courses that are not deleted, with the course's name and colour, and the other
+    exams of the same course that look like the same one (possible duplicates from parallel chats)."""
     today = clock.now().astimezone(ZoneInfo(user.timezone)).date()
     rows = db.execute(
         select(StudyTarget, Course)
         .join(Course, Course.id == StudyTarget.course_id)
         .where(StudyTarget.user_id == user.id, StudyTarget.deleted_at.is_(None), Course.deleted_at.is_(None))
-        .order_by(StudyTarget.due_date)
+        .order_by(StudyTarget.due_date, StudyTarget.created_at)
     ).all()
+    dupes = duplicate_groups([t for t, _ in rows])
+    quiz_counts = dict(
+        db.execute(
+            select(Quiz.target_id, func.count())
+            .where(Quiz.user_id == user.id, Quiz.target_id.is_not(None))
+            .group_by(Quiz.target_id)
+        ).all()
+    )
     return [
         {
             **target_view(db, t, today),
@@ -577,6 +586,32 @@ def targets_timeline(db: Session, user: User) -> list[dict[str, Any]]:
             "course_color": c.color,
             "course_status": c.status,
             "revision": t.revision,
+            "created_at": t.created_at.isoformat(),
+            "simulations": quiz_counts.get(t.id, 0),
+            "duplicates": [str(d) for d in dupes.get(t.id, [])],
+        }
+        for t, c in rows
+    ]
+
+
+def deleted_targets(db: Session, user: User, days: int) -> list[dict[str, Any]]:
+    since = clock.now() - timedelta(days=days)
+    rows = db.execute(
+        select(StudyTarget, Course)
+        .join(Course, Course.id == StudyTarget.course_id)
+        .where(StudyTarget.user_id == user.id, StudyTarget.deleted_at.is_not(None), StudyTarget.deleted_at >= since)
+        .order_by(StudyTarget.deleted_at.desc())
+    ).all()
+    return [
+        {
+            "id": str(t.id),
+            "name": t.name,
+            "kind": t.kind,
+            "due_date": t.due_date.isoformat(),
+            "course_id": str(c.id),
+            "course_title": c.title,
+            "course_color": c.color,
+            "deleted_at": t.deleted_at.isoformat() if t.deleted_at else None,
         }
         for t, c in rows
     ]
