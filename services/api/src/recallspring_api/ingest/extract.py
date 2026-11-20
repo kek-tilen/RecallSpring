@@ -1,8 +1,9 @@
 """Text extraction into citable sections. Runs in a separate, time-limited process (see jobs.py).
 
-Run directly:  python -I -m recallspring_api.ingest.extract <pdf|markdown|text|docx|pptx|xlsx> <path> <max_pages>
+Run directly:  python -I -m recallspring_api.ingest.extract <kind> <path> <max_pages> [<file extension>]
 Prints one JSON object on stdout. Never executes document content; scanned PDFs are reported, not guessed.
-Word, PowerPoint and Excel files are read by office.py.
+Word, PowerPoint and Excel files are read by office.py, OpenDocument files by odf.py, CSV, subtitles, notebooks,
+code and LaTeX by formats.py. The extension (the stored file has none) tells code languages and TSV apart.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from typing import Any
 
 EXTRACTOR_VERSION = "rs-extract-1"
 MAX_SECTION_CHARS = 6000
+MAX_TEXT_CHARS = 3_000_000  # extracted text kept per file; more is cut off and reported
 PLAIN_PART_CHARS = 3000
 MIN_PAGE_CHARS = 20
 NEEDS_ATTENTION_EMPTY_SHARE = 0.3
@@ -182,13 +184,26 @@ def extract_plain(text: str) -> Result:
     return Result("ready", version, _with_offsets(sections))
 
 
-def extract(path: Path, kind: str, max_pages: int) -> Result:
+OFFICE_KINDS = ("docx", "pptx", "xlsx")
+ODF_KINDS = ("odt", "odp", "ods")
+FORMAT_KINDS = ("csv", "subtitles", "notebook", "code", "latex")
+
+
+def extract(path: Path, kind: str, max_pages: int, suffix: str = "") -> Result:
     if kind == "pdf":
         return extract_pdf(path, max_pages)
-    if kind in ("docx", "pptx", "xlsx"):
+    if kind in OFFICE_KINDS:
         from . import office
 
         return office.extract(path, kind, max_pages)
+    if kind in ODF_KINDS:
+        from . import odf
+
+        return odf.extract(path, kind, max_pages)
+    if kind in FORMAT_KINDS:
+        from . import formats
+
+        return formats.extract(path.read_bytes(), kind, suffix)
     try:
         text = decode_text(path.read_bytes())
     except UnicodeDecodeError:
@@ -215,7 +230,8 @@ def _limit_memory() -> None:
 def main(argv: list[str]) -> int:
     _limit_memory()
     kind, path, max_pages = argv[1], Path(argv[2]), int(argv[3])
-    sys.stdout.write(json.dumps(extract(path, kind, max_pages).as_dict(), ensure_ascii=False))
+    suffix = argv[4] if len(argv) > 4 else ""
+    sys.stdout.write(json.dumps(extract(path, kind, max_pages, suffix).as_dict(), ensure_ascii=False))
     return 0
 
 

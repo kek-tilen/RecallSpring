@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import uuid
 from pathlib import Path
 from typing import Any
@@ -12,8 +13,8 @@ from sqlalchemy.orm import Session
 from .. import clock
 from ..config import get_settings
 from ..errors import ApiError
-from ..ingest import jobs
-from ..ingest.storage import commit_blob, storage_key
+from ..ingest import jobs, renderer
+from ..ingest.storage import ALLOWED_EXTENSIONS, TEXT_KINDS, commit_blob, storage_key
 from ..models import ConceptSource, Source, SourceSection, User
 from ..schemas import SectionOut, SourceOut
 from .events import learning_event
@@ -30,6 +31,9 @@ PARSE_MESSAGES = {
     "unsafe_document": "This file contains XML features RecallSpring never reads (DTD or entities), so it was skipped.",
     "empty_document": "The document contains no text.",
     "unsupported_encoding": "The text file is not UTF-8. Save it as UTF-8 and upload it again.",
+    "csv_unreadable": "This CSV file could not be read (a broken quote or a very long cell). Save it again.",
+    "no_subtitle_cues": "No subtitle cues were found. Is it an .srt or .vtt file with timings?",
+    "notebook_unreadable": "This notebook could not be read. Open it in Jupyter, save it again and retry.",
     "extraction_timeout": "Text extraction took too long. Try a smaller file or paste the content.",
     "extraction_crashed": "Text extraction failed unexpectedly. You can retry.",
 }
@@ -44,11 +48,20 @@ KIND_PARSE_MESSAGES = {
         "slides then."
     ),
     ("no_extractable_text", "xlsx"): "This spreadsheet has no visible cells with values.",
+    ("no_extractable_text", "odt"): (
+        "This document has no text or pictures RecallSpring can read. Export it as PDF: Claude can look at its pages."
+    ),
+    ("no_extractable_text", "odp"): (
+        "These slides have no text or pictures RecallSpring can read. Export them as PDF: Claude can look at whole "
+        "slides then."
+    ),
+    ("no_extractable_text", "ods"): "This spreadsheet has no visible cells with values.",
 }
 
 SUPPORTED_FILES = (
-    "PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), Markdown (.md), plain text (.txt) "
-    "and images (.png, .jpg, .webp)"
+    "PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), OpenDocument (.odt, .odp, .ods), Markdown (.md), "
+    "plain text (.txt), CSV/TSV, subtitles (.srt, .vtt), Jupyter notebooks (.ipynb), LaTeX (.tex), source code "
+    "(.py, .java, .c, .js, .sql and more) and images (.png, .jpg, .webp)"
 )
 
 UPLOAD_ERRORS = {
@@ -61,12 +74,12 @@ UPLOAD_ERRORS = {
     ),
     "office_protected": (
         415,
-        "This file is password-protected or in the old Office format. Remove the password or save it as "
-        ".docx, .pptx or .xlsx, then upload it again.",
+        "This file is password-protected or in an old format. Remove the password, or save it as .docx, "
+        ".pptx, .xlsx or OpenDocument (.odt, .odp, .ods), then upload it again.",
     ),
     "office_unreadable": (
         415,
-        "This file could not be opened as a Word, PowerPoint or Excel document. Save it again and retry.",
+        "This file could not be opened as a Word, PowerPoint, Excel or OpenDocument file. Save it again and retry.",
     ),
     "document_too_large": (413, "This file has too many parts to read safely. Split it or export a PDF."),
     "content_does_not_match_type": (415, "The file content does not match its extension."),
@@ -77,6 +90,62 @@ UPLOAD_ERRORS = {
 def upload_error(code: str) -> ApiError:
     status, message = UPLOAD_ERRORS[code]
     return ApiError(status, code, message)
+
+
+def megabytes(n: int) -> str:
+    return f"{n / 1024**3:g} GB" if n >= 1024**3 else f"{round(n / 1024**2)} MB"
+
+
+def file_too_large(filename: str, limit: int) -> ApiError:
+    return ApiError(
+        413,
+        "file_too_large",
+        f"{filename} is larger than {megabytes(limit)}, the limit for this type of file. Split it, or compress a PDF "
+        "(scans and pictures make files large; the text stays small).",
+        {"limit_bytes": limit},
+    )
+
+
+def upload_limits(db: Session, user: User) -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "document_bytes": settings.max_upload_bytes,
+        "text_bytes": settings.max_text_upload_bytes,
+        "image_bytes": settings.max_image_upload_bytes,
+        "library_bytes": settings.max_library_bytes,
+        "library_used_bytes": _library_bytes(db, user.id),
+        "page_renderer_available": renderer.available(),
+        "extensions": {
+            group: sorted(ext for ext, (kind, _) in ALLOWED_EXTENSIONS.items() if _group(kind) == group)
+            for group in ("document", "text", "image")
+        },
+    }
+
+
+def _group(kind: str) -> str:
+    return "text" if kind in TEXT_KINDS else "image" if kind == "image" else "document"
+
+
+def _check_space(db: Session, user: User, size: int) -> None:
+    settings = get_settings()
+    if _library_bytes(db, user.id) + size > settings.max_library_bytes:
+        raise ApiError(
+            413,
+            "library_full",
+            f"Your library has reached its storage limit ({megabytes(settings.max_library_bytes)}). Delete files "
+            "you no longer need, or raise the limit (RS_MAX_LIBRARY_BYTES).",
+        )
+    try:
+        free = shutil.disk_usage(settings.storage_dir).free
+    except OSError:  # pragma: no cover - storage_dir is created at start-up
+        return
+    if free - size < settings.min_free_disk_bytes:
+        raise ApiError(
+            507,
+            "storage_low",
+            "The disk RecallSpring stores files on is almost full, so uploads are paused to protect the server. "
+            "Free some space, then upload again.",
+        )
 
 
 def parse_message(source: Source) -> str | None:
@@ -174,9 +243,12 @@ def create_source(
         .order_by(Source.uploaded_at)
         .limit(1)
     )
-    if existing is None and _library_bytes(db, user.id) + size > get_settings().max_library_bytes:
-        tmp.unlink(missing_ok=True)
-        raise ApiError(413, "library_full", "Your library has reached its storage limit.")
+    if existing is None:
+        try:
+            _check_space(db, user, size)
+        except ApiError:
+            tmp.unlink(missing_ok=True)
+            raise
     key = storage_key(user.id, sha256)
     commit_blob(tmp, key)
     source = Source(

@@ -14,6 +14,7 @@ import time
 import uuid
 from collections.abc import Callable
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import or_, select
@@ -70,14 +71,12 @@ def _claim(db: Session) -> Job | None:
 # ---------------------------------------------------------------- extract_source
 
 
-def run_extraction(kind: str, path: str, max_pages: int) -> extractor.Result:
+def run_extraction(kind: str, path: str, max_pages: int, suffix: str = "") -> extractor.Result:
     """Run the extractor in a separate Python process with a wall-clock timeout."""
     settings = get_settings()
     if settings.extraction_isolation == "inprocess":
-        from pathlib import Path
-
-        return extractor.extract(Path(path), kind, max_pages)
-    cmd = [sys.executable, "-I", "-m", "recallspring_api.ingest.extract", kind, path, str(max_pages)]
+        return extractor.extract(Path(path), kind, max_pages, suffix)
+    cmd = [sys.executable, "-I", "-m", "recallspring_api.ingest.extract", kind, path, str(max_pages), suffix]
     try:
         proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
             cmd, capture_output=True, timeout=settings.extraction_timeout_seconds, check=False
@@ -94,12 +93,13 @@ def run_extraction(kind: str, path: str, max_pages: int) -> extractor.Result:
         raise JobFailure("extraction_crashed") from exc
 
 
-def _start_extract(db: Session, job: Job) -> tuple[str, str, int] | None:
+def _start_extract(db: Session, job: Job) -> tuple[str, str, int, str] | None:
     source = db.get(Source, uuid.UUID(job.payload["source_id"]))
     if source is None or source.deleted_at is not None or source.version != job.payload["version"]:
         return None  # superseded or removed: nothing to do
     source.parse_state = "processing"
-    return source.kind, str(blob_path(source.storage_key)), get_settings().max_pdf_pages
+    suffix = Path(source.filename).suffix.lower()[:20]
+    return source.kind, str(blob_path(source.storage_key)), get_settings().max_pdf_pages, suffix
 
 
 def _finish_extract(db: Session, job: Job, result: extractor.Result) -> None:

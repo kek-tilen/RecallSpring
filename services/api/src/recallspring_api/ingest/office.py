@@ -26,6 +26,7 @@ from xml.etree import ElementTree as ET
 from .extract import (
     EXTRACTOR_VERSION,
     MAX_SECTION_CHARS,
+    MAX_TEXT_CHARS,
     MIN_PAGE_CHARS,
     NEEDS_ATTENTION_EMPTY_SHARE,
     Blocks,
@@ -40,7 +41,6 @@ from .extract import (
 MAX_ENTRIES = 10_000
 MAX_PART_BYTES = 64 * 1024 * 1024
 MAX_TOTAL_BYTES = 256 * 1024 * 1024
-MAX_TEXT_CHARS = 3_000_000  # extracted text kept per file; more is cut off and reported
 
 MAIN_CONTENT_TYPES = {
     "docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"},
@@ -792,12 +792,33 @@ def _sheet_rows(
     return rows
 
 
-def _sheet_section(sheet: str, rows: list[tuple[int, str]], header: str) -> Section:
-    """Rows of one sheet; later parts repeat the first row so the columns stay readable."""
+def _sheet_section(sheet: str | None, rows: list[tuple[int, str]], header: str) -> Section:
+    """Rows of one sheet; later parts refer to the first row so the columns stay readable."""
     body = "\n".join(line for _, line in rows)
     if rows[0][1] != header:
         body = f"(columns as in {header})\n{body}"
-    return Section(0, f"{sheet[:60]}, rows {rows[0][0]}–{rows[-1][0]}", body, heading=sheet[:300])
+    label = f"rows {rows[0][0]}–{rows[-1][0]}"
+    return Section(0, f"{sheet[:60]}, {label}" if sheet else label, body, heading=sheet[:300] if sheet else None)
+
+
+def table_sections(sheet: str | None, lines: list[tuple[int, str]], chars: int) -> tuple[list[Section], int, bool]:
+    """Numbered row lines cut into sections of at most MAX_SECTION_CHARS. Shared by Excel, OpenDocument
+    spreadsheets and CSV. Returns the sections, the characters used so far, and whether the text cap was hit."""
+    chunks: list[list[tuple[int, str]]] = [[]]
+    size = 0
+    truncated = False
+    for number, line in lines:
+        if chars > MAX_TEXT_CHARS:
+            truncated = True
+            break
+        line = line[: MAX_SECTION_CHARS // 2]
+        if chunks[-1] and size + len(line) > MAX_SECTION_CHARS:
+            chunks.append([])
+            size = 0
+        chunks[-1].append((number, line))
+        size += len(line) + 1
+        chars += len(line) + 1
+    return [_sheet_section(sheet, chunk, lines[0][1]) for chunk in chunks if chunk], chars, truncated
 
 
 def extract_xlsx(package: Package, version: str, max_pages: int) -> Result:
@@ -835,20 +856,8 @@ def extract_xlsx(package: Package, version: str, max_pages: int) -> Result:
             (number, f"Row {number}: " + " | ".join(cells.get(c, "") for c in range(first_col, max(cells) + 1)))
             for number, cells in rows
         ]
-        chunks: list[list[tuple[int, str]]] = [[]]
-        size = 0
-        for number, line in lines:
-            if chars > MAX_TEXT_CHARS:
-                truncated = True
-                break
-            line = line[: MAX_SECTION_CHARS // 2]
-            if chunks[-1] and size + len(line) > MAX_SECTION_CHARS:
-                chunks.append([])
-                size = 0
-            chunks[-1].append((number, line))
-            size += len(line) + 1
-            chars += len(line) + 1
-        sections.extend(_sheet_section(name, chunk, lines[0][1]) for chunk in chunks if chunk)
+        found, chars, truncated = table_sections(name, lines, chars)
+        sections.extend(found)
         if truncated:
             break
     notes = _media_note(package, "xlsx")

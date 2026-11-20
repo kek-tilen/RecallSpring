@@ -103,16 +103,34 @@ def test_upload_rejects_disallowed_or_mismatched_files(
 
 def test_upload_size_and_library_limits(owner_api: Api, monkeypatch: pytest.MonkeyPatch) -> None:
     cid = course(owner_api)
-    monkeypatch.setattr(get_settings(), "max_upload_bytes", 100)
+    monkeypatch.setattr(get_settings(), "max_text_upload_bytes", 100)
     r = owner_api.upload(cid, "big.txt", b"x" * 101)
     assert r.status_code == 413 and r.json()["code"] == "file_too_large"
+    assert "the limit for this type of file" in r.json()["message"]
+    assert owner_api.upload(cid, "big.pdf", make_pdf(["Dovolj majhen dokument"])).status_code == 201  # other limit
 
-    monkeypatch.setattr(get_settings(), "max_upload_bytes", 10_000)
-    monkeypatch.setattr(get_settings(), "max_library_bytes", 150)
+    monkeypatch.setattr(get_settings(), "max_text_upload_bytes", 10_000)
+    monkeypatch.setattr(get_settings(), "max_library_bytes", 150 + used_bytes(owner_api))
     assert owner_api.upload(cid, "a.txt", b"a" * 100).status_code == 201
     full = owner_api.upload(cid, "b.txt", b"b" * 100)
     assert full.status_code == 413 and full.json()["code"] == "library_full"
     assert owner_api.upload(cid, "a-again.txt", b"a" * 100).status_code == 201  # identical content uses no space
+
+
+def used_bytes(api: Api) -> int:
+    return api.get("/sources/limits").json()["library_used_bytes"]
+
+
+def test_upload_limits_are_reported_and_a_low_disk_pauses_uploads(
+    owner_api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    limits = owner_api.get("/sources/limits").json()
+    assert limits["document_bytes"] == 100 * 1024**2 and limits["text_bytes"] == 10 * 1024**2
+    assert limits["image_bytes"] == 20 * 1024**2 and limits["library_bytes"] == 2 * 1024**3
+    monkeypatch.setattr(get_settings(), "min_free_disk_bytes", 10**18)
+    r = owner_api.upload(course(owner_api), "notes.txt", b"Kratki zapiski")
+    assert r.status_code == 507 and r.json()["code"] == "storage_low"
+    assert source_count() == 0
 
 
 def test_duplicate_upload_is_flagged_and_not_merged_across_courses(owner_api: Api) -> None:

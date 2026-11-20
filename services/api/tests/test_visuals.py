@@ -116,7 +116,8 @@ def test_word_pictures_are_numbered_once_and_viewable(owner_api: Api, conn: Conn
     shown = conn.get(f"/sources/{source['id']}/visual", picture=2).json()
     assert [(i["label"], i["alt"]) for i in shown["images"]] == [("picture 2", None)] and shown["count"] == 2
     assert conn.get(f"/sources/{source['id']}/visual", picture=3).json()["code"] == "picture_out_of_range"
-    assert conn.get(f"/sources/{source['id']}/visual", page=1).json()["code"] == "picture_required"
+    assert conn.get(f"/sources/{source['id']}/visual").json()["code"] == "picture_required"
+    assert conn.get(f"/sources/{source['id']}/visual", page=1).json()["code"] == "page_needs_renderer"
 
 
 def test_word_document_of_only_pictures_needs_attention_not_invented_text(owner_api: Api) -> None:

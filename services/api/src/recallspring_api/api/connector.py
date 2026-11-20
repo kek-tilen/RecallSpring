@@ -23,7 +23,7 @@ from ..connector_auth import connector_ctx, connector_write_ctx
 from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, replay_if_seen
 from ..errors import ApiError
-from ..ingest import visuals
+from ..ingest import renderer, visuals
 from ..ingest.storage import blob_path
 from ..models import (
     Assessment,
@@ -992,30 +992,48 @@ def source_image(source_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Se
     source = owned(db, Source, source_id, ctx.user.id)
     if source.kind != "image":
         raise ApiError(409, "not_an_image", "This material is not an image; read its sections instead.")
-    if source.byte_size > IMAGE_LIMIT_FOR_CLAUDE:
-        raise ApiError(
-            413, "image_too_large", "The image is larger than 4.5 MB. Upload a smaller photo in the web app."
-        )
     path = blob_path(source.storage_key)
     if not path.is_file():
         raise ApiError(410, "original_missing", "The original file is no longer available.")
-    return Response(path.read_bytes(), media_type=source.mime_type, headers={"Cache-Control": "private, no-store"})
+    headers = {"Cache-Control": "private, no-store"}
+    if source.byte_size <= IMAGE_LIMIT_FOR_CLAUDE:
+        return Response(path.read_bytes(), media_type=source.mime_type, headers=headers)
+    settings = get_settings()  # a large photo: a smaller copy, made in the isolated render process
+    try:
+        result = visuals.run(
+            "image", path, 0, 0, isolation=settings.extraction_isolation, timeout=settings.extraction_timeout_seconds
+        )
+    except visuals.VisualFailure as exc:
+        raise _visual_error(exc.code, 0) from exc
+    if not result.images:
+        raise ApiError(413, "image_too_large", "This photo could not be made small enough for Claude.")
+    smaller = result.images[0]
+    return Response(smaller.data, media_type=smaller.mime, headers={**headers, "X-RS-Converted": "true"})
 
 
 VISUAL_ERRORS = {
-    "page_required": (422, "Give the page number (PDF) or the slide number (PowerPoint)."),
-    "picture_required": (
+    "page_required": (422, "Give the page number (PDF) or the slide number (PowerPoint, OpenDocument slides)."),
+    "picture_required": (422, "Give picture=N, as shown by [picture N] in the text."),
+    "page_needs_renderer": (
         422,
-        "Word documents have no fixed pages: give picture=N, as shown by [picture N] in the document's text.",
+        "Pages of Word and OpenDocument text files can be shown only when LibreOffice is installed with "
+        "RecallSpring. Give picture=N (as [picture N] in the text) instead, or ask the learner for a PDF export.",
     ),
     "page_out_of_range": (422, "There is no such page or slide. This file has {count}."),
     "picture_out_of_range": (422, "There is no picture with that number here."),
     "no_pictures": (
         404,
-        "This slide has no embedded pictures. Shapes, SmartArt and charts can't be shown as an image: their text "
-        "is in the slide's section; for the drawing itself ask the learner for a screenshot or a PDF export.",
+        "This slide has no embedded pictures. Its shapes, SmartArt and charts can be shown as a whole slide when "
+        "LibreOffice is installed with RecallSpring; until then their text is in the slide's section, and for the "
+        "drawing itself ask the learner for a screenshot or a PDF export.",
     ),
-    "no_visuals": (409, "Only PDF pages and pictures inside Word or PowerPoint files can be viewed this way."),
+    "no_visuals": (
+        409,
+        "Only PDF pages, slides, and pictures inside Word, PowerPoint, OpenDocument files and notebooks can be "
+        "viewed this way.",
+    ),
+    "notebook_unreadable": (422, "This notebook could not be opened to show its pictures."),
+    "office_protected": (409, "This file is password-protected, so its pictures can't be shown."),
     "pdf_encrypted": (409, "This PDF is password-protected, so its pages can't be shown."),
     "pdf_unreadable": (422, "This PDF could not be opened to show its pages."),
     "render_failed": (422, "This page could not be rendered."),
@@ -1024,12 +1042,16 @@ VISUAL_ERRORS = {
     "unsafe_document": (422, "This file contains XML features RecallSpring never reads."),
     "content_does_not_match_type": (422, "This file could not be opened to show its pictures."),
     "render_timeout": (504, "Showing this page took too long. Try again, or ask the learner for a screenshot."),
+    "renderer_unavailable": (422, "Whole pages of this file can be shown only when LibreOffice is installed."),
     "render_crashed": (502, "Showing this page failed unexpectedly. You can retry."),
 }
 SKIP_REASONS = {
-    "vector_drawing": "a vector drawing (EMF/WMF/SVG) that can't be shown; ask the learner for a screenshot",
-    "unsupported_format": "a picture format that can't be shown (e.g. TIFF or BMP); ask for a screenshot",
-    "too_large": "too large to send to Claude; ask the learner for a screenshot",
+    "vector_drawing": (
+        "a vector drawing (EMF/WMF/SVG); view the whole slide or page instead (needs LibreOffice with "
+        "RecallSpring), or ask the learner for a screenshot"
+    ),
+    "unsupported_format": "a picture format that can't be shown; ask the learner for a screenshot",
+    "too_large": "too large for Claude even when made smaller; ask the learner for a screenshot",
     "limit": "not sent in this call (at most 4 pictures per call); ask for it with picture=N",
     "missing": "the file has no data for it",
 }
@@ -1040,6 +1062,9 @@ def _visual_error(code: str, count: int) -> ApiError:
     return ApiError(status, code, message.format(count=count), {"count": count})
 
 
+VISUAL_KINDS = {"pdf", "pptx", "docx", "odp", "odt", "notebook"}
+
+
 @router.get("/sources/{source_id}/visual")
 def source_visual(
     source_id: uuid.UUID,
@@ -1048,19 +1073,32 @@ def source_visual(
     ctx: Ctx = Depends(connector_ctx),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """A PDF page rendered as an image, or the pictures inside a PowerPoint slide or Word document, so Claude can
-    look at scanned pages, diagrams and formulas. Rendering runs in a separate, time-limited process."""
+    """A PDF page rendered as an image, a whole slide or page of an Office/OpenDocument file (when LibreOffice is
+    installed), or the pictures inside a slide, document or notebook, so Claude can look at scanned pages,
+    diagrams and formulas. Rendering runs in a separate, time-limited process."""
     source = owned(db, Source, source_id, ctx.user.id)
-    if source.kind not in ("pdf", "pptx", "docx"):
+    if source.kind not in VISUAL_KINDS:
         raise _visual_error("no_visuals", 0)
     path = blob_path(source.storage_key)
     if not path.is_file():
         raise ApiError(410, "original_missing", "The original file is no longer available.")
     settings = get_settings()
+    kind, target, whole = source.kind, path, False
+    if source.kind in renderer.RENDERABLE and page and not picture:
+        slides = source.kind in ("pptx", "odp")
+        if renderer.available():
+            try:
+                target = renderer.to_pdf(path, source.sha256, source.kind)
+                kind, whole = ("rendered-slides" if slides else "rendered-pages"), True
+            except renderer.RenderFailure as exc:
+                if not slides:  # slides fall back to their own pictures
+                    raise _visual_error(exc.code, 0) from exc
+        elif not slides:
+            raise _visual_error("page_needs_renderer", 0)
     try:
         result = visuals.run(
-            source.kind,
-            path,
+            kind,
+            target,
             page or 0,
             picture or 0,
             isolation=settings.extraction_isolation,
@@ -1075,8 +1113,15 @@ def source_visual(
         "filename": source.filename,
         "kind": source.kind,
         "count": result.count,
+        "whole_page": whole,
         "images": [
-            {"label": v.label, "mime": v.mime, "alt": v.alt, "data": base64.b64encode(v.data).decode("ascii")}
+            {
+                "label": v.label,
+                "mime": v.mime,
+                "alt": v.alt,
+                "converted": v.converted,
+                "data": base64.b64encode(v.data).decode("ascii"),
+            }
             for v in result.images
         ],
         "skipped": [{"label": s.label, "reason": s.reason, "message": SKIP_REASONS[s.reason]} for s in result.skipped],

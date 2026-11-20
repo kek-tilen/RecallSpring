@@ -8,13 +8,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..config import get_settings
 from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
 from ..ingest import jobs
 from ..ingest.storage import (
-    OFFICE_KINDS,
+    PACKAGE_KINDS,
+    TEXT_KINDS,
     StorageError,
     blob_path,
     check_office_package,
@@ -23,6 +23,7 @@ from ..ingest.storage import (
     sniff,
     spool,
     spool_bytes,
+    upload_limit,
 )
 from ..models import Course, Source, SourceSection
 from ..schemas import (
@@ -53,8 +54,8 @@ def upload_source(
     ctx: WriteCtx = Depends(write_ctx),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Multipart upload of a PDF, Word, PowerPoint, Excel, Markdown, text or image file. Extraction runs in the
-    worker; poll GET /sources/{id}.
+    """Multipart upload of a PDF, Office or OpenDocument file, Markdown/text, CSV, subtitles, notebook, code,
+    LaTeX or image file (see SUPPORTED_FILES). Extraction runs in the worker; poll GET /sources/{id}.
 
     In production the reverse proxy must also cap the request body (client_max_body_size)."""
     return handle_upload(request, course_id, file, ctx, db, category)
@@ -64,22 +65,24 @@ def handle_upload(
     request: Request, course_id: uuid.UUID, file: UploadFile, ctx: WriteCtx, db: Session, category: str = "material"
 ) -> JSONResponse:
     """Shared by the web app and the connector (local file import)."""
-    settings = get_settings()
-    declared = int(request.headers.get("content-length") or 0)
-    if declared > settings.max_upload_bytes + MULTIPART_OVERHEAD:
-        raise svc.upload_error("file_too_large")
-    owned(db, Course, course_id, ctx.user.id)
     filename = sanitize_filename(file.filename)
+    limit = upload_limit(filename)
+    declared = int(request.headers.get("content-length") or 0)
+    if declared > limit + MULTIPART_OVERHEAD:
+        raise svc.file_too_large(filename, limit)
+    owned(db, Course, course_id, ctx.user.id)
     try:
-        tmp, sha256, size = spool(file.file, settings.max_upload_bytes)
+        tmp, sha256, size = spool(file.file, limit)
     except StorageError as exc:
+        if exc.code == "file_too_large":
+            raise svc.file_too_large(filename, limit) from exc
         raise svc.upload_error(exc.code) from exc
     try:
         with tmp.open("rb") as fh:
             kind, mime = sniff(fh.read(16), filename)
-        if kind in ("markdown", "text"):
-            check_text_encoding(tmp)
-        elif kind in OFFICE_KINDS:
+        if kind in TEXT_KINDS or kind == "notebook":
+            check_text_encoding(tmp, kind)
+        elif kind in PACKAGE_KINDS:
             check_office_package(tmp, kind)
     except StorageError as exc:
         tmp.unlink(missing_ok=True)
@@ -159,6 +162,12 @@ def search(
 ) -> SearchOut:
     rows = svc.search_sections(db, ctx.user.id, q, course_id, limit)
     return SearchOut(hits=[SearchHitOut(**dict(r)) for r in rows])
+
+
+@router.get("/sources/limits")
+def upload_limits(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Upload limits per kind of file and how much of the library is used (the web app shows both)."""
+    return svc.upload_limits(db, ctx.user)
 
 
 @router.get("/sources/{source_id}", response_model=SourceOut)

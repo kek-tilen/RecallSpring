@@ -39,6 +39,7 @@ os.environ.update(
         "RS_MOCK_AI_BEHAVIOR": "normal",
         "RS_STORAGE_DIR": tempfile.mkdtemp(prefix="recallspring-test-storage-"),
         "RS_EXTRACTION_ISOLATION": "inprocess",  # one dedicated test covers the subprocess path
+        "RS_OFFICE_RENDERER": "off",  # results must not depend on LibreOffice being installed; tests fake it
     }
 )
 

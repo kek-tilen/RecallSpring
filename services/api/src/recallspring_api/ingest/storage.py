@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from ..config import get_settings
+from .formats import CODE_LANGUAGES
 
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _KEY = re.compile(r"^[0-9a-f-]{36}/[0-9a-f]{2}/[0-9a-f]{64}$")
@@ -36,12 +37,43 @@ ALLOWED_EXTENSIONS = {
     ".pptx": ("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
     ".ppsx": ("pptx", "application/vnd.openxmlformats-officedocument.presentationml.slideshow"),
     ".xlsx": ("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    # OpenDocument (LibreOffice, OpenOffice, Google Docs exports), read like Office files (odf.py).
+    ".odt": ("odt", "application/vnd.oasis.opendocument.text"),
+    ".odp": ("odp", "application/vnd.oasis.opendocument.presentation"),
+    ".ods": ("ods", "application/vnd.oasis.opendocument.spreadsheet"),
+    # Text formats (formats.py): tables, lecture subtitles/transcripts, notebooks and LaTeX. Never executed.
+    ".csv": ("csv", "text/csv"),
+    ".tsv": ("csv", "text/tab-separated-values"),
+    ".srt": ("subtitles", "application/x-subrip"),
+    ".vtt": ("subtitles", "text/vtt"),
+    ".ipynb": ("notebook", "application/x-ipynb+json"),
+    ".tex": ("latex", "application/x-tex"),
+    # Source code: kept as text with its language, never run.
+    **{ext: ("code", "text/plain") for ext in CODE_LANGUAGES},
 }
 OFFICE_KINDS = {"docx", "pptx", "xlsx"}
+ODF_KINDS = {"odt", "odp", "ods"}
+PACKAGE_KINDS = OFFICE_KINDS | ODF_KINDS  # ZIP packages
+LENIENT_TEXT_KINDS = {"csv", "subtitles"}  # Windows-1250 is accepted (and reported) when not UTF-8
 # Old binary formats, macro-enabled files and templates: refused with a "save it as .docx/.pptx/.xlsx" hint.
 UNSUPPORTED_OFFICE = {".doc", ".ppt", ".pps", ".xls", ".docm", ".pptm", ".xlsm", ".dotx", ".potx", ".xltx", ".rtf"}
 ZIP_MAGIC = b"PK\x03\x04"
 OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # password-protected Office files and the old formats
+
+# Kinds whose files are plain text: they get the smaller text upload limit.
+TEXT_KINDS = {"markdown", "text", "csv", "subtitles", "code", "latex"}
+
+
+def upload_limit(filename: str) -> int:
+    """The size limit for a file of this type (by extension; the content is checked after upload)."""
+    settings = get_settings()
+    kind = ALLOWED_EXTENSIONS.get(Path(filename).suffix.lower(), ("", ""))[0]
+    if kind in TEXT_KINDS:
+        return settings.max_text_upload_bytes
+    if kind == "image":
+        return settings.max_image_upload_bytes
+    return settings.max_upload_bytes
+
 
 IMAGE_MAGIC = {
     "image/png": lambda h: h.startswith(b"\x89PNG\r\n\x1a\n"),
@@ -131,7 +163,7 @@ def sniff(head: bytes, filename: str) -> tuple[str, str]:
     if ext not in ALLOWED_EXTENSIONS:
         raise StorageError("unsupported_file_type")
     kind, mime = ALLOWED_EXTENSIONS[ext]
-    if kind in OFFICE_KINDS:
+    if kind in PACKAGE_KINDS:
         if head.startswith(OLE_MAGIC):
             raise StorageError("office_protected")
         if not head.startswith(ZIP_MAGIC):
@@ -144,24 +176,31 @@ def sniff(head: bytes, filename: str) -> tuple[str, str]:
         raise StorageError("content_does_not_match_type")
     if kind == "image" and not IMAGE_MAGIC[mime](head):
         raise StorageError("content_does_not_match_type")
+    if kind == "notebook" and not head.lstrip(b"\xef\xbb\xbf \t\r\n").startswith(b"{"):
+        raise StorageError("content_does_not_match_type")
     return kind, mime
 
 
 def check_office_package(path: Path, kind: str) -> None:
-    """A real, readable Word/PowerPoint/Excel package of the declared kind (reads only the package index)."""
+    """A real, readable Office or OpenDocument package of the declared kind (reads only the package index)."""
+    from . import odf
     from .office import PackageError, check_package
 
+    passed_on = ("content_does_not_match_type", "document_too_large", "office_protected")
     try:
-        check_package(path, kind)
+        if kind in ODF_KINDS:
+            odf.check_package(path, kind)
+        else:
+            check_package(path, kind)
     except PackageError as exc:
-        code = exc.code if exc.code in ("content_does_not_match_type", "document_too_large") else "office_unreadable"
-        raise StorageError(code) from exc
+        raise StorageError(exc.code if exc.code in passed_on else "office_unreadable") from exc
 
 
-def check_text_encoding(path: Path) -> None:
+def check_text_encoding(path: Path, kind: str = "text") -> None:
     from .extract import decode_text
+    from .formats import decode_lenient
 
     try:
-        decode_text(path.read_bytes())
+        (decode_lenient if kind in LENIENT_TEXT_KINDS else decode_text)(path.read_bytes())
     except UnicodeDecodeError as exc:
         raise StorageError("unsupported_encoding") from exc

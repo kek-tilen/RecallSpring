@@ -38,12 +38,21 @@ class Settings(BaseSettings):
 
     # Sources (docs/08 → Files). Originals are stored privately under storage_dir, keyed by content hash.
     storage_dir: Path = _REPO_ROOT / "local-data" / "storage"
-    max_upload_bytes: int = 30 * 1024 * 1024
-    max_library_bytes: int = 250 * 1024 * 1024
+    # Upload limits per kind of file (docs/10 -> Upload limits). Documents carry pictures; text needs far less.
+    max_upload_bytes: int = 100 * 1024 * 1024  # PDF, Word/PowerPoint/Excel, OpenDocument, notebooks
+    max_text_upload_bytes: int = 10 * 1024 * 1024  # Markdown, text, CSV, subtitles, code, LaTeX
+    max_image_upload_bytes: int = 20 * 1024 * 1024  # photos (Claude gets a smaller copy)
+    max_library_bytes: int = 2 * 1024**3  # all originals of one learner (identical files count once)
+    min_free_disk_bytes: int = 2 * 1024**3  # uploads pause before the disk, shared with other apps, runs low
     max_pdf_pages: int = 600
     extraction_timeout_seconds: int = 120
     # "subprocess" isolates parser crashes and enforces the timeout; "inprocess" is only for fast tests.
     extraction_isolation: Literal["subprocess", "inprocess"] = "subprocess"
+    # Optional page renderer (renderer.py, docs/08): LibreOffice turns Office/OpenDocument files into PDF pages so
+    # Claude can look at whole slides and pages. "auto" uses it when installed; the path overrides the search.
+    office_renderer: Literal["auto", "off"] = "auto"
+    office_renderer_path: Path | None = None
+    office_render_timeout_seconds: int = 120
     job_lease_seconds: int = 300
     job_max_attempts: int = 3
 
