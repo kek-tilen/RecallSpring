@@ -1,6 +1,6 @@
 # ADR-007 — Personal interests, university first and a focus period
 
-- **Status:** Accepted by owner, 2026-11-21
+- **Status:** Accepted by owner, 2026-11-20
 - **Extends:** ADR-005 (`plan-v1`) to `plan-v2`; ADR-006 (learning first) applies unchanged
 
 ## Context
