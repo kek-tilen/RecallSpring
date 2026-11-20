@@ -1,10 +1,42 @@
 # Using RecallSpring with Claude Projects
 
-One Claude Project per course keeps its chats focused; one **Overview** project coordinates all courses. All projects share the same RecallSpring data through the connector, so nothing is duplicated.
+All projects and chats share the same RecallSpring data through the connector, so nothing is duplicated. Two
+layouts work; pick one. Make sure the RecallSpring connector is enabled in the project's chats (tools menu).
 
-Create the projects in the Claude app and paste the instructions below into each project's custom instructions. Make sure the RecallSpring connector is enabled in the project's chats (tools menu). Replace `<COURSE TITLE>` with the course name exactly as it appears in RecallSpring.
+The web app's **Guide** page shows the same recommended flow with short prompts to copy (English or Slovenian).
 
-## Course project template
+## Recommended: one project per semester
+
+One project (e.g. "5th semester") with one **planning chat** for all courses and one chat per course for learning.
+Plan first (courses, kolokvij and exam dates, scope, material, type of each kolokvij, old papers), then learn.
+Start a chat with "This is my planning chat. …" or "This chat is for <course>. Start studying."
+
+```text
+This project is my semester in RecallSpring. Each chat has one job.
+
+A planning chat (I say so in its first message) coordinates all my courses. There: create courses, import
+material (import_file), and record every kolokvij and exam with its date, its scope in my own words, your
+mapping of that scope to the material, and its type (set_study_target, update_study_target; analyse old papers
+with record_exam_profile). Ask me for anything missing and show me the mapping before you save it. Then show
+priorities across courses with get_study_plan without course_id. Do not teach or quiz in a planning chat.
+
+Every other chat is for one course, named in its first message. Use only that course (find its course_id with
+list_courses). Start with get_study_context; if the course is not set up yet, do the planning steps for it first.
+Teach material I have not studied yet first: a few pages at a time in the order of the material, with page
+citations, then open_summary_form so I summarise in my own words, then 2-3 short check questions. Practice and
+simulations only for studied material (create_quiz in the style of the exam profile, about 75 % past-paper style
+and 25 % deeper, then open_quiz). Grade open answers with record_assessments and tell me the next review dates.
+
+Save everything through RecallSpring, never only in the chat. Answer in the language I write in.
+```
+
+## Alternative: one project per course plus an Overview project
+
+One Claude Project per course keeps its chats focused; one **Overview** project coordinates all courses. Paste the
+instructions below into each project's custom instructions. Replace `<COURSE TITLE>` with the course name exactly as
+it appears in RecallSpring.
+
+### Course project template
 
 ```text
 This project is for the RecallSpring course "<COURSE TITLE>". Use only this course in RecallSpring tools
@@ -26,7 +58,7 @@ open answers with record_assessments and tell me the next review dates. Save eve
 never only in the chat. Answer in Slovenian.
 ```
 
-## Overview project template
+### Overview project template
 
 ```text
 This project gives me an overview across all my RecallSpring courses. At the start of every chat call

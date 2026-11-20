@@ -5,6 +5,7 @@ import { setTimezone } from "./format";
 import { ConceptPage } from "./pages/Concept";
 import { CoursePage } from "./pages/Course";
 import { CoursesPage } from "./pages/Courses";
+import { GuidePage } from "./pages/Guide";
 import { HistoryPage } from "./pages/History";
 import { HomePage } from "./pages/Home";
 import { LibraryPage, SourcePage } from "./pages/Library";
@@ -61,6 +62,7 @@ export const router = createBrowserRouter([
           { path: "notes", element: <NotesPage /> },
           { path: "notes/:noteId", element: <NotePage /> },
           { path: "history", element: <HistoryPage /> },
+          { path: "guide", element: <GuidePage /> },
           { path: "settings", element: <SettingsPage /> },
           { path: "*", element: <NotFound /> },
         ],

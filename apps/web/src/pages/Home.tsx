@@ -43,8 +43,8 @@ export function HomePage() {
 
               {d.counts.courses === 0 ? (
                 <Empty title="Add your first course">
-                  In Claude, open your RecallSpring course project and say “Start studying”, or ask Claude to create a course and import
-                  your material. Everything Claude saves appears here.
+                  Start with a planning chat in Claude: tell it your courses, kolokvij dates, scope and material. The{" "}
+                  <Link to="/guide">Guide</Link> has prompts to copy. Everything Claude saves appears here.
                 </Empty>
               ) : (
                 <div className="grid cols-3">

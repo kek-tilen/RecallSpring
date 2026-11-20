@@ -83,3 +83,28 @@ describe("small helpers", () => {
     expect(gradedBy("deterministic")).toBe("RecallSpring (answer key)");
   });
 });
+
+describe("guide", () => {
+  it("keeps the semester project template identical to docs/claude-projects.md", async () => {
+    const { SEMESTER_TEMPLATE } = await import("./guide");
+    // Read with Node (tests run in Node): the doc lives outside the app, so it is not imported as a module.
+    const fsModule = "node:fs";
+    const { readFileSync } = (await import(/* @vite-ignore */ fsModule)) as {
+      readFileSync: (path: string, encoding: string) => string;
+    };
+    const cwd = (globalThis as unknown as { process: { cwd(): string } }).process.cwd(); // apps/web
+    const doc = readFileSync(`${cwd}/../../docs/claude-projects.md`, "utf8").replace(/\r\n/g, "\n");
+    expect(doc).toContain(SEMESTER_TEMPLATE);
+  });
+
+  it("offers every prompt in English and Slovenian with the same placeholders count", async () => {
+    const { STEPS } = await import("./guide");
+    for (const step of STEPS) {
+      for (const p of step.prompts) {
+        expect(p.en.length).toBeGreaterThan(0);
+        expect(p.sl.length).toBeGreaterThan(0);
+        expect((p.sl.match(/\[/g) ?? []).length).toBe((p.en.match(/\[/g) ?? []).length);
+      }
+    }
+  });
+});
