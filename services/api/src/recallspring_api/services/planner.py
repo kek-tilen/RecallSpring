@@ -92,8 +92,12 @@ def today_plan(
     tz = ZoneInfo(user.timezone)
     today = now.astimezone(tz).date()
     available = minutes if minutes is not None else minutes_available(db, user, today)
+    # Archived courses (e.g. a finished semester) only keep their due reviews, as maintenance, when the course is
+    # meant for long-term retention.
     course_stmt = select(Course).where(
-        Course.user_id == user.id, Course.deleted_at.is_(None), Course.status == "active"
+        Course.user_id == user.id,
+        Course.deleted_at.is_(None),
+        (Course.status == "active") | ((Course.status == "archived") & Course.long_term_retention.is_(True)),
     )
     if course_id is not None:
         course_stmt = course_stmt.where(Course.id == course_id)
@@ -125,6 +129,11 @@ def today_plan(
         target_name = sc.active.name if sc.active else None
         in_active = sc.active_scope is None or concept.id in sc.active_scope
 
+        if courses[concept.course_id].status == "archived":
+            if due and state is not None:
+                why = f"Archived course, kept in memory: due {_when(state.due_at, today, tz)}."
+                maintenance.append((state.due_at, _item("Maintain", concept, courses, why, band, diff, None)))
+            continue
         if concept.id in sc.passed_scope:
             if due and state is not None:
                 why = (

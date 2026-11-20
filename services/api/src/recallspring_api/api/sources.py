@@ -15,7 +15,16 @@ from ..errors import ApiError
 from ..ingest import jobs
 from ..ingest.storage import StorageError, blob_path, check_text_encoding, sanitize_filename, sniff, spool, spool_bytes
 from ..models import Course, Source, SourceSection
-from ..schemas import SearchHitOut, SearchOut, SectionOut, SectionPageOut, SourceOut, SourceTextIn
+from ..schemas import (
+    MaterialCategory,
+    SearchHitOut,
+    SearchOut,
+    SectionOut,
+    SectionPageOut,
+    SourceOut,
+    SourcePatch,
+    SourceTextIn,
+)
 from ..services import sources as svc
 from ..services.events import learning_event
 from ..services.ownership import owned
@@ -30,16 +39,19 @@ def upload_source(
     request: Request,
     course_id: uuid.UUID = Form(...),
     file: UploadFile = File(...),
+    category: MaterialCategory = Form("material"),
     ctx: WriteCtx = Depends(write_ctx),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Multipart upload of a PDF, Markdown or text file. Extraction runs in the worker; poll GET /sources/{id}.
 
     In production the reverse proxy must also cap the request body (client_max_body_size)."""
-    return handle_upload(request, course_id, file, ctx, db)
+    return handle_upload(request, course_id, file, ctx, db, category)
 
 
-def handle_upload(request: Request, course_id: uuid.UUID, file: UploadFile, ctx: WriteCtx, db: Session) -> JSONResponse:
+def handle_upload(
+    request: Request, course_id: uuid.UUID, file: UploadFile, ctx: WriteCtx, db: Session, category: str = "material"
+) -> JSONResponse:
     """Shared by the web app and the connector (local file import)."""
     settings = get_settings()
     declared = int(request.headers.get("content-length") or 0)
@@ -53,13 +65,13 @@ def handle_upload(request: Request, course_id: uuid.UUID, file: UploadFile, ctx:
         raise svc.upload_error(exc.code) from exc
     try:
         with tmp.open("rb") as fh:
-            kind, mime = sniff(fh.read(8), filename)
-        if kind != "pdf":
+            kind, mime = sniff(fh.read(16), filename)
+        if kind in ("markdown", "text"):
             check_text_encoding(tmp)
     except StorageError as exc:
         tmp.unlink(missing_ok=True)
         raise svc.upload_error(exc.code) from exc
-    fingerprint = {"course_id": str(course_id), "filename": filename, "sha256": sha256}
+    fingerprint = {"course_id": str(course_id), "filename": filename, "sha256": sha256, "category": category}
     if replay := replay_if_seen(db, ctx, fingerprint):
         tmp.unlink(missing_ok=True)
         return replay
@@ -75,6 +87,7 @@ def handle_upload(request: Request, course_id: uuid.UUID, file: UploadFile, ctx:
         mime=mime,
         origin="upload",
         request_id=ctx.request_id,
+        category=category,
     )
     return commit_with_response(db, ctx, fingerprint, 201, svc.source_view(db, source))
 
@@ -216,3 +229,26 @@ def get_section(
     if source is None or source.deleted_at is not None:
         raise ApiError(404, "not_found", "Section not found.")
     return svc.section_view(section)
+
+
+@router.patch("/sources/{source_id}", response_model=SourceOut)
+def update_source(
+    source_id: uuid.UUID, payload: SourcePatch, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """File a material under a category (lecture material, my notes, exercises, past papers, other)."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    source = owned(db, Source, source_id, ctx.user.id, for_update=True)
+    old = source.category
+    source.category = payload.category
+    db.flush()
+    learning_event(
+        db,
+        user_id=ctx.user.id,
+        entity_type="source",
+        entity_id=source.id,
+        event_type="source.categorised",
+        payload={"from": old, "to": payload.category},
+        request_id=ctx.request_id,
+    )
+    return commit_with_response(db, ctx, payload, 200, svc.source_view(db, source))

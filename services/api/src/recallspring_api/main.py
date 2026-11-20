@@ -14,6 +14,7 @@ from .api import (
     courses,
     health,
     notes,
+    organise,
     overview,
     questions,
     reviews,
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
         reviews,
         settings,
         overview,
+        organise,
         connector,
     )
     for module in modules:

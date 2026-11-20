@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..errors import ApiError
 from ..models import (
     Concept,
     ConceptSource,
@@ -19,8 +20,13 @@ from ..models import (
     SourceSection,
     StudyTarget,
     StudyTargetScope,
+    SyllabusItem,
     TargetProfile,
+    User,
 )
+from ..schemas import TargetIn, TargetScopeItem, TargetUpdateIn
+from .events import audit
+from .ownership import owned
 
 SETUP_QUESTIONS = [
     "What are you preparing for: the 1st kolokvij, the 2nd kolokvij, or the exam (whole course or only a part, "
@@ -194,3 +200,105 @@ def _learning_counts(db: Session, target: StudyTarget) -> dict[str, int]:
     for concept in db.scalars(select(Concept).where(Concept.id.in_(ids))):
         counts[effective_status(concept, concept.id in practised)] += 1
     return counts
+
+
+# ---------------------------------------------------------------- writes shared by Claude (connector) and the web app
+
+
+def scope_rows(
+    db: Session, user_id: uuid.UUID, course_id: uuid.UUID, items: list[TargetScopeItem]
+) -> list[StudyTargetScope]:
+    rows = []
+    for item in items:
+        if item.kind in ("source", "pages"):
+            src = db.get(Source, item.source_id) if item.source_id else None
+            if src is None or src.user_id != user_id or src.course_id != course_id or src.deleted_at:
+                raise ApiError(422, "invalid_scope", "A scope entry refers to a source that is not in this course.")
+            if item.kind == "pages" and (
+                item.page_from is None or item.page_to is None or item.page_from > item.page_to
+            ):
+                raise ApiError(422, "invalid_scope", "A page range needs page_from <= page_to.")
+        elif item.kind == "topic":
+            topic = db.get(SyllabusItem, item.topic_id) if item.topic_id else None
+            if topic is None or topic.user_id != user_id or topic.course_id != course_id:
+                raise ApiError(422, "invalid_scope", "A scope entry refers to a topic that is not in this course.")
+        else:
+            concept = db.get(Concept, item.concept_id) if item.concept_id else None
+            if concept is None or concept.user_id != user_id or concept.course_id != course_id:
+                raise ApiError(422, "invalid_scope", "A scope entry refers to a concept that is not in this course.")
+        rows.append(
+            StudyTargetScope(
+                kind=item.kind,
+                source_id=item.source_id,
+                page_from=item.page_from,
+                page_to=item.page_to,
+                syllabus_item_id=item.topic_id,
+                concept_id=item.concept_id,
+            )
+        )
+    return rows
+
+
+def create_target(db: Session, user: User, payload: TargetIn, request_id: str, *, origin: str) -> StudyTarget:
+    owned(db, Course, payload.course_id, user.id)
+    target = StudyTarget(
+        user_id=user.id,
+        course_id=payload.course_id,
+        kind=payload.kind,
+        name=payload.name,
+        due_date=payload.due_date,
+        scope_description=payload.scope_description,
+        notes=payload.notes,
+        goal=payload.goal,
+    )
+    db.add(target)
+    db.flush()
+    for row in scope_rows(db, user.id, payload.course_id, payload.scope):
+        row.target_id = target.id
+        db.add(row)
+    db.flush()
+    audit(
+        db,
+        actor_id=user.id,
+        action="target.created",
+        target_type="study_target",
+        target_id=target.id,
+        details={"name": payload.name, "due_date": payload.due_date.isoformat(), "origin": origin},
+        request_id=request_id,
+    )
+    return target
+
+
+def update_target(
+    db: Session, user: User, target_id: uuid.UUID, payload: TargetUpdateIn, request_id: str, *, origin: str
+) -> StudyTarget:
+    """Move a date, rename, mark passed/failed, or refine the scope. Audited; nothing is deleted."""
+    target = db.get(StudyTarget, target_id, with_for_update=True)
+    if target is None or target.user_id != user.id or target.deleted_at is not None:
+        raise ApiError(404, "not_found", "Study target not found.")
+    changes: dict[str, Any] = {}
+    for key in ("name", "kind", "goal", "due_date", "status", "result", "scope_description", "notes"):
+        value = getattr(payload, key)
+        if value is not None and value != getattr(target, key):
+            changes[key] = {"from": str(getattr(target, key)), "to": str(value)}
+            setattr(target, key, value)
+    if payload.scope is not None:
+        new_rows = scope_rows(db, user.id, target.course_id, payload.scope)
+        for old in db.scalars(select(StudyTargetScope).where(StudyTargetScope.target_id == target.id)):
+            db.delete(old)  # scope rows are a derived index of the learner's description, not learning evidence
+        for row in new_rows:
+            row.target_id = target.id
+            db.add(row)
+        changes["scope"] = {"entries": len(new_rows)}
+    target.revision += 1
+    db.flush()
+    audit(
+        db,
+        actor_id=user.id,
+        action="target.updated",
+        target_type="study_target",
+        target_id=target.id,
+        details={**changes, "origin": origin},
+        request_id=request_id,
+    )
+    return target

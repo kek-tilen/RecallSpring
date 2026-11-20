@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from .. import clock
 from ..config import get_settings
 from ..errors import ApiError
 from ..ingest import jobs
@@ -30,7 +31,10 @@ PARSE_MESSAGES = {
 
 UPLOAD_ERRORS = {
     "file_too_large": (413, "The file is larger than the upload limit."),
-    "unsupported_file_type": (415, "Only PDF, Markdown (.md) and plain text (.txt) files are supported."),
+    "unsupported_file_type": (
+        415,
+        "Only PDF, Markdown (.md), plain text (.txt) and images (.png, .jpg, .webp) are supported.",
+    ),
     "content_does_not_match_type": (415, "The file content does not match its extension."),
     "unsupported_encoding": (415, "The text file is not UTF-8. Save it as UTF-8 and upload it again."),
 }
@@ -42,6 +46,8 @@ def upload_error(code: str) -> ApiError:
 
 
 def parse_message(source: Source) -> str | None:
+    if source.kind == "image":
+        return None
     if source.parse_state == "failed":
         return PARSE_MESSAGES.get(source.parse_error or "", "Text couldn't be extracted.")
     if source.parse_state == "needs_attention":
@@ -66,6 +72,7 @@ def source_view(db: Session, source: Source) -> dict[str, Any]:
         byte_size=source.byte_size,
         sha256=source.sha256,
         origin=source.origin,
+        category=source.category,
         duplicate_of_id=source.duplicate_of_id,
         duplicate_of_course_id=duplicate_course,
         parse_state=source.parse_state,  # type: ignore[arg-type]
@@ -107,6 +114,7 @@ def create_source(
     mime: str,
     origin: str,
     request_id: str,
+    category: str = "material",
 ) -> Source:
     """Store the original, create the source row and queue extraction, all in the caller's transaction."""
     existing = db.scalar(
@@ -130,19 +138,32 @@ def create_source(
         sha256=sha256,
         storage_key=key,
         origin=origin,
+        category=category,
         duplicate_of_id=existing.id if existing else None,
         parse_state="pending",
     )
+    if kind == "image":
+        # No text extraction (no OCR): the image is kept as is and Claude looks at it on request (view_image).
+        source.parse_state = "ready"
+        source.parsed_at = clock.now()
+        source.parse_notes = ["image"]
     db.add(source)
     db.flush()
-    jobs.enqueue(db, user_id=user.id, type=jobs.EXTRACT_SOURCE, payload={"source_id": str(source.id), "version": 1})
+    if kind != "image":
+        jobs.enqueue(db, user_id=user.id, type=jobs.EXTRACT_SOURCE, payload={"source_id": str(source.id), "version": 1})
     learning_event(
         db,
         user_id=user.id,
         entity_type="source",
         entity_id=source.id,
         event_type="source.added",
-        payload={"kind": kind, "origin": origin, "bytes": size, "duplicate_of": str(existing.id) if existing else None},
+        payload={
+            "kind": kind,
+            "category": category,
+            "origin": origin,
+            "bytes": size,
+            "duplicate_of": str(existing.id) if existing else None,
+        },
         request_id=request_id,
     )
     return source

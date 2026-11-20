@@ -10,7 +10,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from ..connector_auth import connector_ctx, connector_write_ctx
 from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, replay_if_seen
 from ..errors import ApiError
+from ..ingest.storage import blob_path
 from ..models import (
     Assessment,
     Attempt,
@@ -29,6 +30,7 @@ from ..models import (
     Concept,
     ConceptSource,
     Course,
+    CourseGroup,
     Note,
     Question,
     Quiz,
@@ -37,7 +39,6 @@ from ..models import (
     SourceSection,
     StudySession,
     StudyTarget,
-    StudyTargetScope,
     SyllabusItem,
     TargetProfile,
     User,
@@ -56,6 +57,8 @@ from ..schemas import (
     DifficultyIn,
     KnownConceptsIn,
     LearningSummaryIn,
+    MaterialCategory,
+    OrganiseCoursesIn,
     PlanOut,
     QuizDraftIn,
     QuizIn,
@@ -67,12 +70,13 @@ from ..schemas import (
     StudySessionOut,
     TargetIn,
     TargetProfileIn,
-    TargetScopeItem,
     TargetUpdateIn,
 )
 from ..services import attempts as attempt_svc
+from ..services import overview
 from ..services import quizzes as quiz_svc
 from ..services import sources as source_svc
+from ..services import targets as target_svc
 from ..services.events import audit, learning_event
 from ..services.learning import effective_status, mark, require_studied, save_summary
 from ..services.ownership import owned
@@ -128,6 +132,7 @@ def courses(ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)) ->
                 "id": str(c.id),
                 "title": c.title,
                 "status": c.status,
+                "semester": " › ".join(overview.group_path(db, c.group_id)) or None,
                 "concepts": concept_count,
                 "due_reviews": due,
                 "sources": sources,
@@ -174,7 +179,8 @@ def outline(course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session
         {
             k: v
             for k, v in source_svc.source_view(db, s).items()
-            if k in ("id", "filename", "kind", "parse_state", "parse_message", "section_count", "page_count")
+            if k
+            in ("id", "filename", "kind", "category", "parse_state", "parse_message", "section_count", "page_count")
         }
         for s in db.scalars(
             select(Source)
@@ -579,11 +585,12 @@ def import_file(
     request: Request,
     course_id: uuid.UUID = Form(...),
     file: UploadFile = File(...),
+    category: MaterialCategory = Form("material"),
     ctx: WriteCtx = Depends(connector_write_ctx),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """A local file the learner asked the connector to import (same checks as the web upload)."""
-    return handle_upload(request, course_id, file, ctx, db)
+    return handle_upload(request, course_id, file, ctx, db, category)
 
 
 @router.get("/sources/{source_id}")
@@ -625,38 +632,6 @@ def course_context(
     return study_context(db, course, _today(ctx), ctx.user.style_percent)
 
 
-def _scope_rows(db: Session, ctx: Ctx, course_id: uuid.UUID, items: list[TargetScopeItem]) -> list[StudyTargetScope]:
-    rows = []
-    for item in items:
-        if item.kind in ("source", "pages"):
-            src = db.get(Source, item.source_id) if item.source_id else None
-            if src is None or src.user_id != ctx.user.id or src.course_id != course_id or src.deleted_at:
-                raise ApiError(422, "invalid_scope", "A scope entry refers to a source that is not in this course.")
-            if item.kind == "pages" and (
-                item.page_from is None or item.page_to is None or item.page_from > item.page_to
-            ):
-                raise ApiError(422, "invalid_scope", "A page range needs page_from <= page_to.")
-        elif item.kind == "topic":
-            topic = db.get(SyllabusItem, item.topic_id) if item.topic_id else None
-            if topic is None or topic.user_id != ctx.user.id or topic.course_id != course_id:
-                raise ApiError(422, "invalid_scope", "A scope entry refers to a topic that is not in this course.")
-        else:
-            concept = db.get(Concept, item.concept_id) if item.concept_id else None
-            if concept is None or concept.user_id != ctx.user.id or concept.course_id != course_id:
-                raise ApiError(422, "invalid_scope", "A scope entry refers to a concept that is not in this course.")
-        rows.append(
-            StudyTargetScope(
-                kind=item.kind,
-                source_id=item.source_id,
-                page_from=item.page_from,
-                page_to=item.page_to,
-                syllabus_item_id=item.topic_id,
-                concept_id=item.concept_id,
-            )
-        )
-    return rows
-
-
 @router.post("/targets", status_code=201)
 def create_target(
     payload: TargetIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
@@ -664,32 +639,7 @@ def create_target(
     """Record what the learner prepares for, with their own scope description kept verbatim."""
     if replay := replay_if_seen(db, ctx, payload):
         return replay
-    owned(db, Course, payload.course_id, ctx.user.id)
-    target = StudyTarget(
-        user_id=ctx.user.id,
-        course_id=payload.course_id,
-        kind=payload.kind,
-        name=payload.name,
-        due_date=payload.due_date,
-        scope_description=payload.scope_description,
-        notes=payload.notes,
-        goal=payload.goal,
-    )
-    db.add(target)
-    db.flush()
-    for row in _scope_rows(db, ctx, payload.course_id, payload.scope):
-        row.target_id = target.id
-        db.add(row)
-    db.flush()
-    audit(
-        db,
-        actor_id=ctx.user.id,
-        action="target.created",
-        target_type="study_target",
-        target_id=target.id,
-        details={"name": payload.name, "due_date": payload.due_date.isoformat(), "origin": "connector"},
-        request_id=ctx.request_id,
-    )
+    target = target_svc.create_target(db, ctx.user, payload, ctx.request_id, origin="connector")
     return commit_with_response(db, ctx, payload, 201, target_view(db, target, _today(ctx)))
 
 
@@ -703,34 +653,7 @@ def update_target(
     """Move a date, mark a kolokvij passed/failed, or refine the scope. Audited; nothing is deleted."""
     if replay := replay_if_seen(db, ctx, payload):
         return replay
-    target = db.get(StudyTarget, target_id, with_for_update=True)
-    if target is None or target.user_id != ctx.user.id or target.deleted_at is not None:
-        raise ApiError(404, "not_found", "Study target not found.")
-    changes: dict[str, Any] = {}
-    for key in ("due_date", "status", "result", "scope_description", "notes"):
-        value = getattr(payload, key)
-        if value is not None and value != getattr(target, key):
-            changes[key] = {"from": str(getattr(target, key)), "to": str(value)}
-            setattr(target, key, value)
-    if payload.scope is not None:
-        new_rows = _scope_rows(db, ctx, target.course_id, payload.scope)
-        for old in db.scalars(select(StudyTargetScope).where(StudyTargetScope.target_id == target.id)):
-            db.delete(old)  # scope rows are a derived index of the learner's description, not learning evidence
-        for row in new_rows:
-            row.target_id = target.id
-            db.add(row)
-        changes["scope"] = {"entries": len(new_rows)}
-    target.revision += 1
-    db.flush()
-    audit(
-        db,
-        actor_id=ctx.user.id,
-        action="target.updated",
-        target_type="study_target",
-        target_id=target.id,
-        details=changes,
-        request_id=ctx.request_id,
-    )
+    target = target_svc.update_target(db, ctx.user, target_id, payload, ctx.request_id, origin="connector")
     return commit_with_response(db, ctx, payload, 200, target_view(db, target, _today(ctx)))
 
 
@@ -983,3 +906,93 @@ def mark_known(
     )
     db.flush()
     return commit_with_response(db, ctx, payload, 200, {"concepts": out})
+
+
+# ---------------------------------------------------------------- semesters, simulations to grade, images
+
+
+@router.post("/courses/organise")
+def organise_courses(
+    payload: OrganiseCoursesIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """File courses under university → faculty → semester by name; missing levels are created. Audited."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    parent_id = None
+    created = []
+    for kind, name in (
+        ("university", payload.university),
+        ("faculty", payload.faculty),
+        ("semester", payload.semester),
+    ):
+        if not name:
+            continue
+        stmt = select(CourseGroup).where(
+            CourseGroup.user_id == ctx.user.id,
+            CourseGroup.kind == kind,
+            func.lower(CourseGroup.name) == name.strip().lower(),
+            CourseGroup.deleted_at.is_(None),
+        )
+        stmt = stmt.where(CourseGroup.parent_id.is_(None) if parent_id is None else CourseGroup.parent_id == parent_id)
+        group = db.scalar(stmt.limit(1))
+        if group is None:
+            group = CourseGroup(user_id=ctx.user.id, kind=kind, name=name.strip(), parent_id=parent_id)
+            db.add(group)
+            db.flush()
+            created.append({"kind": kind, "name": group.name})
+        parent_id = group.id
+    moved = []
+    for course_id in payload.course_ids:
+        course = owned(db, Course, course_id, ctx.user.id, for_update=True)
+        course.group_id = parent_id
+        course.revision += 1
+        moved.append(course.title)
+    db.flush()
+    audit(
+        db,
+        actor_id=ctx.user.id,
+        action="courses.organised",
+        target_type="course_group",
+        target_id=parent_id,
+        details={"created": created, "courses": moved, "origin": "connector"},
+        request_id=ctx.request_id,
+    )
+    path = " › ".join(n for n in (payload.university, payload.faculty, payload.semester) if n)
+    return commit_with_response(db, ctx, payload, 200, {"placed_in": path, "courses": moved, "created": created})
+
+
+@router.get("/quizzes")
+def list_quizzes(
+    course_id: uuid.UUID | None = None,
+    needs_grading: bool = False,
+    ctx: Ctx = Depends(connector_ctx),
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Recent simulations, newest first. needs_grading=true: submitted ones with open answers Claude has not graded
+    (for example a simulation the learner answered in the RecallSpring web app)."""
+    stmt = select(Quiz).where(Quiz.user_id == ctx.user.id).order_by(Quiz.created_at.desc()).limit(30)
+    if course_id is not None:
+        stmt = stmt.where(Quiz.course_id == course_id)
+    rows = [overview.quiz_summary(db, q) for q in db.scalars(stmt)]
+    if needs_grading:
+        rows = [r for r in rows if r["status"] == "submitted" and (r["pending_items"] or 0) > 0]
+    return rows
+
+
+IMAGE_LIMIT_FOR_CLAUDE = 4_500_000
+
+
+@router.get("/sources/{source_id}/image")
+def source_image(source_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)) -> Response:
+    """The original image (photo of notes, notebook or exercises) so Claude can look at it on request."""
+    source = owned(db, Source, source_id, ctx.user.id)
+    if source.kind != "image":
+        raise ApiError(409, "not_an_image", "This material is not an image; read its sections instead.")
+    if source.byte_size > IMAGE_LIMIT_FOR_CLAUDE:
+        raise ApiError(
+            413, "image_too_large", "The image is larger than 4.5 MB. Upload a smaller photo in the web app."
+        )
+    path = blob_path(source.storage_key)
+    if not path.is_file():
+        raise ApiError(410, "original_missing", "The original file is no longer available.")
+    return Response(path.read_bytes(), media_type=source.mime_type, headers={"Cache-Control": "private, no-store"})

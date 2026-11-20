@@ -191,7 +191,14 @@ def save_draft(quiz: Quiz, answers: list[QuizAnswer]) -> None:
 
 
 def submit(
-    db: Session, user: User, quiz: Quiz, client_request_id: uuid.UUID, answers: list[QuizAnswer], request_id: str
+    db: Session,
+    user: User,
+    quiz: Quiz,
+    client_request_id: uuid.UUID,
+    answers: list[QuizAnswer],
+    request_id: str,
+    *,
+    captured_via: str = "answer_form",
 ) -> None:
     """Persist every answer exactly (one transaction), then grade multiple-choice items from the hidden key.
     Items left empty count as "I don't know"."""
@@ -226,7 +233,7 @@ def submit(
             kind="answer" if answered else "dont_know",
             answer_text=answer_text,
             answer_mode="closed_notes",
-            captured_via="answer_form",
+            captured_via=captured_via,
             request_id=request_id,
         )
         attempt.quiz_id = quiz.id

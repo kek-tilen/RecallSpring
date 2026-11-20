@@ -157,14 +157,18 @@ class Api:
     def post(self, path: str, json: Any = None, key: uuid.UUID | str | None = None) -> Any:
         return self.client.post(f"/api/v1{path}", json=json, headers=self.headers(key))
 
+    def patch(self, path: str, json: Any = None, key: uuid.UUID | str | None = None) -> Any:
+        return self.client.patch(f"/api/v1{path}", json=json, headers=self.headers(key))
+
     def get(self, path: str, **params: Any) -> Any:
         return self.client.get(f"/api/v1{path}", params=params)
 
-    def upload(self, course_id: str, filename: str, content: bytes, key: str | None = None) -> Any:
+    def upload(
+        self, course_id: str, filename: str, content: bytes, key: str | None = None, category: str | None = None
+    ) -> Any:
         headers = self.headers(key)
-        return self.client.post(
-            "/api/v1/sources", data={"course_id": course_id}, files={"file": (filename, content)}, headers=headers
-        )
+        data = {"course_id": course_id, **({"category": category} if category else {})}
+        return self.client.post("/api/v1/sources", data=data, files={"file": (filename, content)}, headers=headers)
 
     def paste(self, course_id: str, text: str, title: str = "Lecture notes", fmt: str = "markdown") -> Any:
         return self.post("/sources/text", {"course_id": course_id, "title": title, "text": text, "format": fmt})

@@ -22,6 +22,7 @@ from ..models import (
     Concept,
     ConceptSource,
     Course,
+    CourseGroup,
     LearningEvent,
     Note,
     Question,
@@ -31,6 +32,7 @@ from ..models import (
     ReviewState,
     Source,
     SourceSection,
+    StudyTarget,
     User,
 )
 from . import mastery
@@ -139,13 +141,7 @@ def course_overview(db: Session, user: User, course: Course) -> dict[str, Any]:
     active = active_target(targets, today)
     quizzes = db.scalars(select(Quiz).where(Quiz.course_id == course.id).order_by(Quiz.created_at.desc()))
     return {
-        "course": {
-            "id": str(course.id),
-            "title": course.title,
-            "description": course.description,
-            "status": course.status,
-            "created_at": course.created_at.isoformat(),
-        },
+        "course": course_view(course),
         "active_target_id": str(active.id) if active else None,
         "targets": [target_view(db, t, today) for t in targets],
         "progress": {"study": study, "bands": bands, "concepts": len(concepts)},
@@ -164,6 +160,64 @@ def course_overview(db: Session, user: User, course: Course) -> dict[str, Any]:
         "quizzes": [quiz_summary(db, q) for q in quizzes],
         "note": mastery_note(),
     }
+
+
+def course_view(course: Course) -> dict[str, Any]:
+    return {
+        "id": str(course.id),
+        "title": course.title,
+        "description": course.description,
+        "status": course.status,
+        "color": course.color,
+        "group_id": str(course.group_id) if course.group_id else None,
+        "long_term_retention": course.long_term_retention,
+        "created_at": course.created_at.isoformat(),
+    }
+
+
+def group_view(group: CourseGroup, course_count: int) -> dict[str, Any]:
+    return {
+        "id": str(group.id),
+        "parent_id": str(group.parent_id) if group.parent_id else None,
+        "kind": group.kind,
+        "name": group.name,
+        "position": group.position,
+        "status": group.status,
+        "starts_on": group.starts_on.isoformat() if group.starts_on else None,
+        "ends_on": group.ends_on.isoformat() if group.ends_on else None,
+        "archived_at": group.archived_at.isoformat() if group.archived_at else None,
+        "courses": course_count,
+    }
+
+
+def groups(db: Session, user: User) -> list[dict[str, Any]]:
+    counts = dict(
+        db.execute(
+            select(Course.group_id, func.count())
+            .where(Course.user_id == user.id, Course.deleted_at.is_(None), Course.group_id.is_not(None))
+            .group_by(Course.group_id)
+        ).all()
+    )
+    rows = db.scalars(
+        select(CourseGroup)
+        .where(CourseGroup.user_id == user.id, CourseGroup.deleted_at.is_(None))
+        .order_by(CourseGroup.position, CourseGroup.created_at)
+    )
+    return [group_view(g, counts.get(g.id, 0)) for g in rows]
+
+
+def group_path(db: Session, group_id: uuid.UUID | None) -> list[str]:
+    """Names from the top (university) down to the course's own group (semester)."""
+    names: list[str] = []
+    seen: set[uuid.UUID] = set()
+    while group_id is not None and group_id not in seen:
+        seen.add(group_id)
+        group = db.get(CourseGroup, group_id)
+        if group is None:
+            break
+        names.append(group.name)
+        group_id = group.parent_id
+    return list(reversed(names))
 
 
 def mastery_note() -> str:
@@ -491,6 +545,7 @@ def courses_summary(db: Session, user: User) -> list[dict[str, Any]]:
         out.append(
             {
                 **view["course"],
+                "group_path": group_path(db, course.group_id),
                 "active_target": {k: active[k] for k in ("id", "kind", "name", "due_date", "days_left", "status")}
                 if active
                 else None,
@@ -503,3 +558,25 @@ def courses_summary(db: Session, user: User) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def targets_timeline(db: Session, user: User) -> list[dict[str, Any]]:
+    """Every exam and kolokvij of courses that are not deleted, with the course's name and colour."""
+    today = clock.now().astimezone(ZoneInfo(user.timezone)).date()
+    rows = db.execute(
+        select(StudyTarget, Course)
+        .join(Course, Course.id == StudyTarget.course_id)
+        .where(StudyTarget.user_id == user.id, StudyTarget.deleted_at.is_(None), Course.deleted_at.is_(None))
+        .order_by(StudyTarget.due_date)
+    ).all()
+    return [
+        {
+            **target_view(db, t, today),
+            "course_id": str(c.id),
+            "course_title": c.title,
+            "course_color": c.color,
+            "course_status": c.status,
+            "revision": t.revision,
+        }
+        for t, c in rows
+    ]

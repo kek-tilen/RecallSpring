@@ -26,6 +26,17 @@ ALLOWED_EXTENSIONS = {
     ".md": ("markdown", "text/markdown"),
     ".markdown": ("markdown", "text/markdown"),
     ".txt": ("text", "text/plain"),
+    # Photos of handwritten notes, notebooks and exercises. SVG is deliberately not allowed (it can carry script).
+    ".png": ("image", "image/png"),
+    ".jpg": ("image", "image/jpeg"),
+    ".jpeg": ("image", "image/jpeg"),
+    ".webp": ("image", "image/webp"),
+}
+
+IMAGE_MAGIC = {
+    "image/png": lambda h: h.startswith(b"\x89PNG\r\n\x1a\n"),
+    "image/jpeg": lambda h: h.startswith(b"\xff\xd8\xff"),
+    "image/webp": lambda h: h[:4] == b"RIFF" and h[8:12] == b"WEBP",
 }
 
 
@@ -112,6 +123,8 @@ def sniff(head: bytes, filename: str) -> tuple[str, str]:
     if kind == "pdf" and not is_pdf:
         raise StorageError("content_does_not_match_type")
     if kind != "pdf" and is_pdf:
+        raise StorageError("content_does_not_match_type")
+    if kind == "image" and not IMAGE_MAGIC[mime](head):
         raise StorageError("content_does_not_match_type")
     return kind, mime
 

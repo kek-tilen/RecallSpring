@@ -54,6 +54,57 @@ class CourseOut(_Out):
     updated_at: datetime
 
 
+CourseColor = Literal["teal", "blue", "violet", "rose", "orange", "olive", "slate", "brown"]
+MaterialCategory = Literal["material", "notes", "exercises", "past_paper", "other"]
+
+
+class CoursePatch(BaseModel):
+    """Only the fields sent are changed; send ``null`` for ``color`` or ``group_id`` to clear them."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=5000)
+    color: CourseColor | None = None
+    group_id: uuid.UUID | None = None
+    long_term_retention: bool | None = None
+    archived: bool | None = None
+
+
+class OrganiseCoursesIn(BaseModel):
+    """Names of the levels to file courses under, e.g. university "UM", faculty "FERI", semester "5. semester"."""
+
+    course_ids: list[uuid.UUID] = Field(min_length=1, max_length=30)
+    semester: str = Field(min_length=1, max_length=200)
+    faculty: str | None = Field(default=None, min_length=1, max_length=200)
+    university: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class GroupIn(BaseModel):
+    kind: Literal["university", "faculty", "semester", "other"]
+    name: str = Field(min_length=1, max_length=200)
+    parent_id: uuid.UUID | None = None
+    starts_on: date | None = None
+    ends_on: date | None = None
+
+
+class GroupPatch(BaseModel):
+    """Only the fields sent are changed; send ``null`` for ``parent_id`` to move a group to the top level."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    kind: Literal["university", "faculty", "semester", "other"] | None = None
+    parent_id: uuid.UUID | None = None
+    starts_on: date | None = None
+    ends_on: date | None = None
+    position: int | None = Field(default=None, ge=0, le=10_000)
+
+
+class ArchiveIn(BaseModel):
+    archived: bool
+
+
+class SourcePatch(BaseModel):
+    category: MaterialCategory
+
+
 class SyllabusItemIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     parent_id: uuid.UUID | None = None
@@ -251,6 +302,7 @@ class SourceOut(BaseModel):
     byte_size: int
     sha256: str
     origin: str
+    category: str = "material"
     duplicate_of_id: uuid.UUID | None
     duplicate_of_course_id: uuid.UUID | None
     parse_state: Literal["pending", "processing", "ready", "needs_attention", "failed"]
@@ -500,6 +552,9 @@ class TargetIn(BaseModel):
 
 
 class TargetUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    kind: Literal["kolokvij", "izpit", "other"] | None = None
+    goal: Literal["exam_only", "long_term"] | None = None
     due_date: date | None = None
     status: Literal["upcoming", "passed", "failed", "cancelled"] | None = None
     result: str | None = Field(default=None, max_length=120)
