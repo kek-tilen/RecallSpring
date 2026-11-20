@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { ApiError, request } from "../api";
 import { dateLabel } from "../format";
-import { useCourses, useSources } from "../queries";
+import { useCourses, useSources, useTargets } from "../queries";
 import type { ScopeItem, Target } from "../types";
 import { useInvalidateOrganisation } from "./organise";
 import { Confirm, ErrorNote, Modal } from "./ui";
@@ -101,6 +101,30 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
       onClose();
     },
   });
+
+  // Merging is always available by hand, not only when Exams detects a likely duplicate.
+  const allTargets = useTargets();
+  const ownCourse = target?.course_id ?? courseId;
+  const mergeOptions = target
+    ? (allTargets.data ?? []).filter((t) => t.id !== target.id && t.course_id === ownCourse)
+    : [];
+  const likelyDuplicate = mergeOptions.find((t) => target?.duplicates?.includes(t.id));
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeInto, setMergeInto] = useState("");
+  const mergeTarget = mergeOptions.find((t) => t.id === mergeInto);
+  const merge = useMutation({
+    mutationFn: () => request(`/targets/${target!.id}/merge`, { method: "POST", json: { into_id: mergeInto } }),
+    onSuccess: () => {
+      refresh();
+      setMergeOpen(false);
+      onClose();
+    },
+  });
+  function openMerge() {
+    setConfirmDelete(false);
+    setMergeInto(likelyDuplicate?.id ?? mergeOptions[0]?.id ?? "");
+    setMergeOpen(true);
+  }
 
   const existing =
     save.error instanceof ApiError && save.error.code === "target_exists"
@@ -220,10 +244,15 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
           save.error && <ErrorNote error={save.error} />
         )}
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <div>
+          <div className="row">
             {target && (
               <button type="button" className="btn danger" onClick={() => setConfirmDelete(true)}>
                 Delete
+              </button>
+            )}
+            {target && mergeOptions.length > 0 && (
+              <button type="button" className="btn" onClick={openMerge}>
+                Merge into…
               </button>
             )}
           </div>
@@ -249,7 +278,44 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
         >
           {target.name} on {dateLabel(target.due_date)} disappears from your plan, the timeline and Claude. Simulations, answers and
           grades stay. You can restore it from Exams → Recently deleted for 30 days.
+          {likelyDuplicate && (
+            <div className="notice" style={{ marginTop: 10 }}>
+              It looks like the same exam as <strong>{likelyDuplicate.name}</strong>. Merge it instead, so its simulations and
+              old-paper analysis move there.{" "}
+              <button type="button" className="btn small" onClick={openMerge}>
+                Merge instead
+              </button>
+            </div>
+          )}
           {remove.error && <ErrorNote error={remove.error} />}
+        </Confirm>
+      )}
+      {target && (
+        <Confirm
+          open={mergeOpen}
+          title={`Merge ${target.name} into another exam?`}
+          confirmLabel="Merge"
+          busy={merge.isPending || !mergeTarget}
+          onConfirm={() => merge.mutate()}
+          onClose={() => setMergeOpen(false)}
+        >
+          <label className="field">
+            Keep this exam
+            <select value={mergeInto} onChange={(e) => setMergeInto(e.target.value)}>
+              {mergeOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} · {dateLabel(t.due_date)}
+                  {t.status !== "upcoming" ? ` · ${t.status}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p>
+            The old-paper analysis and simulations of {target.name} move to {mergeTarget?.name ?? "the exam you keep"}; its
+            material mapping is used if that one has none, and its description is added to the notes. {target.name} is then
+            deleted; you can restore it from Exams → Recently deleted for 30 days.
+          </p>
+          {merge.error && <ErrorNote error={merge.error} />}
         </Confirm>
       )}
     </Modal>
