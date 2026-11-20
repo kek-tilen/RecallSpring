@@ -171,6 +171,8 @@ def course_view(course: Course) -> dict[str, Any]:
         "title": course.title,
         "description": course.description,
         "status": course.status,
+        "kind": course.kind,
+        "focus_until": course.focus_until.isoformat() if course.focus_until else None,
         "color": course.color,
         "group_id": str(course.group_id) if course.group_id else None,
         "long_term_retention": course.long_term_retention,

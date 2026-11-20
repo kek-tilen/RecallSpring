@@ -18,7 +18,7 @@ from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_s
 from ..errors import ApiError
 from ..models import Course, CourseGroup, User
 from ..schemas import ArchiveIn, CoursePatch, GroupIn, GroupPatch, MergeIn, TargetIn, TargetUpdateIn
-from ..services import overview
+from ..services import interests, overview
 from ..services import targets as target_svc
 from ..services.events import audit
 from ..services.ownership import owned
@@ -194,9 +194,12 @@ def update_course(
         return replay
     course = owned(db, Course, course_id, ctx.user.id, for_update=True)
     sent = payload.model_fields_set
-    if "group_id" in sent and payload.group_id is not None:
-        _group(db, payload.group_id, ctx.user.id)
     changes: dict[str, Any] = {}
+    if payload.kind is not None and (kind_change := interests.change_kind(db, course, payload.kind)):
+        changes["kind"] = kind_change
+    if "group_id" in sent and payload.group_id is not None:
+        interests.refuse_interest_filing(course)
+        _group(db, payload.group_id, ctx.user.id)
     for key in ("title", "description", "color", "group_id", "long_term_retention"):
         if key not in sent:
             continue

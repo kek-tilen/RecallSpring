@@ -37,10 +37,17 @@ class SessionOut(BaseModel):
 # ---------------------------------------------------------------- courses
 
 
+CourseKind = Literal["course", "interest"]
+
+
 class CourseIn(BaseModel):
+    """``kind`` 'interest' is personal learning without a deadline (planned after university work); its
+    ``description`` is the learner's goal."""
+
     title: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     long_term_retention: bool = True
+    kind: CourseKind = "course"
 
 
 class CourseOut(_Out):
@@ -49,6 +56,8 @@ class CourseOut(_Out):
     description: str | None
     long_term_retention: bool
     status: str
+    kind: CourseKind = "course"
+    focus_until: date | None = None
     color: str | None = None
     group_id: uuid.UUID | None = None
     revision: int
@@ -69,6 +78,19 @@ class CoursePatch(BaseModel):
     group_id: uuid.UUID | None = None
     long_term_retention: bool | None = None
     archived: bool | None = None
+    kind: CourseKind | None = None
+
+
+class FocusIn(BaseModel):
+    """Concentrate on one course or interest until ``until`` (inclusive; default today). ``course_id`` null ends
+    the focus."""
+
+    course_id: uuid.UUID | None = None
+    until: date | None = None
+
+
+class InterestGoalIn(BaseModel):
+    goal: str = Field(min_length=1, max_length=5000)
 
 
 class OrganiseCoursesIn(BaseModel):
@@ -413,6 +435,8 @@ class PlanItemOut(BaseModel):
     why_selected: str
     estimated_minutes: int
     target: str | None = None
+    course_kind: CourseKind = "course"
+    focus: bool = False
     band: Literal["not_started", "emerging", "developing", "reliable"]
     study_status: Literal["not_studied", "studied", "known"]
     difficulty: int
@@ -435,6 +459,22 @@ class TargetCapacityOut(BaseModel):
     message: str
 
 
+class InterestPlanOut(BaseModel):
+    policy: Literal["university_first", "share"]
+    percent: int
+    reserved_minutes: int
+    planned_minutes: int
+    message: str
+
+
+class FocusOut(BaseModel):
+    course_id: uuid.UUID
+    course_title: str
+    kind: CourseKind
+    until: str
+    message: str
+
+
 class PlanOut(BaseModel):
     policy_version: str
     generated_at: datetime
@@ -445,6 +485,8 @@ class PlanOut(BaseModel):
     targets: list[TargetCapacityOut]
     message: str | None
     note: str
+    interests: InterestPlanOut | None = None
+    focus: FocusOut | None = None
 
 
 # ---------------------------------------------------------------- connector settings (owner session)
@@ -605,12 +647,14 @@ class AvailabilityIn(BaseModel):
     day: date | None = None
     minutes: int | None = Field(default=None, ge=0, le=720)
     note: str | None = Field(default=None, max_length=200)
+    interest_percent: int | None = Field(default=None, ge=0, le=50)
 
 
 class StudySettingsIn(BaseModel):
     weekly_minutes: list[int] | None = Field(default=None, min_length=7, max_length=7)
     maintenance_percent: int | None = Field(default=None, ge=0, le=50)
     style_percent: int | None = Field(default=None, ge=0, le=100)
+    interest_percent: int | None = Field(default=None, ge=0, le=50)
 
 
 # ---------------------------------------------------------------- exam simulations (quizzes)

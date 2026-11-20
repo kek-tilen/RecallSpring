@@ -147,6 +147,8 @@ def target_view(db: Session, target: StudyTarget, today: date) -> dict[str, Any]
 def study_context(db: Session, course: Course, today: date, style_percent: int = 75) -> dict[str, Any]:
     """Everything Claude needs at the start of a study session in one course, including whether to ask the
     learner what they are preparing for."""
+    if course.kind == "interest":
+        return _interest_context(db, course, today)
     targets = live_targets(db, course.id)
     active = active_target(targets, today)
     stale = [t for t in targets if t.status == "upcoming" and t.due_date < today]
@@ -160,7 +162,7 @@ def study_context(db: Session, course: Course, today: date, style_percent: int =
         )
     quizzes = db.scalars(select(Quiz).where(Quiz.course_id == course.id).order_by(Quiz.created_at.desc()).limit(5))
     return {
-        "course": {"id": str(course.id), "title": course.title},
+        "course": {"id": str(course.id), "title": course.title, "kind": course.kind},
         "today": today.isoformat(),
         "active_target": target_view(db, active, today) if active else None,
         "other_targets": [target_view(db, t, today) for t in targets if t is not active],
@@ -185,6 +187,54 @@ def study_context(db: Session, course: Course, today: date, style_percent: int =
             "Material of passed targets is in maintenance: keep reviewing it, but give priority to the active target.",
             f"About {style_percent} % of practice questions follow the style of the target's exam profile (past "
             f"papers); the other {100 - style_percent} % are deeper Bloom 4-5 questions for understanding.",
+        ],
+    }
+
+
+def _interest_context(db: Session, course: Course, today: date) -> dict[str, Any]:
+    """A personal interest: no exams; the learner's goal (the course description) drives the session."""
+    from .interests import INTEREST_QUESTIONS
+    from .learning import effective_status
+
+    goal = (course.description or "").strip()
+    concepts = list(db.scalars(select(Concept).where(Concept.course_id == course.id, Concept.deleted_at.is_(None))))
+    practised = set(
+        db.scalars(select(ReviewState.concept_id).where(ReviewState.concept_id.in_([c.id for c in concepts])))
+    )
+    counts = {"not_studied": 0, "studied": 0, "known": 0}
+    for concept in concepts:
+        counts[effective_status(concept, concept.id in practised)] += 1
+    quizzes = db.scalars(select(Quiz).where(Quiz.course_id == course.id).order_by(Quiz.created_at.desc()).limit(5))
+    return {
+        "course": {"id": str(course.id), "title": course.title, "kind": "interest"},
+        "today": today.isoformat(),
+        "goal": goal or None,
+        "focus_until": course.focus_until.isoformat() if course.focus_until and course.focus_until >= today else None,
+        "active_target": None,
+        "other_targets": [],
+        "passed_targets": [],
+        "needs_setup": not goal,
+        "setup_reasons": [] if goal else ["no goal is set for this interest"],
+        "ask_learner": [] if goal else INTEREST_QUESTIONS,
+        "recent_simulations": [
+            {
+                "quiz_id": str(q.id),
+                "title": q.title,
+                "status": q.status,
+                "submitted_at": q.submitted_at.isoformat() if q.submitted_at else None,
+            }
+            for q in quizzes
+        ],
+        "learning": counts,
+        "rules": [
+            "This is a personal interest, not a university course: there is no exam and no deadline. Work toward "
+            "the learner's goal; save it with set_interest_goal when it is missing or changes.",
+            "Learn first still applies: teach material that is not_studied (explain, then the learner summarises "
+            "in the summary form) before practice. Prefer applied exercises, small projects and real data (Bloom "
+            "3-6) over exam-style questions.",
+            "University comes first unless the learner chose otherwise: get_study_plan shows how much time the "
+            "interests get today. Set a focus (set_focus) or a share of the day (set_availability interest_percent) "
+            "only when the learner clearly asks for it.",
         ],
     }
 
@@ -277,6 +327,9 @@ def _brief(t: StudyTarget) -> dict[str, Any]:
 
 def create_target(db: Session, user: User, payload: TargetIn, request_id: str, *, origin: str) -> StudyTarget:
     course = owned(db, Course, payload.course_id, user.id, for_update=True)  # serialises parallel chats
+    from .interests import refuse_interest_exam
+
+    refuse_interest_exam(course)
     existing = find_duplicate(db, course.id, payload.name, payload.kind, payload.due_date)
     if existing is not None:
         raise ApiError(

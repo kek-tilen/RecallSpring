@@ -23,10 +23,12 @@ from ..schemas import (
     ConnectorTokenCreatedOut,
     ConnectorTokenIn,
     ConnectorTokenOut,
+    FocusIn,
     PlanOut,
     StudySettingsIn,
 )
 from ..security import sha256_hex
+from ..services import interests
 from ..services.events import audit
 from ..services.planner import today_plan
 
@@ -56,14 +58,30 @@ def planner_today(
     return today_plan(db, ctx.user, clock.now(), minutes, course_id)
 
 
-@router.get("/settings/study")
-def study_settings(ctx: Ctx = Depends(current_ctx)) -> dict[str, Any]:
-    u = ctx.user
+def _study_view(db: Session, u: User) -> dict[str, Any]:
     return {
         "weekly_minutes": u.weekly_minutes,
         "maintenance_percent": u.maintenance_percent,
         "style_percent": u.style_percent,
+        "interest_percent": u.interest_percent,
+        "focus": interests.focus_view(db, u),
     }
+
+
+@router.get("/settings/study")
+def study_settings(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return _study_view(db, ctx.user)
+
+
+@router.put("/settings/focus")
+def update_focus(payload: FocusIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)) -> JSONResponse:
+    """Put one course or interest first until a day (inclusive), or end the focus with ``course_id`` null."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    user = db.get(User, ctx.user.id, with_for_update=True)
+    assert user is not None
+    interests.set_focus(db, user, payload.course_id, payload.until, ctx.request_id, origin="web")
+    return commit_with_response(db, ctx, payload, 200, _study_view(db, user))
 
 
 @router.put("/settings/study")
@@ -77,12 +95,7 @@ def update_study_settings(
     changes = apply_study_settings(user, payload.model_dump(exclude_none=True))
     audit(db, actor_id=user.id, action="study.settings_changed", details=changes, request_id=ctx.request_id)
     db.flush()
-    body = {
-        "weekly_minutes": user.weekly_minutes,
-        "maintenance_percent": user.maintenance_percent,
-        "style_percent": user.style_percent,
-    }
-    return commit_with_response(db, ctx, payload, 200, body)
+    return commit_with_response(db, ctx, payload, 200, _study_view(db, user))
 
 
 def apply_study_settings(user: User, values: dict[str, Any]) -> dict[str, Any]:

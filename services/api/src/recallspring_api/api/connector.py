@@ -57,6 +57,8 @@ from ..schemas import (
     CourseIn,
     CourseOut,
     DifficultyIn,
+    FocusIn,
+    InterestGoalIn,
     KnownConceptsIn,
     LearningSummaryIn,
     MaterialCategory,
@@ -75,6 +77,7 @@ from ..schemas import (
     TargetUpdateIn,
 )
 from ..services import attempts as attempt_svc
+from ..services import interests as interest_svc
 from ..services import overview
 from ..services import quizzes as quiz_svc
 from ..services import sources as source_svc
@@ -134,6 +137,9 @@ def courses(ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)) ->
             {
                 "id": str(c.id),
                 "title": c.title,
+                "kind": c.kind,
+                "goal": c.description if c.kind == "interest" else None,
+                "focus_until": c.focus_until.isoformat() if c.focus_until else None,
                 "status": c.status,
                 "semester": " › ".join(overview.group_path(db, c.group_id)) or None,
                 "concepts": concept_count,
@@ -740,6 +746,8 @@ def set_availability(
     details: dict[str, Any] = {}
     if payload.weekly_minutes is not None:
         details.update(apply_study_settings(user, {"weekly_minutes": payload.weekly_minutes}))
+    if payload.interest_percent is not None:
+        details.update(apply_study_settings(user, {"interest_percent": payload.interest_percent}))
     if payload.day is not None:
         if payload.minutes is None:
             raise ApiError(422, "minutes_required", "Give the minutes available on that day.")
@@ -751,7 +759,37 @@ def set_availability(
         details["day"] = {"day": payload.day.isoformat(), "minutes": payload.minutes}
     audit(db, actor_id=user.id, action="study.availability_changed", details=details, request_id=ctx.request_id)
     db.flush()
-    return commit_with_response(db, ctx, payload, 200, {"weekly_minutes": user.weekly_minutes, **details})
+    body = {"weekly_minutes": user.weekly_minutes, **details, "interest_percent": user.interest_percent}
+    return commit_with_response(db, ctx, payload, 200, body)
+
+
+@router.post("/focus")
+def set_focus(
+    payload: FocusIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """The learner chose to concentrate on one course or interest until a day (default today); ``course_id`` null
+    ends the focus. Only on the learner's clear request. Audited."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    user = db.get(User, ctx.user.id, with_for_update=True)
+    assert user is not None
+    focus = interest_svc.set_focus(db, user, payload.course_id, payload.until, ctx.request_id, origin="connector")
+    return commit_with_response(db, ctx, payload, 200, {"focus": focus})
+
+
+@router.post("/courses/{course_id}/goal")
+def set_interest_goal(
+    course_id: uuid.UUID,
+    payload: InterestGoalIn,
+    ctx: WriteCtx = Depends(connector_write_ctx),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """The learner's goal for a personal interest, in their own words. Audited."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    course = interest_svc.set_goal(db, ctx.user, course_id, payload.goal, ctx.request_id)
+    body = {"course_id": str(course.id), "title": course.title, "goal": course.description}
+    return commit_with_response(db, ctx, payload, 200, body)
 
 
 # ---------------------------------------------------------------- exam simulations
@@ -948,6 +986,7 @@ def organise_courses(
     moved = []
     for course_id in payload.course_ids:
         course = owned(db, Course, course_id, ctx.user.id, for_update=True)
+        interest_svc.refuse_interest_filing(course)
         course.group_id = parent_id
         course.revision += 1
         moved.append(course.title)
