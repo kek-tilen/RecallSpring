@@ -323,7 +323,7 @@ async def test_prompts_start_with_the_study_context() -> None:
     async with Client(mcp) as client:
         names = [p.name for p in (await client.list_prompts()).prompts]
         prompt = await client.get_prompt("start-studying", {"course": "KV"})
-    assert names == ["plan-semester", "start-studying", "exam-overview"]
+    assert names == ["plan-semester", "add-interest", "start-studying", "exam-overview"]
     text = prompt.messages[0].content.text
     assert "get_study_context" in text and "1st kolokvij" in text and "KV" in text
 
@@ -446,3 +446,27 @@ async def test_instructions_and_quiz_tool_put_learning_first() -> None:
     )
     assert "mark_concepts_known" in tools
     assert "not studied yet first" in prompt.messages[0].content.text
+
+
+async def test_interest_tools_call_their_routes(api: FakeApi) -> None:
+    api.route("POST", "/courses", 201, {"id": "c1", "kind": "interest"})
+    api.route("POST", "/courses/c1/goal", 200, {"goal": "pandas"})
+    api.route("POST", "/focus", 200, {"focus": None})
+    api.route("POST", "/availability", 200, {"interest_percent": 20})
+    async with Client(mcp) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        await client.call_tool("create_course", {"title": "Data analysis", "kind": "interest", "description": "pandas"})
+        await client.call_tool("set_interest_goal", {"course_id": "c1", "goal": "pandas"})
+        await client.call_tool("set_focus", {"course_id": None})
+        await client.call_tool("set_availability", {"interest_percent": 20})
+        prompt = await client.get_prompt("add-interest", {"topic": "ML"})
+    assert "clearly says" in tools["set_focus"].description and "interest" in tools["create_course"].description
+    sent = [(r.url.path.removeprefix("/api/v1/connector"), json.loads(r.content)) for r in api.requests]
+    assert sent == [
+        ("/courses", {"title": "Data analysis", "description": "pandas", "kind": "interest"}),
+        ("/courses/c1/goal", {"goal": "pandas"}),
+        ("/focus", {"course_id": None, "until": None}),
+        ("/availability", {"interest_percent": 20}),
+    ]
+    text = prompt.messages[0].content.text
+    assert "ML" in text and 'kind="interest"' in text and "university first" in text and "set_focus" in text
