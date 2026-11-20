@@ -138,12 +138,15 @@ def course_overview(db: Session, user: User, course: Course) -> dict[str, Any]:
             }
         )
     targets = live_targets(db, course.id)
+    dupes = duplicate_groups(targets)
     active = active_target(targets, today)
     quizzes = db.scalars(select(Quiz).where(Quiz.course_id == course.id).order_by(Quiz.created_at.desc()))
     return {
         "course": course_view(course),
         "active_target_id": str(active.id) if active else None,
-        "targets": [target_view(db, t, today) for t in targets],
+        "targets": [
+            {**target_view(db, t, today), "duplicates": [str(d) for d in dupes.get(t.id, [])]} for t in targets
+        ],
         "progress": {"study": study, "bands": bands, "concepts": len(concepts)},
         "concepts": rows,
         "sources": [
@@ -484,8 +487,34 @@ def counts(db: Session, user: User) -> dict[str, int]:
 
 
 def attention(db: Session, user: User) -> list[dict[str, Any]]:
-    """Things that need the learner: failed extractions, open simulations, answers waiting for feedback."""
+    """Things that need the learner: duplicate exams, failed extractions, open simulations, answers waiting for
+    feedback."""
     items: list[dict[str, Any]] = []
+    live = list(
+        db.scalars(
+            select(StudyTarget)
+            .join(Course, Course.id == StudyTarget.course_id)
+            .where(StudyTarget.user_id == user.id, StudyTarget.deleted_at.is_(None), Course.deleted_at.is_(None))
+        )
+    )
+    seen: set[frozenset[uuid.UUID]] = set()
+    for target_id, others in duplicate_groups(live).items():
+        group = frozenset([target_id, *others])
+        if group in seen:
+            continue
+        seen.add(group)
+        members = [t for t in live if t.id in group]
+        course = db.get(Course, members[0].course_id)
+        items.append(
+            {
+                "kind": "duplicates",
+                "id": str(target_id),
+                "course_id": str(members[0].course_id),
+                "title": f"{course.title if course else 'A course'}: {len(members)} entries for the same exam",
+                "text": " and ".join(f"{t.name} ({t.due_date.isoformat()})" for t in members)
+                + ". Merge them or delete one in Exams.",
+            }
+        )
     for s in db.scalars(
         select(Source).where(
             Source.user_id == user.id,

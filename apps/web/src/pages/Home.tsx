@@ -23,6 +23,7 @@ const CAPACITY: Record<TargetCapacity["status"], { tone: string; label: string }
 function attentionLink(a: AttentionItem): string {
   if (a.kind === "source" && a.id) return `/library/${a.id}`;
   if (a.kind === "quiz" && a.id) return `/simulations/${a.id}`;
+  if (a.kind === "duplicates") return "/exams";
   return "/history";
 }
 

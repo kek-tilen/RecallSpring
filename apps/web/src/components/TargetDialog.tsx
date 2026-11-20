@@ -1,10 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
-import { request } from "../api";
+import { ApiError, request } from "../api";
+import { dateLabel } from "../format";
 import { useCourses, useSources } from "../queries";
 import type { ScopeItem, Target } from "../types";
 import { useInvalidateOrganisation } from "./organise";
-import { ErrorNote, Modal } from "./ui";
+import { Confirm, ErrorNote, Modal } from "./ui";
 
 interface MaterialRow {
   source_id: string;
@@ -34,12 +35,14 @@ function toScope(rows: MaterialRow[], kept: ScopeItem[]) {
 }
 
 /** Create or edit an exam / kolokvij: date, status and result, the scope in the learner's words and its mapping. */
-export function TargetDialog({ target, courseId, open, onClose }: {
+export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
   target?: Target & { course_id?: string };
   courseId?: string;
   open: boolean;
   onClose: () => void;
+  onDeleted?: (target: Target) => void;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const courses = useCourses();
   const [course, setCourse] = useState(target?.course_id ?? courseId ?? "");
   const chosenCourse = course || courses.data?.[0]?.id || "";
@@ -88,6 +91,21 @@ export function TargetDialog({ target, courseId, open, onClose }: {
       onClose();
     },
   });
+
+  const remove = useMutation({
+    mutationFn: () => request(`/targets/${target!.id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      refresh();
+      setConfirmDelete(false);
+      onDeleted?.(target!);
+      onClose();
+    },
+  });
+
+  const existing =
+    save.error instanceof ApiError && save.error.code === "target_exists"
+      ? (save.error.details?.existing as { name: string; due_date: string } | undefined)
+      : undefined;
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -192,16 +210,48 @@ export function TargetDialog({ target, courseId, open, onClose }: {
           <span className="hint">Written or online, length, multiple-choice or open questions, allowed aids.</span>
           <textarea rows={2} value={notes} maxLength={4000} onChange={(e) => setNotes(e.target.value)} />
         </label>
-        {save.error && <ErrorNote error={save.error} />}
-        <div className="row" style={{ justifyContent: "flex-end" }}>
-          <button type="button" className="btn" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="btn primary" disabled={save.isPending || !due || !scopeText.trim() || !chosenCourse}>
-            {target ? "Save" : "Add"}
-          </button>
+        {existing ? (
+          <div className="notice warn" role="alert">
+            This course already has <strong>{existing.name}</strong> on {dateLabel(existing.due_date)}, probably recorded from
+            another chat. Close this and edit that one instead (Exams shows it), or use a different date or name if it is
+            another exam.
+          </div>
+        ) : (
+          save.error && <ErrorNote error={save.error} />
+        )}
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <div>
+            {target && (
+              <button type="button" className="btn danger" onClick={() => setConfirmDelete(true)}>
+                Delete
+              </button>
+            )}
+          </div>
+          <div className="row">
+            <button type="button" className="btn" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn primary" disabled={save.isPending || !due || !scopeText.trim() || !chosenCourse}>
+              {target ? "Save" : "Add"}
+            </button>
+          </div>
         </div>
       </form>
+      {target && (
+        <Confirm
+          open={confirmDelete}
+          title={`Delete ${target.name}?`}
+          confirmLabel="Delete"
+          danger
+          busy={remove.isPending}
+          onConfirm={() => remove.mutate()}
+          onClose={() => setConfirmDelete(false)}
+        >
+          {target.name} on {dateLabel(target.due_date)} disappears from your plan, the timeline and Claude. Simulations, answers and
+          grades stay. You can restore it from Exams → Recently deleted for 30 days.
+          {remove.error && <ErrorNote error={remove.error} />}
+        </Confirm>
+      )}
     </Modal>
   );
 }

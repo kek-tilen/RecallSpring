@@ -7,6 +7,7 @@ import type {
   CourseOverview,
   CourseSummary,
   Dashboard,
+  DeletedTarget,
   Group,
   HistoryRow,
   Note,
@@ -65,6 +66,8 @@ export const useStudySettings = () =>
 export const useConnector = () => useQuery({ queryKey: keys.connector, queryFn: () => get<ConnectorSettings>("/settings/connector") });
 
 export const useGroups = () => useQuery({ queryKey: keys.groups, queryFn: () => get<Group[]>("/groups") });
+export const useDeletedTargets = () =>
+  useQuery({ queryKey: ["targets", "deleted"], queryFn: () => get<DeletedTarget[]>("/targets/deleted") });
 export const useTargets = () => useQuery({ queryKey: keys.targets, queryFn: () => get<TimelineTarget[]>("/targets") });
 
 /** Everything that shows courses, groups or exams; call after any organisation change. */

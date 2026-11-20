@@ -41,7 +41,7 @@ export function setUnauthenticatedHandler(fn: () => void): void {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PUT" | "PATCH";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   json?: unknown;
   form?: FormData;
   key?: string;

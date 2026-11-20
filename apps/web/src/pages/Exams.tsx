@@ -3,11 +3,12 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerE
 import { Link } from "react-router";
 import { API, request } from "../api";
 import { CourseDot, cc, groupPath, useInvalidateOrganisation } from "../components/organise";
+import { DuplicatesPanel, RecentlyDeleted } from "../components/ExamCleanup";
 import { TargetDialog } from "../components/TargetDialog";
 import { Async, Empty, ErrorNote, PageHead } from "../components/ui";
 import { TARGET_KIND, addDays, dateLabel, daysBetween, plural, todayIso } from "../format";
 import { useCourses, useGroups, useTargets } from "../queries";
-import type { TimelineTarget } from "../types";
+import type { Target, TimelineTarget } from "../types";
 
 const DAY = 14; // pixels per day: about four months fit on a laptop screen
 const SHORT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -23,9 +24,27 @@ interface Moved {
   to: string;
 }
 
-function Marker({ t, start, onMove, onEdit }: {
+const LANE = 38; // vertical step between markers that would overlap in one row
+const MARKER_WIDTH = 130; // approximate pill width, used only to decide overlaps
+
+/** Lane per target so markers close in time sit on separate lines instead of covering each other. */
+function lanes(list: TimelineTarget[], start: string): Map<string, number> {
+  const ends: number[] = [];
+  const out = new Map<string, number>();
+  for (const t of [...list].sort((a, b) => a.due_date.localeCompare(b.due_date))) {
+    const left = daysBetween(start, t.due_date) * DAY;
+    let lane = ends.findIndex((end) => end <= left);
+    if (lane === -1) lane = ends.length;
+    ends[lane] = left + MARKER_WIDTH;
+    out.set(t.id, lane);
+  }
+  return out;
+}
+
+function Marker({ t, start, lane, onMove, onEdit }: {
   t: TimelineTarget;
   start: string;
+  lane: number;
   onMove: (t: TimelineTarget, to: string) => void;
   onEdit: (t: TimelineTarget) => void;
 }) {
@@ -90,7 +109,7 @@ function Marker({ t, start, onMove, onEdit }: {
     <button
       type="button"
       className={`tl-marker ${cc(t.course_color)} ${dragging ? "dragging" : ""} ${done ? "done" : ""}`}
-      style={{ left }}
+      style={{ left, top: 10 + lane * LANE }}
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}
@@ -159,20 +178,29 @@ function Timeline({ targets, onMove, onEdit }: {
         </div>
         {rows.map((list) => {
           const first = list[0]!;
+          const laneOf = lanes(list, start);
+          const height = 52 + Math.max(0, ...laneOf.values()) * LANE;
           return [
-            <div key={`${first.course_id}-label`} className="tl-label" title={first.course_title}>
+            <div key={`${first.course_id}-label`} className="tl-label" title={first.course_title} style={{ height }}>
               <CourseDot color={first.course_color} />
               <Link to={`/courses/${first.course_id}?tab=targets`} style={{ color: "inherit", textDecoration: "none" }}>
                 {first.course_title}
               </Link>
             </div>,
-            <div key={`${first.course_id}-track`} className="tl-track" style={{ width }}>
+            <div key={`${first.course_id}-track`} className="tl-track" style={{ width, height }}>
               {weeks.map((w) => (
                 <span key={w} className="tl-week" style={{ left: w }} />
               ))}
               <span className="tl-today" style={{ left: todayLeft }} />
               {list.map((t) => (
-                <Marker key={`${t.id}-${t.due_date}`} t={t} start={start} onMove={onMove} onEdit={onEdit} />
+                <Marker
+                  key={`${t.id}-${t.due_date}`}
+                  t={t}
+                  start={start}
+                  lane={laneOf.get(t.id) ?? 0}
+                  onMove={onMove}
+                  onEdit={onEdit}
+                />
               ))}
             </div>,
           ];
@@ -192,6 +220,14 @@ export function ExamsPage() {
   const [showPast, setShowPast] = useState(false);
   const [calendarGroup, setCalendarGroup] = useState("");
   const [toast, setToast] = useState<Moved | null>(null);
+  const [deleted, setDeleted] = useState<Target | null>(null);
+  const restore = useMutation({
+    mutationFn: (id: string) => request(`/targets/${id}/restore`, { method: "POST" }),
+    onSuccess: () => {
+      setDeleted(null);
+      refresh();
+    },
+  });
 
   const move = useMutation({
     mutationFn: ({ target, to }: { target: TimelineTarget; to: string; from: string }) =>
@@ -206,6 +242,11 @@ export function ExamsPage() {
     const id = window.setTimeout(() => setToast(null), 7000);
     return () => window.clearTimeout(id);
   }, [toast]);
+  useEffect(() => {
+    if (!deleted) return;
+    const id = window.setTimeout(() => setDeleted(null), 9000);
+    return () => window.clearTimeout(id);
+  }, [deleted]);
 
   const archivedCourses = new Set((courses.data ?? []).filter((c) => c.status === "archived").map((c) => c.id));
   const semesters = (groups.data ?? []).filter((g) => g.status === "active");
@@ -251,6 +292,7 @@ export function ExamsPage() {
                   </a>
                 </div>
               </div>
+              <DuplicatesPanel targets={all.filter((t) => !archivedCourses.has(t.course_id))} />
               {visible.length === 0 ? (
                 <Empty title="No exams yet">
                   Add one here, or use <strong>Plan semester</strong> in Claude's + menu to set up all your kolokviji at once.
@@ -282,6 +324,7 @@ export function ExamsPage() {
                           </td>
                           <td>
                             <strong>{t.name}</strong> <span className="muted small">{TARGET_KIND[t.kind] ?? t.kind}</span>
+                            {t.duplicates.length > 0 && <span className="chip warn" style={{ marginLeft: 8 }}>Possible duplicate</span>}
                             <div className="small muted pre">{t.scope_description}</div>
                           </td>
                           <td>
@@ -307,11 +350,31 @@ export function ExamsPage() {
                   </table>
                 </div>
               )}
+              <RecentlyDeleted />
             </>
           );
         }}
       </Async>
-      {editing && <TargetDialog key={editing.id + editing.revision} target={editing} open onClose={() => setEditing(null)} />}
+      {editing && (
+        <TargetDialog
+          key={editing.id + editing.revision}
+          target={editing}
+          open
+          onClose={() => setEditing(null)}
+          onDeleted={(t) => {
+            setToast(null);
+            setDeleted(t);
+          }}
+        />
+      )}
+      {deleted && (
+        <div className="toast" role="status">
+          Deleted {deleted.name}.
+          <button type="button" className="btn small" onClick={() => restore.mutate(deleted.id)} disabled={restore.isPending}>
+            Undo
+          </button>
+        </div>
+      )}
       {adding && <TargetDialog open onClose={() => setAdding(false)} />}
       {toast && (
         <div className="toast" role="status">

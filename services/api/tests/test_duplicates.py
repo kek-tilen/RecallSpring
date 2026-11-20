@@ -103,6 +103,11 @@ def test_duplicates_are_flagged_and_merged_without_losing_anything(
     assert timeline[kept["id"]]["duplicates"] == [dup] and timeline[dup]["duplicates"] == [kept["id"]]
     assert timeline[kept["id"]]["simulations"] == 1
 
+    attention = [a for a in owner_api.get("/dashboard").json()["attention"] if a["kind"] == "duplicates"]
+    assert len(attention) == 1 and "2 entries for the same exam" in attention[0]["title"]
+    course_view = {t["id"]: t for t in owner_api.get(f"/courses/{course}/overview").json()["targets"]}
+    assert course_view[dup]["duplicates"] == [kept["id"]]
+
     merged = owner_api.post(f"/targets/{dup}/merge", {"into_id": kept["id"]})
     assert merged.status_code == 200, merged.text
     body = merged.json()
@@ -111,6 +116,7 @@ def test_duplicates_are_flagged_and_merged_without_losing_anything(
     after = owner_api.get("/targets").json()
     assert [t["id"] for t in after] == [kept["id"]] and after[0]["duplicates"] == []
     assert [d["id"] for d in owner_api.get("/targets/deleted").json()] == [dup]
+    assert not [a for a in owner_api.get("/dashboard").json()["attention"] if a["kind"] == "duplicates"]
     with new_session() as db:
         audit = db.scalar(select(AuditEvent).where(AuditEvent.action == "target.merged"))
     assert audit is not None and audit.details["simulations_moved"] == 0 and audit.details["merged"]["id"] == dup

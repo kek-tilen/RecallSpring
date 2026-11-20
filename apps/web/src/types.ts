@@ -119,6 +119,7 @@ export interface Target {
   notes: string | null;
   concepts_in_scope: number;
   profile: TargetProfile | null;
+  duplicates?: string[];
 }
 
 export interface Source {
@@ -247,6 +248,20 @@ export interface TimelineTarget extends Target {
   course_color: CourseColor | null;
   course_status: string;
   revision: number;
+  created_at: string;
+  simulations: number;
+  duplicates: string[];
+}
+
+export interface DeletedTarget {
+  id: string;
+  name: string;
+  kind: string;
+  due_date: string;
+  course_id: string;
+  course_title: string;
+  course_color: CourseColor | null;
+  deleted_at: string | null;
 }
 
 export interface QuizView {
@@ -322,7 +337,7 @@ export interface Plan {
 }
 
 export interface AttentionItem {
-  kind: "source" | "quiz" | "answers";
+  kind: "source" | "quiz" | "answers" | "duplicates";
   id: string | null;
   course_id: string | null;
   title: string;

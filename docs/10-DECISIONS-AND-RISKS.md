@@ -37,6 +37,7 @@
 | Photos of notes, notebooks and exercises are kept as material (PNG/JPG/WebP, no OCR); Claude looks at them on request via the connector (≤ 4.5 MB; the web app shrinks larger photos before upload) | Approved 2026-11-20 |
 | Calendar: exams export as an .ics download (no public subscription URL while local-only) | Approved 2026-11-20 |
 | Sharing with others | Deferred (owner in chat) |
+| Several chats share one learner's records: a second course with the same title or a second exam that matches a live one (same name, or same type and date) is refused (409) and Claude updates the existing one; existing duplicates are flagged and merged in the web app; exams are soft-deleted only from the web app (restorable 30 days; purge job not built yet) | Approved 2026-11-20 |
 | Web app = overview of everything stored (plan, courses, exams, concepts, reviews, simulations, material, notes, history, settings) in the Sage Study palette; studying stays in Claude. Served same-origin by the API from `apps/web/dist` with a strict CSP | Approved 2026-11-19 |
 | Learning first: teach new material (explain, own-words summary, short checks) before practice or simulations; server refuses practice on unstudied concepts; diagnostics only on request and never affect reviews | Approved 2026-11-19 (ADR-006) |
 

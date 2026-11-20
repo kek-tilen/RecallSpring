@@ -288,6 +288,13 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
           }
         >
           <div className="stack">
+            {!!t.duplicates?.length && (
+              <div className="notice warn small">
+                This looks like the same exam as{" "}
+                {t.duplicates.map((id) => targets.find((x) => x.id === id)?.name ?? "another entry").join(", ")} (probably
+                recorded from two chats). <Link to="/exams">Merge or delete it in Exams</Link>.
+              </div>
+            )}
             <dl className="kv">
               <dt>When</dt>
               <dd>

@@ -136,3 +136,20 @@ describe("organisation helpers", () => {
     expect(gradingPrompt({ title: "Simulation 1", quiz_id: "abc-123" })).toContain("(ID abc-123)");
   });
 });
+
+describe("duplicate exams", () => {
+  it("groups entries that point at each other once", async () => {
+    const { duplicateGroups } = await import("./components/ExamCleanup");
+    const base = {
+      kind: "kolokvij", status: "upcoming", result: null, goal: null, scope_description: "", scope: [], notes: null,
+      concepts_in_scope: 0, profile: null, days_left: 10, course_id: "c", course_title: "KV", course_color: null,
+      course_status: "active", revision: 1, simulations: 0, due_date: "2026-11-30",
+    };
+    const a = { ...base, id: "a", name: "1. kolokvij", created_at: "2026-11-19T20:00:00Z", duplicates: ["b"] };
+    const b = { ...base, id: "b", name: "Kolokvij", created_at: "2026-11-20T08:00:00Z", duplicates: ["a"] };
+    const c = { ...base, id: "c2", name: "2. kolokvij", due_date: "2027-01-15", created_at: "2026-11-20T08:00:00Z", duplicates: [] };
+    const groups = duplicateGroups([b, a, c]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.map((t) => t.id)).toEqual(["a", "b"]); // oldest first
+  });
+});
