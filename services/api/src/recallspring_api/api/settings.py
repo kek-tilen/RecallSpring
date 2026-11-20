@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import clock
+from .. import backup, clock
 from ..config import get_settings
 from ..connector_auth import daily_limit, new_token, used_today
 from ..db import get_db
@@ -66,6 +66,28 @@ def _study_view(db: Session, u: User) -> dict[str, Any]:
         "interest_percent": u.interest_percent,
         "focus": interests.focus_view(db, u),
     }
+
+
+@router.get("/settings/backup")
+def backup_status(ctx: Ctx = Depends(current_ctx)) -> dict[str, Any]:
+    """When the last backup ran, whether it was checked, where backups are kept (no secrets)."""
+    return backup.status_view()
+
+
+@router.post("/settings/backup")
+def backup_now(ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)) -> JSONResponse:
+    """Back up the database and the uploaded files now (usually seconds). Audited as ``backup.created`` or
+    ``backup.failed`` by the backup itself, so a failure is on record although the request fails."""
+    if replay := replay_if_seen(db, ctx, None):
+        return replay
+    db.rollback()  # no transaction stays open while pg_dump runs
+    try:
+        view = backup.run("manual", actor_id=ctx.user.id, request_id=ctx.request_id)
+    except backup.BackupError as exc:
+        if exc.code == "busy":
+            raise ApiError(409, "backup_busy", exc.message) from exc
+        raise ApiError(503, "backup_failed", exc.message, {"reason": exc.code}) from exc
+    return commit_with_response(db, ctx, None, 200, view)
 
 
 @router.get("/settings/study")

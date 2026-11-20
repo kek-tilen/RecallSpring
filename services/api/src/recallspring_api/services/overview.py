@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import clock
+from .. import backup, clock
 from ..models import (
     Assessment,
     Attempt,
@@ -349,6 +349,10 @@ _EVENT_TEXT = {
     "concepts.marked_known": "You marked concepts as known",
     "study.settings_changed": "Study settings changed",
     "study.availability_changed": "Study time changed",
+    "study.focus_changed": "Focus changed",
+    "course.goal_changed": "Interest goal changed",
+    "backup.created": "Backup made",
+    "backup.failed": "Backup failed",
     "review.defer": "Review deferred",
     "assessment.grade_override": "Grade overridden",
     "auth.login": "Signed in",
@@ -379,6 +383,13 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         }.get(payload.get("source"), payload.get("source"))
     if event_type == "quiz.submitted":
         return f"{payload.get('items')} questions, {payload.get('mode', 'practice')}"
+    if event_type == "backup.created":
+        check = {"restored": "checked by a test restore", "listed": "dump read back"}.get(
+            payload.get("check"), "not checked"
+        )
+        return f"{payload.get('rows')} rows, {payload.get('files')} files, {check}"
+    if event_type == "backup.failed":
+        return str(payload.get("message") or payload.get("code"))
     return None
 
 
@@ -461,7 +472,7 @@ def history(db: Session, user: User, limit: int) -> list[dict[str, Any]]:
             "kind": "audit",
             "type": a.action,
             "text": _EVENT_TEXT.get(a.action, a.action),
-            "detail": None,
+            "detail": _detail(a.action, a.details) if a.action.startswith("backup.") else None,
             "entity_type": a.target_type,
             "entity_id": str(a.target_id) if a.target_id else None,
             "label": labels.get(a.target_id) if a.target_id else None,
@@ -489,9 +500,11 @@ def counts(db: Session, user: User) -> dict[str, int]:
 
 
 def attention(db: Session, user: User) -> list[dict[str, Any]]:
-    """Things that need the learner: duplicate exams, failed extractions, open simulations, answers waiting for
-    feedback."""
+    """Things that need the learner: a failed or overdue backup, duplicate exams, failed extractions, open
+    simulations, answers waiting for feedback."""
     items: list[dict[str, Any]] = []
+    if item := backup.attention_item():
+        items.append(item)
     live = list(
         db.scalars(
             select(StudyTarget)

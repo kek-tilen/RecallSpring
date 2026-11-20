@@ -4,6 +4,10 @@ recallspring create-owner --username <name>      (password is prompted, never pa
 recallspring seed-demo --username <name>         (adds a clearly labelled demo course)
 recallspring worker [--once]                     (processes source extraction jobs; no model calls)
 recallspring connector-token --username <name>   (writes a Claude connector token to a private file)
+recallspring backup [--if-due]                   (database + uploaded files, checked by a test restore)
+recallspring backup-status                       (last backup, kept snapshots, location)
+recallspring backup-restore --database <new> [--snapshot <name>|latest] [--storage <empty folder>]
+                                                 (restores into a NEW database / folder; never overwrites)
 """
 
 from __future__ import annotations
@@ -137,6 +141,67 @@ def connector_token(username: str, label: str, path: Path) -> int:
     return 0
 
 
+def _size(n: int) -> str:
+    return f"{n / 1024 / 1024:.1f} MB"
+
+
+def backup_now(if_due: bool) -> int:
+    from . import backup
+
+    if if_due and not backup.due():
+        print("No backup due.")
+        return 0
+    try:
+        view = backup.run("cli")
+    except backup.BackupError as exc:
+        print(f"Backup failed ({exc.code}): {exc.message}", file=sys.stderr)
+        return 1
+    last = view["last"]
+    print(f"Backup {last['snapshot']} (UTC) in {view['location']}")
+    print(f"  database: {last['tables']} tables, {last['rows']} rows, dump {_size(last['dump_bytes'])}")
+    print(f"  files: {last['files']} ({last['files_copied']} new), {_size(last['files_bytes'])}")
+    if last["files_missing"]:
+        print(f"  WARNING: {last['files_missing']} uploaded file(s) were missing from storage")
+    print(f"  check: {last['check']}; kept snapshots: {len(view['snapshots'])}; removed: {last['removed_snapshots']}")
+    return 0
+
+
+def backup_status() -> int:
+    from . import backup
+
+    view = backup.status_view()
+    print(f"Backups {'on' if view['enabled'] else 'OFF'}, every {view['interval_hours']} h, in {view['location']}")
+    if view["same_disk_as_storage"]:
+        print("  Same disk as the uploaded files: set RS_BACKUP_DIR to another disk or a synced folder.")
+    print(f"  last good: {view['last_success_at'] or 'never'}; next due: {view['next_due']}")
+    if view["last_error"]:
+        print(f"  LAST ATTEMPT FAILED ({view['last_error']['code']}): {view['last_error']['message']}")
+    print(f"  snapshots (UTC, newest first): {', '.join(view['snapshots']) or 'none'}; {_size(view['disk_bytes'])}")
+    print(f"  tools: {view['tools'] or 'pg_dump not found'}")
+    return 0
+
+
+def backup_restore(snapshot: str, database: str, storage: Path | None) -> int:
+    from . import backup
+
+    try:
+        result = backup.restore(snapshot, database, storage)
+    except backup.BackupError as exc:
+        print(f"Restore refused or failed ({exc.code}): {exc.message}", file=sys.stderr)
+        return 1
+    print(f"Restored backup {result['snapshot']} into the new database {result['database']} ({result['rows']} rows).")
+    if result["tables_differing"]:
+        print(f"  WARNING: row counts differ in {', '.join(result['tables_differing'])}", file=sys.stderr)
+    if result["storage"]:
+        print(f"  {result['files']} of {result['files_expected']} files copied to {result['storage']}")
+    print("Nothing was switched. To use it, stop RecallSpring, then in services/api/.env set")
+    print(f"  RS_DATABASE_URL={result['database_url']}  (keep your password in place of ***)")
+    if result["storage"]:
+        print(f"  RS_STORAGE_DIR={result['storage']}")
+    print("run `alembic upgrade head` and start RecallSpring again. Keep the old database until you are sure.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="recallspring")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -149,7 +214,23 @@ def main(argv: list[str] | None = None) -> int:
     token.add_argument("--file", type=Path, default=default_token_file(), help="where the token is written")
     worker = sub.add_parser("worker")
     worker.add_argument("--once", action="store_true", help="process queued jobs, then exit")
+    bk = sub.add_parser("backup", help="back up the database and uploaded files now")
+    bk.add_argument("--if-due", action="store_true", help="only when the last good backup is older than the interval")
+    sub.add_parser("backup-status", help="show the last backup and the kept snapshots")
+    rs = sub.add_parser("backup-restore", help="restore a backup into a NEW database (never overwrites)")
+    rs.add_argument("--snapshot", default="latest", help="snapshot name (see backup-status) or 'latest'")
+    rs.add_argument("--database", required=True, help="name of a database that does not exist yet")
+    rs.add_argument("--storage", type=Path, help="an empty or new folder for the uploaded files")
     args = parser.parse_args(argv)
+    if args.command in ("backup", "backup-status", "backup-restore"):
+        import logging
+
+        logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s %(message)s")
+        if args.command == "backup":
+            return backup_now(args.if_due)
+        if args.command == "backup-status":
+            return backup_status()
+        return backup_restore(args.snapshot, args.database, args.storage)
     if args.command == "create-owner":
         return create_owner(args.username)
     if args.command == "connector-token":

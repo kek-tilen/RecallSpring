@@ -56,6 +56,21 @@ class Settings(BaseSettings):
     job_lease_seconds: int = 300
     job_max_attempts: int = 3
 
+    # Backups (backup.py, docs/08 -> Backups): the worker makes one when the last good one is older than the
+    # interval: a database dump plus the uploaded files, checked by restoring it into a throwaway database.
+    # backup_dir defaults to "backups" next to storage_dir, i.e. the same disk: point it at another disk or a
+    # synced folder to survive a broken disk.
+    backup_enabled: bool = True
+    backup_dir: Path | None = None
+    backup_interval_hours: int = Field(default=24, ge=1, le=24 * 7)
+    backup_keep_daily: int = Field(default=7, ge=1, le=90)
+    backup_keep_weekly: int = Field(default=4, ge=0, le=52)
+    backup_verify: bool = True
+    backup_timeout_seconds: int = 600
+    # pg_dump / pg_restore: in backup_pg_bin, else on PATH, else (development and test only) inside this container.
+    backup_pg_bin: Path | None = None
+    backup_docker_container: str | None = "recallspring-dev-db-1"
+
     # Web app: the built single-page app (apps/web/dist) is served by the API when present.
     web_dist: Path = _REPO_ROOT / "apps" / "web" / "dist"
 
