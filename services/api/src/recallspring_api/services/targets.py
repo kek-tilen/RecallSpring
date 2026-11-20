@@ -426,11 +426,14 @@ def merge_targets(
                 )
             )
             copied_scope += 1
+    # Text already kept (e.g. merged, restored and merged again) is not appended twice.
+    kept_text = f"{into.scope_description}\n{into.notes or ''}"
     extra = []
-    if source.scope_description.strip() and source.scope_description.strip() != into.scope_description.strip():
-        extra.append(f"Scope (from {source.name}): {source.scope_description.strip()}")
-    if source.notes and source.notes.strip() and source.notes.strip() not in (into.notes or ""):
-        extra.append(f"Notes (from {source.name}): {source.notes.strip()}")
+    scope, notes = source.scope_description.strip(), (source.notes or "").strip()
+    if scope and scope != into.scope_description.strip() and scope not in kept_text:
+        extra.append(f"Scope (from {source.name}): {scope}")
+    if notes and notes not in kept_text:
+        extra.append(f"Notes (from {source.name}): {notes}")
     if extra:
         into.notes = "\n\n".join([*(p for p in [into.notes] if p), *extra])[:4000]
     into.revision += 1

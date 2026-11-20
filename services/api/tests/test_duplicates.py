@@ -121,6 +121,11 @@ def test_duplicates_are_flagged_and_merged_without_losing_anything(
         audit = db.scalar(select(AuditEvent).where(AuditEvent.action == "target.merged"))
     assert audit is not None and audit.details["simulations_moved"] == 0 and audit.details["merged"]["id"] == dup
 
+    # Restored and merged again: its scope and notes are not appended a second time.
+    assert owner_api.post(f"/targets/{dup}/restore").status_code == 200
+    again = owner_api.post(f"/targets/{dup}/merge", {"into_id": kept["id"]})
+    assert again.status_code == 200 and again.json()["notes"] == body["notes"]
+
     assert owner_api.post(f"/targets/{kept['id']}/merge", {"into_id": kept["id"]}).status_code == 422
 
 
