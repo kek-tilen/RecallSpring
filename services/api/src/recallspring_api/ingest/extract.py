@@ -1,7 +1,8 @@
 """Text extraction into citable sections. Runs in a separate, time-limited process (see jobs.py).
 
-Run directly:  python -I -m recallspring_api.ingest.extract <pdf|markdown|text> <path> <max_pages>
+Run directly:  python -I -m recallspring_api.ingest.extract <pdf|markdown|text|docx|pptx|xlsx> <path> <max_pages>
 Prints one JSON object on stdout. Never executes document content; scanned PDFs are reported, not guessed.
+Word, PowerPoint and Excel files are read by office.py.
 """
 
 from __future__ import annotations
@@ -63,7 +64,8 @@ def normalize(text: str) -> str:
 
 
 def _split_long(text: str, limit: int) -> list[str]:
-    """Split at paragraph boundaries; hard-split paragraphs longer than ``limit``."""
+    """Split at paragraph boundaries. A paragraph longer than ``limit`` (e.g. a table) is cut at a line break
+    in the second half of the chunk when there is one, otherwise hard."""
     parts: list[str] = []
     current = ""
     for para in text.split("\n\n"):
@@ -71,8 +73,10 @@ def _split_long(text: str, limit: int) -> list[str]:
             if current:
                 parts.append(current)
                 current = ""
-            parts.append(para[:limit])
-            para = para[limit:]
+            cut = para.rfind("\n", limit // 2, limit)
+            cut = cut if cut > 0 else limit
+            parts.append(para[:cut])
+            para = para[cut:].lstrip("\n")
         candidate = f"{current}\n\n{para}" if current else para
         if len(candidate) > limit and current:
             parts.append(current)
@@ -132,7 +136,7 @@ def extract_markdown(text: str) -> Result:
     text = normalize(text)
     if not text:
         return Result("failed", version, error_code="empty_document")
-    blocks: list[tuple[list[str], list[str]]] = [([], [])]
+    blocks: Blocks = [([], [])]
     path: list[str] = []
     in_fence = False
     for line in text.split("\n"):
@@ -145,18 +149,27 @@ def extract_markdown(text: str) -> Result:
             blocks.append((list(path), [line]))
         else:
             blocks[-1][1].append(line)
+    return Result("ready", version, sections_from_blocks(blocks, "\n"))
+
+
+# (heading path, body lines) per heading; the first block holds anything before the first heading.
+Blocks = list[tuple[list[str], list[str]]]
+
+
+def sections_from_blocks(blocks: Blocks, joiner: str, preface: str = "Introduction") -> list[Section]:
+    """One "§ Heading" section per heading (split when long); shared by Markdown and Word documents."""
     sections: list[Section] = []
     for heading_path, lines in blocks:
-        body = "\n".join(lines).strip()
+        body = joiner.join(lines).strip()
         if not body:
             continue
-        label_base = (heading_path[-1] if heading_path else "Introduction")[:120]
+        label_base = (heading_path[-1] if heading_path else preface)[:120]
         heading = " › ".join(heading_path)[:300] or None
         chunks = _split_long(body, MAX_SECTION_CHARS)
         for i, chunk in enumerate(chunks):
             label = label_base if len(chunks) == 1 else f"{label_base} (part {i + 1})"
             sections.append(Section(0, f"§ {label}", chunk, heading=heading))
-    return Result("ready", version, _with_offsets(sections))
+    return _with_offsets(sections)
 
 
 def extract_plain(text: str) -> Result:
@@ -172,6 +185,10 @@ def extract_plain(text: str) -> Result:
 def extract(path: Path, kind: str, max_pages: int) -> Result:
     if kind == "pdf":
         return extract_pdf(path, max_pages)
+    if kind in ("docx", "pptx", "xlsx"):
+        from . import office
+
+        return office.extract(path, kind, max_pages)
     try:
         text = decode_text(path.read_bytes())
     except UnicodeDecodeError:
@@ -179,7 +196,24 @@ def extract(path: Path, kind: str, max_pages: int) -> Result:
     return extract_markdown(text) if kind == "markdown" else extract_plain(text)
 
 
+MEMORY_LIMIT_BYTES = 2 * 1024**3
+
+
+def _limit_memory() -> None:
+    """Cap this process's address space where the OS supports it (Linux, macOS), so a hostile file fails the
+    extraction instead of starving the host. On Windows the timeout and the size limits apply."""
+    try:
+        import resource
+    except ImportError:  # Windows
+        return
+    try:
+        resource.setrlimit(resource.RLIMIT_AS, (MEMORY_LIMIT_BYTES, MEMORY_LIMIT_BYTES))
+    except (ValueError, OSError):  # pragma: no cover - already lower, or not permitted
+        pass
+
+
 def main(argv: list[str]) -> int:
+    _limit_memory()
     kind, path, max_pages = argv[1], Path(argv[2]), int(argv[3])
     sys.stdout.write(json.dumps(extract(path, kind, max_pages).as_dict(), ensure_ascii=False))
     return 0

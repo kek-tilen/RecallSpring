@@ -31,7 +31,17 @@ ALLOWED_EXTENSIONS = {
     ".jpg": ("image", "image/jpeg"),
     ".jpeg": ("image", "image/jpeg"),
     ".webp": ("image", "image/webp"),
+    # Office Open XML. Only the text is read (office.py); macros, embedded objects and links are never run.
+    ".docx": ("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ".pptx": ("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+    ".ppsx": ("pptx", "application/vnd.openxmlformats-officedocument.presentationml.slideshow"),
+    ".xlsx": ("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
 }
+OFFICE_KINDS = {"docx", "pptx", "xlsx"}
+# Old binary formats, macro-enabled files and templates: refused with a "save it as .docx/.pptx/.xlsx" hint.
+UNSUPPORTED_OFFICE = {".doc", ".ppt", ".pps", ".xls", ".docm", ".pptm", ".xlsm", ".dotx", ".potx", ".xltx", ".rtf"}
+ZIP_MAGIC = b"PK\x03\x04"
+OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # password-protected Office files and the old formats
 
 IMAGE_MAGIC = {
     "image/png": lambda h: h.startswith(b"\x89PNG\r\n\x1a\n"),
@@ -116,9 +126,17 @@ def sanitize_filename(name: str | None) -> str:
 def sniff(head: bytes, filename: str) -> tuple[str, str]:
     """Return (kind, mime) after checking the extension allowlist against the actual content."""
     ext = Path(filename).suffix.lower()
+    if ext in UNSUPPORTED_OFFICE:
+        raise StorageError("office_format_unsupported")
     if ext not in ALLOWED_EXTENSIONS:
         raise StorageError("unsupported_file_type")
     kind, mime = ALLOWED_EXTENSIONS[ext]
+    if kind in OFFICE_KINDS:
+        if head.startswith(OLE_MAGIC):
+            raise StorageError("office_protected")
+        if not head.startswith(ZIP_MAGIC):
+            raise StorageError("content_does_not_match_type")
+        return kind, mime
     is_pdf = head.startswith(b"%PDF-")
     if kind == "pdf" and not is_pdf:
         raise StorageError("content_does_not_match_type")
@@ -127,6 +145,17 @@ def sniff(head: bytes, filename: str) -> tuple[str, str]:
     if kind == "image" and not IMAGE_MAGIC[mime](head):
         raise StorageError("content_does_not_match_type")
     return kind, mime
+
+
+def check_office_package(path: Path, kind: str) -> None:
+    """A real, readable Word/PowerPoint/Excel package of the declared kind (reads only the package index)."""
+    from .office import PackageError, check_package
+
+    try:
+        check_package(path, kind)
+    except PackageError as exc:
+        code = exc.code if exc.code in ("content_does_not_match_type", "document_too_large") else "office_unreadable"
+        raise StorageError(code) from exc
 
 
 def check_text_encoding(path: Path) -> None:

@@ -22,19 +22,46 @@ PARSE_MESSAGES = {
     "no_extractable_text": "Text couldn't be extracted. Try a text-based PDF or paste the content.",
     "pdf_encrypted": "This PDF is password-protected. Remove the protection or paste the content.",
     "pdf_unreadable": "This PDF could not be read. It may be damaged; export it again or paste the content.",
-    "too_many_pages": "This PDF has too many pages. Split it into smaller files.",
+    "too_many_pages": "This file has too many pages, slides or sheets. Split it into smaller files.",
+    "office_unreadable": "This file could not be read. It may be damaged; save it again in Office or export a PDF.",
+    "document_too_large": "This file is too large to read safely. Split it or export a PDF.",
+    "unsafe_document": "This file contains XML features RecallSpring never reads (DTD or entities), so it was skipped.",
     "empty_document": "The document contains no text.",
     "unsupported_encoding": "The text file is not UTF-8. Save it as UTF-8 and upload it again.",
     "extraction_timeout": "Text extraction took too long. Try a smaller file or paste the content.",
     "extraction_crashed": "Text extraction failed unexpectedly. You can retry.",
 }
 
+# Per kind, where the generic message would point to the wrong fix.
+KIND_PARSE_MESSAGES = {
+    ("no_extractable_text", "docx"): "This document has no text (only pictures?). Paste the content or export a PDF.",
+    ("no_extractable_text", "pptx"): "These slides have no text (only pictures?). Add photos of the slides instead.",
+    ("no_extractable_text", "xlsx"): "This spreadsheet has no visible cells with values.",
+}
+
+SUPPORTED_FILES = (
+    "PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), Markdown (.md), plain text (.txt) "
+    "and images (.png, .jpg, .webp)"
+)
+
 UPLOAD_ERRORS = {
     "file_too_large": (413, "The file is larger than the upload limit."),
-    "unsupported_file_type": (
+    "unsupported_file_type": (415, f"Supported files: {SUPPORTED_FILES}."),
+    "office_format_unsupported": (
         415,
-        "Only PDF, Markdown (.md), plain text (.txt) and images (.png, .jpg, .webp) are supported.",
+        "This Office format isn't supported (old .doc/.ppt/.xls, macro-enabled or template files). "
+        "Open it and save it as .docx, .pptx or .xlsx, or export a PDF.",
     ),
+    "office_protected": (
+        415,
+        "This file is password-protected or in the old Office format. Remove the password or save it as "
+        ".docx, .pptx or .xlsx, then upload it again.",
+    ),
+    "office_unreadable": (
+        415,
+        "This file could not be opened as a Word, PowerPoint or Excel document. Save it again and retry.",
+    ),
+    "document_too_large": (413, "This file has too many parts to read safely. Split it or export a PDF."),
     "content_does_not_match_type": (415, "The file content does not match its extension."),
     "unsupported_encoding": (415, "The text file is not UTF-8. Save it as UTF-8 and upload it again."),
 }
@@ -49,10 +76,20 @@ def parse_message(source: Source) -> str | None:
     if source.kind == "image":
         return None
     if source.parse_state == "failed":
-        return PARSE_MESSAGES.get(source.parse_error or "", "Text couldn't be extracted.")
+        code = source.parse_error or ""
+        return KIND_PARSE_MESSAGES.get((code, source.kind)) or PARSE_MESSAGES.get(code, "Text couldn't be extracted.")
     if source.parse_state == "needs_attention":
-        pages = next((n.split(":", 1)[1] for n in source.parse_notes if n.startswith("pages_without_text:")), "")
-        return f"Some pages have no extractable text (possibly scanned): {pages.replace(',', ', ')}."
+        notes = {n.split(":", 1)[0]: n.split(":", 1)[1] if ":" in n else "" for n in source.parse_notes}
+        messages = []
+        if "pages_without_text" in notes:
+            pages = notes["pages_without_text"].replace(",", ", ")
+            messages.append(f"Some pages have no extractable text (possibly scanned): {pages}.")
+        if "slides_without_text" in notes:
+            slides = notes["slides_without_text"].replace(",", ", ")
+            messages.append(f"Many slides have little or no text (pictures only?): {slides}.")
+        if "truncated" in notes:
+            messages.append("The file is very large, so only its beginning was extracted. Split it to get the rest.")
+        return " ".join(messages) or None
     return None
 
 

@@ -13,7 +13,17 @@ from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
 from ..ingest import jobs
-from ..ingest.storage import StorageError, blob_path, check_text_encoding, sanitize_filename, sniff, spool, spool_bytes
+from ..ingest.storage import (
+    OFFICE_KINDS,
+    StorageError,
+    blob_path,
+    check_office_package,
+    check_text_encoding,
+    sanitize_filename,
+    sniff,
+    spool,
+    spool_bytes,
+)
 from ..models import Course, Source, SourceSection
 from ..schemas import (
     MaterialCategory,
@@ -43,7 +53,8 @@ def upload_source(
     ctx: WriteCtx = Depends(write_ctx),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Multipart upload of a PDF, Markdown or text file. Extraction runs in the worker; poll GET /sources/{id}.
+    """Multipart upload of a PDF, Word, PowerPoint, Excel, Markdown, text or image file. Extraction runs in the
+    worker; poll GET /sources/{id}.
 
     In production the reverse proxy must also cap the request body (client_max_body_size)."""
     return handle_upload(request, course_id, file, ctx, db, category)
@@ -68,6 +79,8 @@ def handle_upload(
             kind, mime = sniff(fh.read(16), filename)
         if kind in ("markdown", "text"):
             check_text_encoding(tmp)
+        elif kind in OFFICE_KINDS:
+            check_office_package(tmp, kind)
     except StorageError as exc:
         tmp.unlink(missing_ok=True)
         raise svc.upload_error(exc.code) from exc
