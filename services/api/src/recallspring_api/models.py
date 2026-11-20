@@ -464,7 +464,7 @@ class Source(Base):
 
     __table_args__ = (
         Index("ix_sources_user_sha256", "user_id", "sha256"),
-        CheckConstraint("kind IN ('pdf','markdown','text','image')", name="kind"),
+        CheckConstraint("kind IN ('pdf','markdown','text','image','docx','pptx','xlsx')", name="kind"),
         CheckConstraint("origin IN ('upload','paste')", name="origin"),
         CheckConstraint("category IN ('material','notes','exercises','past_paper','other')", name="category"),
         CheckConstraint(
