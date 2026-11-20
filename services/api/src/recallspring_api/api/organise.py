@@ -18,7 +18,7 @@ from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_s
 from ..errors import ApiError
 from ..models import Course, CourseGroup, User
 from ..schemas import ArchiveIn, CoursePatch, GroupIn, GroupPatch, MergeIn, TargetIn, TargetUpdateIn
-from ..services import interests, overview
+from ..services import interests, overview, readiness
 from ..services import targets as target_svc
 from ..services.events import audit
 from ..services.ownership import owned
@@ -234,6 +234,14 @@ def update_course(
 @router.get("/targets")
 def list_targets(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     return overview.targets_timeline(db, ctx.user)
+
+
+@router.get("/targets/{target_id}/readiness")
+def target_readiness(
+    target_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """What is left before this exam, by material: not studied, weak, not practised, getting there, solid."""
+    return readiness.readiness(db, ctx.user, target_id, clock.now())
 
 
 @router.post("/targets", status_code=201)

@@ -78,7 +78,7 @@ from ..schemas import (
 )
 from ..services import attempts as attempt_svc
 from ..services import interests as interest_svc
-from ..services import overview
+from ..services import overview, readiness, week
 from ..services import quizzes as quiz_svc
 from ..services import sources as source_svc
 from ..services import targets as target_svc
@@ -111,6 +111,33 @@ def plan(
     if course_id is not None:
         owned(db, Course, course_id, ctx.user.id)
     return today_plan(db, ctx.user, clock.now(), minutes, course_id)
+
+
+@router.get("/readiness")
+def exam_readiness(
+    target_id: uuid.UUID | None = None,
+    course_id: uuid.UUID | None = None,
+    ctx: Ctx = Depends(connector_ctx),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """What is left before an exam (``target_id``, or the next exam of ``course_id``): states by material, the
+    weakest concepts with the gaps from their last feedback, next steps and the time check."""
+    now = clock.now()
+    if target_id is None:
+        if course_id is None:
+            raise ApiError(422, "target_or_course_required", "Give target_id or course_id.")
+        target_id = readiness.for_course(db, ctx.user, course_id, now)
+    return readiness.compact(readiness.readiness(db, ctx.user, target_id, now))
+
+
+@router.get("/week")
+def week_review(
+    weeks_ago: int = Query(default=0, ge=0, le=52),
+    ctx: Ctx = Depends(connector_ctx),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Weekly review: activity, grades and their trend, study time, overdue reviews and the next exams."""
+    return week.week_review(db, ctx.user, clock.now(), weeks_ago)
 
 
 @router.get("/courses")

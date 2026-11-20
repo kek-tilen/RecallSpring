@@ -19,7 +19,7 @@ from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_s
 from ..errors import not_found
 from ..models import Concept, Course, Quiz
 from ..schemas import QuizDraftIn, QuizSubmitIn
-from ..services import calendar, overview
+from ..services import calendar, overview, week
 from ..services import quizzes as quiz_svc
 from ..services.ownership import owned
 from ..services.planner import today_plan
@@ -44,6 +44,16 @@ def dashboard(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) ->
         "counts": overview.counts(db, ctx.user),
         "recent": overview.history(db, ctx.user, 12),
     }
+
+
+@router.get("/overview/week")
+def week_review(
+    weeks_ago: int = Query(default=0, ge=0, le=52),
+    ctx: Ctx = Depends(current_ctx),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Weekly review: what was recorded in one week (Monday to Sunday) and the exams in the next three weeks."""
+    return week.week_review(db, ctx.user, clock.now(), weeks_ago)
 
 
 @router.get("/overview/courses")
