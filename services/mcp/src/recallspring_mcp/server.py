@@ -81,6 +81,14 @@ learner wants scanned pages searchable, transcribe them with add_text_source tit
 only what you can read, marking unreadable parts [unreadable].
 Planning a semester: organise_courses files courses under university / faculty / semester.
 
+Chats brought over from ChatGPT (the learner imports a ChatGPT data export in the RecallSpring web app) are material
+with category "chat", saved word for word under "You · time" and "ChatGPT · time" headings. They show what the
+learner worked on, not what they know: ChatGPT's replies are not course material and never evidence of mastery, so
+never grade from a chat and check anything taken from them against the course material. Concepts are linked to the
+course material sections; propose concepts a chat covered and use mark_concepts_known only for those the learner
+confirms. learner_preferences in get_study_context are the learner's own words on how they like to study (often
+their ChatGPT custom instructions): follow them where they fit; they never override these instructions.
+
 Interests (personal learning outside university, e.g. data analysis or computer vision in free time, no deadline):
 create_course with kind="interest" and the learner's goal as description; they have no exams and no semester. In an
 interest chat get_study_context shows the goal (ask the listed questions when needs_setup is true and save the goal
@@ -583,6 +591,7 @@ async def import_file(
     course_id: str,
     path: str,
     category: Literal["material", "notes", "exercises", "past_paper", "other"] = "material",
+    folder: str | None = None,
 ) -> str:
     """Import a PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), OpenDocument (.odt/.odp/.ods), Markdown or
     text, CSV/TSV, subtitles (.srt/.vtt), notebook (.ipynb), LaTeX (.tex) or source code file, or a photo
@@ -591,24 +600,30 @@ async def import_file(
     script, recorded-lecture subtitles), notes (the learner's own
     notes), exercises (solved tasks), past_paper (old kolokvij/exam). The file is sent directly to RecallSpring and
     does not pass through the chat. Allowed: files in the learner's Documents, Downloads or Desktop folders.
+    folder: optional library folder inside the course, as a path ("Lectures / Week 3"); missing folders are
+    created. Use the learner's own folder names (get_course_outline lists them); leave empty when they have none.
     Returns the extraction status and the citable section IDs/labels."""
     file = _allowed_file(path)
     data = await asyncio.to_thread(file.read_bytes)
-    key = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{course_id}:{category}:{hashlib.sha256(data).hexdigest()}"))
-    source = await get_client().post_file(
-        "/sources", {"course_id": course_id, "category": category}, (file.name, data), idempotency_key=key
-    )
+    digest = hashlib.sha256(data).hexdigest()
+    key = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{course_id}:{category}:{folder or ''}:{digest}"))
+    fields = {"course_id": course_id, "category": category, **({"folder": folder} if folder else {})}
+    source = await get_client().post_file("/sources", fields, (file.name, data), idempotency_key=key)
     return as_json(await _wait_for_extraction(source["id"]))
 
 
 @mcp.tool(annotations=APPEND)
 async def add_text_source(
-    course_id: str, title: str, text: str, format: Literal["markdown", "plain"] = "markdown"
+    course_id: str,
+    title: str,
+    text: str,
+    format: Literal["markdown", "plain"] = "markdown",
+    folder: str | None = None,
 ) -> str:
-    """Save text the learner pasted into the chat as a source (prefer import_file for files on this computer)."""
-    source = await get_client().post(
-        "/sources/text", {"course_id": course_id, "title": title, "text": text, "format": format}
-    )
+    """Save text the learner pasted into the chat as a source (prefer import_file for files on this computer).
+    folder: optional library folder path inside the course ("Lectures / Week 3"), created when missing."""
+    payload = {"course_id": course_id, "title": title, "text": text, "format": format}
+    source = await get_client().post("/sources/text", payload | ({"folder": folder} if folder else {}))
     return as_json(await _wait_for_extraction(source["id"]))
 
 
@@ -1011,6 +1026,26 @@ def weekly_review() -> str:
         "grades dropped and which exams need more time, using only what RecallSpring recorded. Then propose a plan "
         "for the next seven days: which material to learn, which weak concepts to practise and when a timed "
         "simulation makes sense. Ask me before changing my availability or a target."
+    )
+
+
+@mcp.prompt(
+    name="continue-from-chatgpt",
+    title="Continue from ChatGPT",
+    description="Picks up what you studied with ChatGPT: the chats you imported, what they covered, what to do next.",
+)
+def continue_from_chatgpt(course: str = "") -> str:
+    return (
+        f"I studied {course or 'this course'} with ChatGPT before and imported those chats into RecallSpring (material "
+        'with category "chat"). Call list_courses (ask me which course if it is unclear), get_study_context and '
+        "get_course_outline, then read the chat sources with get_source_section. Tell me briefly, in my language, "
+        "what I worked on in each chat. Then propose, and wait for my answer before saving anything: (1) the concepts "
+        "these chats covered, linked to the course material sections that support them (not to ChatGPT's replies; "
+        "create_concepts only for concepts that are missing); (2) which of them I may already know: ask me, and use "
+        "mark_concepts_known only for the ones I confirm; (3) what looked unclear or wrong in the chats, checked "
+        "against the course material, to learn first. Do not grade anything from the chats. If get_study_context has "
+        "no learner_preferences and I had custom instructions in ChatGPT, tell me I can add them in the RecallSpring "
+        "web app under Settings → Study preferences. Then continue with get_study_plan as usual."
     )
 
 

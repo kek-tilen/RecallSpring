@@ -228,6 +228,26 @@ async def test_import_file_uploads_directly_and_waits_for_extraction(
     )
     status = json.loads(text_of(result))
     assert status["parse_state"] == "ready" and status["sections"][0]["id"] == "sec1"
+    assert b'name="folder"' not in upload.content  # no folder unless Claude names one
+
+
+async def test_import_file_and_pasted_text_can_go_into_a_folder(
+    api: FakeApi, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lecture = tmp_path / "week3.md"
+    lecture.write_text("# Week 3\n\nNotes.", encoding="utf-8")
+    monkeypatch.setenv("RS_IMPORT_ROOTS", str(tmp_path))
+    api.route("POST", "/sources", 201, {"id": "s1", "parse_state": "ready"})
+    api.route("POST", "/sources/text", 201, {"id": "s1", "parse_state": "ready"})
+    api.route("GET", "/sources/s1", 200, {"id": "s1", "parse_state": "ready", "sections": []})
+    async with Client(mcp) as client:
+        await client.call_tool("import_file", {"course_id": "c1", "path": str(lecture), "folder": "Lectures / Week 3"})
+        await client.call_tool(
+            "add_text_source", {"course_id": "c1", "title": "Pasted", "text": "x", "folder": "Lectures"}
+        )
+    upload, pasted = (r for r in api.requests if r.method == "POST")
+    assert b'name="folder"' in upload.content and b"Lectures / Week 3" in upload.content
+    assert json.loads(pasted.content)["folder"] == "Lectures"
 
 
 # ---------------------------------------------------------------- plan v1 and simulations
@@ -323,7 +343,14 @@ async def test_prompts_start_with_the_study_context() -> None:
     async with Client(mcp) as client:
         names = [p.name for p in (await client.list_prompts()).prompts]
         prompt = await client.get_prompt("start-studying", {"course": "KV"})
-    assert names == ["plan-semester", "add-interest", "start-studying", "exam-overview", "weekly-review"]
+    assert names == [
+        "plan-semester",
+        "add-interest",
+        "start-studying",
+        "exam-overview",
+        "weekly-review",
+        "continue-from-chatgpt",
+    ]
     text = prompt.messages[0].content.text
     assert "get_study_context" in text and "1st kolokvij" in text and "KV" in text
 
@@ -335,6 +362,14 @@ async def test_plan_semester_prompt_plans_before_learning() -> None:
     assert "5. semester" in text and "Do not teach or quiz here" in text
     for tool in ("organise_courses", "import_file", "set_study_target", "record_exam_profile", "get_study_plan"):
         assert tool in text
+
+
+async def test_continue_from_chatgpt_prompt_never_grades_from_chats() -> None:
+    async with Client(mcp) as client:
+        prompt = await client.get_prompt("continue-from-chatgpt", {"course": "Biochemistry"})
+    text = prompt.messages[0].content.text
+    assert "Biochemistry" in text and "Do not grade anything from the chats" in text
+    assert "mark_concepts_known only for the ones I confirm" in text and "learner_preferences" in text
 
 
 async def test_view_image_returns_the_picture_and_refuses_other_content(api: FakeApi) -> None:
