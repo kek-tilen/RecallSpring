@@ -5,6 +5,8 @@ import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
 import { Link } from "react-router";
 import { bytes, dateLabel, dateTime, plural } from "../format";
 import { keys, useBackup, useConnector, useSession, useStudySettings } from "../queries";
+import { PreferencesEditor } from "./Import";
+import { ChatGptPanel } from "../components/ChatGpt";
 import type { BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -382,11 +384,14 @@ export function SettingsPage() {
   const session = useSession();
   return (
     <div className="page">
-      <PageHead title="Settings" sub="Study time, the Claude connector, backups and how RecallSpring looks. Every change is recorded in History." />
+      <PageHead title="Settings" sub="Study time, the Claude connector, ChatGPT, backups and how RecallSpring looks. Every change is recorded in History." />
       <div className="grid cols-2" style={{ alignItems: "start" }}>
         <div className="stack" style={{ gap: 16 }}>
           <Card title="Study time">
             <Async q={study}>{(s) => <StudyForm initial={s} />}</Async>
+          </Card>
+          <Card title="Study preferences">
+            <PreferencesEditor />
           </Card>
           <Card title="Appearance">
             <ThemePicker />
@@ -405,6 +410,9 @@ export function SettingsPage() {
         <div className="stack" style={{ gap: 16 }}>
           <Card title="Claude connector">
             <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
+          </Card>
+          <Card title="ChatGPT (preview)">
+            <ChatGptPanel />
           </Card>
           <Card title="Backups">
             <Async q={backup}>{(b) => <BackupPanel b={b} />}</Async>

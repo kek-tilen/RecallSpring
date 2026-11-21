@@ -1,15 +1,17 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState, type DragEvent } from "react";
-import { request } from "../api";
+import { ApiError, request } from "../api";
 import { bytes } from "../format";
 import { useCourses, useUploadLimits } from "../queries";
-import type { MaterialCategory, Source } from "../types";
+import type { ImportResult, MaterialCategory, Source } from "../types";
 import { ErrorNote } from "./ui";
 
 // Until the server's list has loaded (it also lists code files); the server checks every file again.
 const FALLBACK_ACCEPT =
   ".pdf,.docx,.pptx,.ppsx,.xlsx,.odt,.odp,.ods,.md,.markdown,.txt,.csv,.tsv,.srt,.vtt,.ipynb,.tex,.png,.jpg,.jpeg,.webp";
 const MB = 1024 * 1024;
+const MAX_FOLDER_FILES = 500;
+const SKIPPED_DIRS = new Set(["__macosx", ".git", "node_modules", "__pycache__", ".ipynb_checkpoints"]);
 
 function extension(name: string): string {
   return (/\.[^.]+$/.exec(name)?.[0] ?? "").toLowerCase();
@@ -36,7 +38,7 @@ async function shrinkImage(file: File): Promise<File> {
   }
 }
 
-const CATEGORY_OPTIONS: [MaterialCategory, string][] = [
+export const CATEGORY_OPTIONS: [MaterialCategory, string][] = [
   ["material", "Lecture material"],
   ["notes", "My notes"],
   ["exercises", "Exercises"],
@@ -44,62 +46,147 @@ const CATEGORY_OPTIONS: [MaterialCategory, string][] = [
   ["other", "Other"],
 ];
 
-/** Drag-and-drop with click-to-browse. Extraction runs in the background worker; the list polls its state. */
-export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
+/** A file and the folder it came from inside an uploaded or dropped folder ("Week 3/Slides"). */
+interface Picked {
+  file: File;
+  dir: string | null;
+}
+
+/** Hidden and system files (.DS_Store, __MACOSX, Thumbs.db) are never uploaded. */
+function isJunk(p: Picked): boolean {
+  const parts = [...(p.dir ? p.dir.split("/") : []), p.file.name];
+  return (
+    parts.some((s) => s.startsWith(".") || SKIPPED_DIRS.has(s.toLowerCase())) ||
+    ["thumbs.db", "desktop.ini"].includes(p.file.name.toLowerCase())
+  );
+}
+
+function fromInput(list: FileList | null): Picked[] {
+  return Array.from(list ?? []).map((file) => {
+    const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? "";
+    const dir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : null;
+    return { file, dir };
+  });
+}
+
+/** Files of dropped folders, with their folders; plain files as they are. */
+async function fromDrop(dt: DataTransfer): Promise<Picked[]> {
+  const entries = Array.from(dt.items)
+    .map((i) => i.webkitGetAsEntry?.())
+    .filter((e): e is FileSystemEntry => !!e);
+  if (!entries.some((e) => e.isDirectory)) return Array.from(dt.files).map((file) => ({ file, dir: null }));
+  const out: Picked[] = [];
+  async function walk(entry: FileSystemEntry, dir: string): Promise<void> {
+    if (out.length > MAX_FOLDER_FILES) return;
+    if (entry.isFile) {
+      const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject));
+      out.push({ file, dir: dir || null });
+      return;
+    }
+    const reader = (entry as FileSystemDirectoryEntry).createReader();
+    const inner = dir ? `${dir}/${entry.name}` : entry.name;
+    for (;;) {
+      const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+      if (batch.length === 0) break;
+      for (const e of batch) await walk(e, inner);
+    }
+  }
+  for (const e of entries) await walk(e, "");
+  return out;
+}
+
+/**
+ * Drag-and-drop with click-to-browse: files, whole folders (their folders become library folders) and ZIPs (unpacked
+ * on the server, folders kept). Extraction runs in the background worker; the list polls its state.
+ */
+export function Upload({ courseId: fixedCourse, folderId }: { courseId?: string; folderId?: string | null }) {
   const courses = useCourses();
   const [courseId, setCourseId] = useState(fixedCourse ?? "");
   const [category, setCategory] = useState<MaterialCategory>("material");
   const [over, setOver] = useState(false);
-  const [done, setDone] = useState<Source[]>([]);
+  const [done, setDone] = useState<ImportResult | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
   const limits = useUploadLimits();
   const chosen = fixedCourse ?? (courseId || courses.data?.[0]?.id || "");
   const groups = limits.data?.extensions;
-  const accept = groups ? [...groups.document, ...groups.text, ...groups.image].join(",") : FALLBACK_ACCEPT;
+  const accept = (groups ? [...groups.document, ...groups.text, ...groups.image].join(",") : FALLBACK_ACCEPT) + ",.zip";
+  const allowed = new Set(accept.split(","));
 
   /** Documents may be large (pictures, scans); text files need far less. Photos are shrunk before upload. */
   function limitFor(file: File): number | null {
     const l = limits.data;
-    if (file.type.startsWith("image/")) return null;
+    if (file.type.startsWith("image/") || extension(file.name) === ".zip") return null;
     if (!l) return 100 * MB;
     return l.extensions.text.includes(extension(file.name)) ? l.text_bytes : l.document_bytes;
   }
 
   const upload = useMutation({
-    mutationFn: async (files: File[]) => {
-      const out: Source[] = [];
-      for (const original of files) {
-        const file = await shrinkImage(original);
-        const form = new FormData();
-        form.set("course_id", chosen);
-        form.set("category", category);
-        form.set("file", file);
-        out.push(await request<Source>("/sources", { form }));
+    mutationFn: async (picked: Picked[]) => {
+      const result: ImportResult = { imported: [], skipped: [] };
+      const single = picked.length === 1;
+      setProgress({ done: 0, total: picked.length });
+      for (const [i, p] of picked.entries()) {
+        try {
+          const form = new FormData();
+          form.set("course_id", chosen);
+          form.set("category", category);
+          if (folderId) form.set("folder_id", folderId);
+          if (extension(p.file.name) === ".zip") {
+            form.set("file", p.file);
+            const r = await request<ImportResult>("/sources/zip", { form });
+            result.imported.push(...r.imported);
+            result.skipped.push(...r.skipped);
+          } else {
+            const limit = limitFor(p.file);
+            const label = p.dir ? `${p.dir}/${p.file.name}` : p.file.name;
+            if (!allowed.has(extension(p.file.name))) {
+              result.skipped.push({ name: label, reason: "this type of file is not supported" });
+              continue;
+            }
+            if (limit !== null && p.file.size > limit) {
+              result.skipped.push({ name: label, reason: `larger than ${bytes(limit)}` });
+              continue;
+            }
+            if (p.dir) form.set("folder_path", p.dir);
+            form.set("file", await shrinkImage(p.file));
+            result.imported.push(await request<Source>("/sources", { form }));
+          }
+        } catch (e) {
+          if (single || !(e instanceof ApiError) || e.status === 0 || e.status === 401) throw e;
+          result.skipped.push({ name: p.dir ? `${p.dir}/${p.file.name}` : p.file.name, reason: e.message });
+        } finally {
+          setProgress({ done: i + 1, total: picked.length });
+        }
       }
-      return out;
+      return result;
     },
-    onSuccess: (sources) => {
-      setDone(sources);
-      void qc.invalidateQueries({ queryKey: ["sources"] });
-      void qc.invalidateQueries({ queryKey: ["courses"] });
-      void qc.invalidateQueries({ queryKey: ["dashboard"] });
-      void qc.invalidateQueries({ queryKey: ["upload-limits"] });
+    onSettled: () => {
+      setProgress(null);
+      for (const key of ["sources", "folders", "courses", "dashboard", "upload-limits"]) {
+        void qc.invalidateQueries({ queryKey: [key] });
+      }
     },
+    onSuccess: (result) => setDone(result),
   });
 
-  function send(list: FileList | null) {
+  function send(all: Picked[]) {
     setLocalError(null);
-    const files = Array.from(list ?? []);
-    if (!files.length) return;
-    const tooBig = files.find((f) => {
-      const limit = limitFor(f);
-      return limit !== null && f.size > limit;
-    });
-    if (tooBig) {
+    setDone(null);
+    const picked = all.filter((p) => !isJunk(p));
+    if (!picked.length) return;
+    if (picked.length > MAX_FOLDER_FILES) {
+      setLocalError(`That is more than ${MAX_FOLDER_FILES} files. Put the folder into a ZIP and upload the ZIP instead.`);
+      return;
+    }
+    const first = picked[0]!;
+    const limit = limitFor(first.file);
+    if (picked.length === 1 && limit !== null && first.file.size > limit) {
       setLocalError(
-        `${tooBig.name} is ${bytes(tooBig.size)}; the limit for this type of file is ${bytes(limitFor(tooBig) ?? 0)}. ` +
+        `${first.file.name} is ${bytes(first.file.size)}; the limit for this type of file is ${bytes(limit)}. ` +
           "Split it, or compress the PDF (scans and pictures make files large; the text stays small).",
       );
       return;
@@ -108,15 +195,16 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
       setLocalError("Create a course first (ask Claude, or use the connector's create_course).");
       return;
     }
-    upload.mutate(files);
+    upload.mutate(picked);
   }
 
   function drop(e: DragEvent) {
     e.preventDefault();
     setOver(false);
-    send(e.dataTransfer.files);
+    void fromDrop(e.dataTransfer).then(send, () => send(Array.from(e.dataTransfer.files).map((file) => ({ file, dir: null }))));
   }
 
+  const shown = done?.imported.slice(0, 8) ?? [];
   return (
     <div className="stack">
       {!fixedCourse && (
@@ -150,15 +238,26 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
         onDragLeave={() => setOver(false)}
         onDrop={drop}
       >
-        <strong style={{ color: "var(--ink)" }}>Drop lecture files, notes or photos here</strong>
+        <strong style={{ color: "var(--ink)" }}>Drop lecture files, notes, photos, a whole folder or a ZIP here</strong>
         <span className="small">
           PDF, Word, PowerPoint, Excel, OpenDocument, Markdown, text, CSV, subtitles (.srt, .vtt), notebooks (.ipynb),
           LaTeX, code, or photos. Up to {bytes(limits.data?.document_bytes ?? 100 * MB)} per document and{" "}
           {bytes(limits.data?.text_bytes ?? 10 * MB)} per text file; large photos are shrunk so Claude can look at them.
+          Folders inside a folder or ZIP become library folders.
         </span>
-        <button type="button" className="btn small" onClick={() => input.current?.click()} disabled={upload.isPending}>
-          {upload.isPending ? "Uploading…" : "Choose files"}
-        </button>
+        <div className="row" style={{ gap: 8, justifyContent: "center" }}>
+          <button type="button" className="btn small" onClick={() => input.current?.click()} disabled={upload.isPending}>
+            Choose files
+          </button>
+          <button type="button" className="btn small ghost" onClick={() => folderInput.current?.click()} disabled={upload.isPending}>
+            Choose a folder
+          </button>
+        </div>
+        {progress && (
+          <span className="small" role="status">
+            Uploading {progress.done + (progress.done < progress.total ? 1 : 0)} of {progress.total}…
+          </span>
+        )}
         <input
           ref={input}
           type="file"
@@ -166,7 +265,18 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
           multiple
           hidden
           onChange={(e) => {
-            send(e.target.files);
+            send(fromInput(e.target.files));
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={folderInput}
+          type="file"
+          multiple
+          hidden
+          {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+          onChange={(e) => {
+            send(fromInput(e.target.files));
             e.target.value = "";
           }}
         />
@@ -180,12 +290,43 @@ export function Upload({ courseId: fixedCourse }: { courseId?: string }) {
       )}
       {localError && <div className="notice warn">{localError}</div>}
       {upload.error && <ErrorNote error={upload.error} />}
-      {done.length > 0 && !upload.isPending && (
+      {done && !upload.isPending && <ImportSummary result={done} shown={shown} />}
+    </div>
+  );
+}
+
+/** What an upload or import added, and what it left out with the reason. */
+export function ImportSummary({ result, shown }: { result: ImportResult; shown?: Source[] }) {
+  const list = shown ?? result.imported.slice(0, 8);
+  const more = result.imported.length - list.length;
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      {result.imported.length > 0 && (
         <div className="notice small" role="status">
-          Uploaded {done.map((s) => s.filename).join(", ")}.
-          {done.some((s) => s.duplicate_of_id) && " Some files were already in your library; RecallSpring kept one copy."}{" "}
+          Added {list.map((s) => (s.folder ? `${s.folder} / ${s.filename}` : s.filename)).join(", ")}
+          {more > 0 ? ` and ${more} more` : ""}.
+          {result.imported.some((s) => s.duplicate_of_id) && " Some files were already in your library; RecallSpring kept one copy."}{" "}
           Text extraction runs in the background.
         </div>
+      )}
+      {result.imported.length === 0 && result.skipped.length > 0 && (
+        <div className="notice small" role="status">
+          Nothing new was added.
+        </div>
+      )}
+      {result.skipped.length > 0 && (
+        <details className="notice warn small">
+          <summary>
+            {result.skipped.length} {result.skipped.length === 1 ? "file was" : "files were"} left out
+          </summary>
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+            {result.skipped.slice(0, 100).map((s, i) => (
+              <li key={i} style={{ overflowWrap: "anywhere" }}>
+                {s.name}: {s.reason}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   );

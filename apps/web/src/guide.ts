@@ -258,4 +258,5 @@ export const GOOD_TO_KNOW: string[] = [
   "Grades from Claude are estimates. Challenge one whenever you disagree.",
   "After RecallSpring is updated, quit and reopen Claude Desktop so it loads the new connector.",
   "Your daily connector limit and study time are in Settings; every change appears in History.",
+  "Studied with ChatGPT before? Library → Move in brings your chats and custom instructions over; then use the “Continue from ChatGPT” prompt in Claude.",
 ];

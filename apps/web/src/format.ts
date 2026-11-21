@@ -208,5 +208,6 @@ export const CATEGORY_LABEL: Record<string, string> = {
   notes: "My notes",
   exercises: "Exercises",
   past_paper: "Past papers",
+  chat: "Chats",
   other: "Other",
 };

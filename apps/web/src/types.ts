@@ -21,7 +21,7 @@ export interface Progress {
 }
 
 export type CourseColor = "blue" | "orange" | "aqua" | "yellow" | "magenta" | "green" | "violet" | "red";
-export type MaterialCategory = "material" | "notes" | "exercises" | "past_paper" | "other";
+export type MaterialCategory = "material" | "notes" | "exercises" | "past_paper" | "chat" | "other";
 
 export type CourseKind = "course" | "interest";
 
@@ -137,6 +137,11 @@ export interface Source {
   byte_size: number;
   origin: string;
   category: MaterialCategory;
+  folder_id: string | null;
+  folder: string | null; // "Lectures / Week 3"
+  archived: boolean; // archived itself
+  hidden: boolean; // archived itself or inside an archived folder
+  archived_at: string | null;
   duplicate_of_id: string | null;
   parse_state: "pending" | "processing" | "ready" | "needs_attention" | "failed";
   parse_message: string | null;
@@ -146,6 +151,33 @@ export interface Source {
   section_count: number;
   uploaded_at: string;
   parsed_at: string | null;
+}
+
+export interface Folder {
+  id: string;
+  course_id: string;
+  parent_id: string | null;
+  name: string;
+  path: string;
+  archived: boolean;
+  hidden: boolean; // archived itself or inside an archived folder
+  archived_at: string | null;
+  files: number;
+  revision: number;
+  created_at: string;
+}
+
+export interface CourseRef {
+  id: string;
+  title: string;
+  color: CourseColor | null;
+}
+
+export interface ArchivedView {
+  groups: (Group & { path: string })[];
+  courses: (Course & { group_path: string; long_term_retention: boolean })[];
+  folders: (Folder & { course: CourseRef })[];
+  sources: (Source & { course: CourseRef })[];
 }
 
 export interface QuizSummary {
@@ -597,4 +629,53 @@ export interface StudySettings {
   /** Share of each day kept for interests; 0 = university first. */
   interest_percent: number;
   focus: { course_id: string; course_title: string; kind: CourseKind; until: string } | null;
+}
+
+/** Files brought in at once (a ZIP, a folder, chats from ChatGPT): what went in and what was left out, and why. */
+export interface ImportResult {
+  imported: Source[];
+  skipped: { name: string; reason: string }[];
+  conversations?: number;
+}
+
+export interface ChatImportSummary {
+  id: string;
+  filename: string;
+  created_at: string;
+  expires_at: string;
+  conversations: number;
+  saved: number;
+}
+
+export interface ChatConversation {
+  key: string;
+  title: string;
+  created: string | null;
+  updated: string | null;
+  messages: number;
+  bytes: number;
+  too_large: boolean;
+  project: string | null;
+  files: number;
+  files_missing: number;
+  saved: { course_id: string; source_id: string } | null;
+}
+
+/** A ChatGPT data export staged privately until the learner picks what to keep. */
+export interface ChatImport {
+  id: string;
+  filename: string;
+  bytes: number;
+  created_at: string;
+  expires_at: string;
+  skipped: number;
+  instructions: { about_you: string; how_to_respond: string } | null;
+  memories: string[];
+  projects: { id: string; chats: number }[];
+  conversations: ChatConversation[];
+}
+
+export interface StudyPreferences {
+  text: string;
+  max_chars: number;
 }

@@ -1564,6 +1564,137 @@ pre.template {
   box-shadow: var(--shadow);
 }
 
+.linklike {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.linklike:hover {
+  text-decoration: underline;
+}
+
+.quote {
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--border);
+  background: var(--surface);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-preview {
+  margin: 0;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font: inherit;
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-list {
+  max-height: 560px;
+  overflow: auto;
+}
+
+.chat-list > li.selected {
+  background: var(--surface);
+}
+
+.folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.folder-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  color: var(--ink);
+  text-decoration: none;
+  min-width: 0;
+}
+
+.folder-tile:hover,
+.folder-tile.over {
+  border-color: var(--primary);
+  background: var(--surface);
+}
+
+.folder-icon {
+  flex: none;
+  width: 28px;
+  height: 22px;
+  border-radius: 3px 6px 4px 4px;
+  background: var(--ramp-1);
+  position: relative;
+}
+
+.folder-icon::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -4px;
+  width: 12px;
+  height: 6px;
+  border-radius: 3px 3px 0 0;
+  background: var(--ramp-1);
+}
+
+.folder-icon.small {
+  width: 16px;
+  height: 12px;
+}
+
+.folder-icon.small::before {
+  top: -3px;
+  width: 7px;
+  height: 4px;
+}
+
+.crumb-drop.over {
+  outline: 2px dashed var(--primary);
+  outline-offset: 2px;
+}
+
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  position: sticky;
+  top: 8px;
+  z-index: 2;
+}
+
+tr.selected td {
+  background: var(--surface);
+}
+
+.thumb.selected img {
+  outline: 3px solid var(--primary);
+  outline-offset: 1px;
+}
+
 .gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));

@@ -9,7 +9,9 @@ import { ExamsPage } from "./pages/Exams";
 import { GuidePage } from "./pages/Guide";
 import { HistoryPage } from "./pages/History";
 import { HomePage } from "./pages/Home";
-import { LibraryPage, SourcePage } from "./pages/Library";
+import { ArchivedPage } from "./pages/Archived";
+import { ImportPage } from "./pages/Import";
+import { CourseLibraryPage, LibraryPage, SourcePage } from "./pages/Library";
 import { LoginPage } from "./pages/Login";
 import { NotePage, NotesPage } from "./pages/Notes";
 import { ReadinessPage } from "./pages/Readiness";
@@ -64,6 +66,9 @@ export const router = createBrowserRouter([
           { path: "simulations", element: <SimulationsPage /> },
           { path: "simulations/:quizId", element: <SimulationPage /> },
           { path: "library", element: <LibraryPage /> },
+          { path: "library/archived", element: <ArchivedPage /> },
+          { path: "library/import", element: <ImportPage /> },
+          { path: "library/course/:courseId", element: <CourseLibraryPage /> },
           { path: "library/:sourceId", element: <SourcePage /> },
           { path: "notes", element: <NotesPage /> },
           { path: "notes/:noteId", element: <NotePage /> },

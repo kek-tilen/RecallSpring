@@ -14,7 +14,8 @@ import {
 } from "../components/organise";
 import { Async, Confirm, Empty, ErrorNote, PageHead, StudyMeter } from "../components/ui";
 import { dateLabel, plural } from "../format";
-import { useCourseSummary, useGroups } from "../queries";
+import { useArchived, useCourseSummary, useGroups } from "../queries";
+import { ArchivedCourses } from "./Archived";
 import type { CourseSummary, Group } from "../types";
 
 function CourseCard({ c }: { c: CourseSummary }) {
@@ -157,7 +158,8 @@ function GroupBlock({ group, groups, courses, showArchived, depth }: {
 export function CoursesPage() {
   const q = useCourseSummary();
   const groups = useGroups();
-  const [showArchived, setShowArchived] = useState(false);
+  const showArchived = false; // archived groups and courses are listed in their own section below
+  const archived = useArchived();
   const [creating, setCreating] = useState(false);
   const [addingInterest, setAddingInterest] = useState(false);
   return (
@@ -166,10 +168,9 @@ export function CoursesPage() {
         title="Courses"
         sub="Organised by university, faculty and semester, plus your own interests. Each shows its next exam or goal and progress."
       >
-        <label className="row small">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-          Show archived
-        </label>
+        <a href="#archived" className="btn ghost">
+          Archived{archived.data ? ` (${archived.data.groups.length + archived.data.courses.length})` : ""}
+        </a>
         <button type="button" className="btn" onClick={() => setCreating(true)}>
           New university, faculty or semester
         </button>
@@ -242,6 +243,20 @@ export function CoursesPage() {
           );
         }}
       </Async>
+      <section id="archived" className="group" aria-label="Archived" style={{ marginTop: 28 }}>
+        <div className="group-head">
+          <h2>
+            <span className="kind">Archived</span>
+            Put away, nothing deleted
+          </h2>
+          <Link to="/library/archived" className="btn small ghost">
+            Archived folders and files
+          </Link>
+        </div>
+        <Async q={archived} lines={2}>
+          {(view) => <ArchivedCourses view={view} compact />}
+        </Async>
+      </section>
       {creating && <GroupDialog open onClose={() => setCreating(false)} />}
       {addingInterest && <NewInterestDialog open onClose={() => setAddingInterest(false)} />}
     </div>

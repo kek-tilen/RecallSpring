@@ -5,12 +5,11 @@ import { get } from "../api";
 import { Async, BandChip, BandMeter, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip, StudyMeter } from "../components/ui";
 import { CourseDialog, CourseDot, FocusControl, groupPath } from "../components/organise";
 import { TargetDialog } from "../components/TargetDialog";
-import { Upload } from "../components/Upload";
 import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, plural, relativeDay } from "../format";
 import { useCourseOverview, useGroups } from "../queries";
 import type { AttemptRow, ConceptRow, CourseOverview, StudyStatus, Target, TargetProfile } from "../types";
 import { NewNoteButton, NoteList } from "./Notes";
-import { MaterialsView } from "./Library";
+import { FolderBrowser } from "./Library";
 import { QuizTable } from "./Simulations";
 
 const TABS = [
@@ -120,12 +119,11 @@ export function CoursePage() {
               {tab === "concepts" && <ConceptsTab o={o} />}
               {tab === "targets" && !isInterest && <TargetsTab targets={o.targets} activeId={o.active_target_id} courseId={o.course.id} />}
               {tab === "materials" && (
-                <div className="stack" style={{ gap: 20 }}>
-                  <MaterialsView sources={o.sources} courseId={o.course.id} />
-                  <Card title="Add material">
-                    <Upload courseId={o.course.id} />
-                  </Card>
-                </div>
+                <FolderBrowser
+                  courseId={o.course.id}
+                  folderId={params.get("folder")}
+                  href={(id) => `?tab=materials${id ? `&folder=${id}` : ""}`}
+                />
               )}
               {tab === "notes" && (
                 <div className="stack">
