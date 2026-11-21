@@ -1,8 +1,9 @@
 # Plan: RecallSpring without Claude (Codex first, then a ChatGPT tutor in the app)
 
 Status, 2026-11-21: **Phase 0, Phase 1 and Phase 2 built** (owner in chat). Open: the
-owner's Codex smoke test (setup: `docs/codex-setup.md`) and a live check that the SIWC preview accepts function tools
-in a namespace (Phase 2 was tested against a fake OpenAI only). Phase 3 starts after the owner's go-ahead.
+owner's Codex smoke test (setup: `docs/codex-setup.md`). Phase 2 passed the owner's live test on 2026-11-21 (the SIWC
+preview accepted the namespaced tools; read steps ran); forms and grading are not yet seen live. Phase 3 starts after
+the owner's go-ahead.
 
 ## Owner decisions (2026-11-21)
 
