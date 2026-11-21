@@ -26,11 +26,13 @@
 }
 ```
 
-All text/action contrast must meet WCAG 2.2 AA; change tones as needed. Use readable system font fallback, 16px base, generous line height, limited measure on reading view. Keyboard focus visible, labels on all controls, reduced-motion support, touch targets >=44 CSS px where practical.
+All text/action contrast must meet WCAG 2.2 AA; change tones as needed.
+
+**Themes** (owner decision 2026-11-21; Settings → Appearance, saved on the device in `rs-theme`, `theme.ts`): **RecallSpring White** (the tokens above, default) and **RecallSpring Dark**, plus four popular open-source schemes chosen to differ from each other: **Solarized Light** (warm cream, low glare), **Nord** (cool blue-grey, calm), **Dracula** (vivid purple, high contrast) and **Gruvbox Dark** (warm retro). "Match my computer" follows the system with White or Dark. Each theme is only a set of the same tokens under `:root[data-theme=…]`, so every page and every visual follows it. Text, muted text, links, buttons, warnings and errors meet 4.5:1 on their backgrounds in every theme (checked when the palettes were made; original Solarized tones were darkened for this); the progress ramp stays one hue from light to dark; course colours use the light or dark validated set. Use readable system font fallback, 16px base, generous line height, limited measure on reading view. Keyboard focus visible, labels on all controls, reduced-motion support, touch targets >=44 CSS px where practical.
 
 ## Navigation hierarchy
 
-**Desktop (optional left rail)**: `Home`, `Courses`, `Study`, `Review`, `Insights`, `Library`, `Settings`.  
+**Desktop (optional left rail)**: `Home`, `Courses`, `Study`, `Review`, `Insights`, `Library`, `Settings`. The rail can be hidden (button next to the logo or `Ctrl+\`, remembered on the device in `rs-rail`) so the page uses the whole width; a small button at the top left brings it back and takes the keyboard focus. On phones the rail is a top bar and cannot be hidden.  
 **Mobile** (deferred — desktop-first by owner decision; keep layouts responsive where cheap): bottom nav with `Home`, `Study`, `Review`, `Library` + overflow `More`; keyboard shortcuts not required for core use.
 
 ### Home dashboard: the three obvious actions
@@ -119,6 +121,7 @@ Do not hide primary features behind keyboard commands. Optional:
 - `@course` / `@topic` / `@source` in tutor composer opens a searchable context picker.
 - `/explain`, `/visual`, `/quiz`, `/review` optional command palette.
 - `Ctrl/Cmd+K` opens global search; `Esc` closes dialogs.
+- `Ctrl/Cmd+\` hides or shows the menu rail (built).
 
 Provide full mouse/touch alternatives. In-context help should be short, not a tutorial maze.
 

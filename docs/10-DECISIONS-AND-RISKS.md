@@ -56,6 +56,7 @@
 | ChatGPT replies may include **visual explanations** as allowlisted JSON blocks (`recallspring-visual`: process flow, concept map, comparison, timeline, chart, slider over built-in formulas), checked on the server and drawn by RecallSpring; never model HTML/JS/CSS; a `Visuals` switch by the composer; ChatGPT charts always labelled illustrative and "not checked against your material" | Approved 2026-11-21 (owner in chat) |
 | Chat is one window-high page (list, thread and composer as one panel); the learner marks which files a ChatGPT conversation may use, and only excerpts of those files matching each message are sent (≤ 30 000 characters; recorded per message, cited as S1…, citations and visual refs checked against what was sent) | Requested 2026-11-21 (owner in chat); excerpt budget and matching are working choices |
 | ChatGPT voices: not built, because Sign in with ChatGPT does not support audio input or transcription and does not list speech output | Owner asked 2026-11-21; open: a local read-aloud with the computer's voices instead |
+| Themes: RecallSpring White and RecallSpring Dark plus Solarized Light, Nord, Dracula and Gruvbox Dark (adapted to WCAG AA); the menu rail can be hidden | Approved 2026-11-21 (owner in chat) |
 
 ## Working assumptions (do not mistake for owner approval)
 
