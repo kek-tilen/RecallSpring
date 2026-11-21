@@ -3,7 +3,7 @@
  * RecallSpring) and the chime, made with the Web Audio API (no sound files).
  */
 
-export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"];
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 const DB_NAME = "recallspring-focus";
@@ -38,13 +38,17 @@ async function run<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => I
 
 /** Why a file cannot be used as a background, or null when it can. */
 export function imageProblem(file: File): string | null {
-  if (!IMAGE_TYPES.includes(file.type)) return "Choose a PNG, JPEG, WebP or GIF image.";
+  if (!IMAGE_TYPES.includes(file.type)) return "Choose a PNG, JPEG, WebP, AVIF or GIF image.";
   if (file.size > MAX_IMAGE_BYTES) return "Choose an image under 20 MB.";
   return null;
 }
 
+/** Fired on window when the stored background image is replaced or removed. */
+export const IMAGE_CHANGED = "recallspring:focus-image";
+
 export async function saveImage(file: Blob): Promise<void> {
   await run<IDBValidKey>("readwrite", (s) => s.put(file, IMAGE_KEY));
+  window.dispatchEvent(new Event(IMAGE_CHANGED));
 }
 
 export async function loadImage(): Promise<Blob | null> {
@@ -62,6 +66,7 @@ export async function removeImage(): Promise<void> {
   } catch {
     /* nothing stored */
   }
+  window.dispatchEvent(new Event(IMAGE_CHANGED));
 }
 
 // ---------------------------------------------------------------- chime

@@ -2912,75 +2912,134 @@ a.cite:hover {
   padding-top: 64px;
 }
 
-/* focus mode: the timer alone over the learner's chosen background */
+/* the chosen background behind the timer: focus mode, and the live preview on the Focus page */
 :root.focus-mode-open {
   overflow: hidden;
 }
 
-.focus-mode {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: grid;
-  place-items: center;
-  overflow: auto;
+.focus-stage {
+  position: relative;
+  overflow: hidden;
   color: var(--ink);
 }
 
-.focus-mode[data-tone="dark"] {
+.focus-stage[data-tone="dark"] {
   color: #f4f6f5;
 }
 
-.focus-mode[data-tone="light"] {
+.focus-stage[data-tone="light"] {
   color: #2b2620;
 }
 
-.focus-mode-bg,
-.focus-mode-scrim {
+.focus-stage-bg,
+.focus-stage-scrim {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 }
 
-.focus-mode-bg {
+.focus-stage-bg {
   object-fit: cover;
 }
 
-.focus-mode-scrim {
+.focus-stage-scrim {
   background: #000;
 }
 
-.focus-mode-body {
+.focus-stage-body {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 22px;
-  padding: 32px 16px;
   text-align: center;
 }
 
-.focus-mode[data-tone="dark"] .focus-mode-body {
+.focus-stage[data-tone="dark"] .focus-stage-body {
   text-shadow: 0 1px 3px rgb(0 0 0 / 45%);
 }
 
-.focus-mode .face {
-  font-size: clamp(16px, 3.4vw, 34px);
-}
-
-.focus-mode[data-tone="dark"] .face {
+.focus-stage[data-tone="dark"] .face {
   --face-ink: #f4f6f5;
   --face-track: rgb(255 255 255 / 22%);
   --face-fill: #f4f6f5;
   --face-card: rgb(255 255 255 / 12%);
 }
 
-.focus-mode[data-tone="light"] .face {
+.focus-stage[data-tone="light"] .face {
   --face-ink: #2b2620;
   --face-track: rgb(43 38 32 / 16%);
   --face-fill: #2b2620;
   --face-card: rgb(255 255 255 / 55%);
+}
+
+.focus-stage[data-tone="dark"] .phase-steps span {
+  color: rgb(244 246 245 / 75%);
+}
+
+.focus-stage[data-tone="dark"] .phase-steps span.on {
+  border-color: rgb(255 255 255 / 40%);
+  background: rgb(255 255 255 / 14%);
+  color: #f4f6f5;
+}
+
+.focus-stage[data-tone="light"] .phase-steps span {
+  color: rgb(43 38 32 / 75%);
+}
+
+.focus-stage[data-tone="light"] .phase-steps span.on {
+  border-color: rgb(43 38 32 / 35%);
+  background: rgb(255 255 255 / 55%);
+  color: #2b2620;
+}
+
+.focus-stage[data-tone="dark"] .round-dots span,
+.focus-stage[data-tone="light"] .round-dots span {
+  border-color: currentColor;
+}
+
+.focus-stage[data-tone="dark"] .round-dots span.done,
+.focus-stage[data-tone="light"] .round-dots span.done {
+  background: currentColor;
+}
+
+/* the live preview on the Focus page */
+.timer-stage {
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  padding: 18px 12px 20px;
+}
+
+.timer-stage .focus-stage-body {
+  gap: 14px;
+}
+
+/* focus mode: the timer alone over the whole window */
+.focus-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.focus-mode-stage {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.focus-mode-stage[data-tone="theme"] {
+  background: var(--bg);
+}
+
+.focus-mode-stage .focus-stage-body {
+  padding: 32px 16px;
+}
+
+.focus-mode .face {
+  font-size: clamp(16px, 3.4vw, 34px);
 }
 
 .focus-mode-phase {
@@ -2999,41 +3058,44 @@ a.cite:hover {
   justify-content: center;
 }
 
-.focus-mode[data-tone="dark"] .btn {
+.focus-mode-stage[data-tone="dark"] .btn {
   background: rgb(255 255 255 / 12%);
   border-color: rgb(255 255 255 / 35%);
   color: #f4f6f5;
   text-shadow: none;
 }
 
-.focus-mode[data-tone="dark"] .btn.primary {
+.focus-mode-stage[data-tone="dark"] .btn.primary {
   background: #f4f6f5;
   border-color: #f4f6f5;
   color: #111916;
 }
 
-.focus-mode[data-tone="light"] .btn {
+.focus-mode-stage[data-tone="light"] .btn {
   background: rgb(255 255 255 / 60%);
   border-color: rgb(43 38 32 / 35%);
   color: #2b2620;
 }
 
-.focus-mode[data-tone="light"] .btn.primary {
+.focus-mode-stage[data-tone="light"] .btn.primary {
   background: #2b2620;
   border-color: #2b2620;
   color: #f6efe0;
 }
 
-.focus-mode[data-tone="dark"] :focus-visible {
+.focus-mode-stage[data-tone="dark"] :focus-visible {
   outline-color: #f4f6f5;
 }
 
-.focus-mode .round-dots span {
-  border-color: currentColor;
+/* the image picker is a label around a real file field */
+.file-button {
+  position: relative;
+  cursor: pointer;
 }
 
-.focus-mode .round-dots span.done {
-  background: currentColor;
+.file-button:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 @media (max-width: 860px) {

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { Link } from "react-router";
-import { BACKGROUNDS, ClockFace, RoundDots, TimerText, useBackgroundImage, usePomodoro } from "../components/Pomodoro";
+import { BACKGROUNDS, ClockFace, FocusStage, RoundDots, TimerText, useBackgroundImage, usePomodoro } from "../components/Pomodoro";
 import { Async, Card, PageHead } from "../components/ui";
-import { chime, imageProblem, loadImage, removeImage, saveImage } from "../focusMedia";
+import { IMAGE_CHANGED, chime, imageProblem, loadImage, removeImage, saveImage } from "../focusMedia";
 import { timeOnly, dayHeading } from "../format";
 import { DEFAULT_SETTINGS, FACES, LIMITS, PHASE_LABEL, type PomodoroSettings } from "../pomodoro";
 import { useCourses, useFocusSummary } from "../queries";
@@ -35,12 +35,19 @@ function Timer() {
   const label = run.status === "running" ? "Pause" : run.status === "paused" ? "Resume" : "Start";
   const options = (courses.data ?? []).filter((c) => c.status !== "archived");
 
+  /** Start and Resume put the timer over the whole window; Pause stays here. */
+  function startOrPause() {
+    const starting = p.run.status !== "running";
+    p.toggle();
+    if (starting) p.setFocusMode(true);
+  }
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (p.focusMode || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
       if (e.key === " ") {
         e.preventDefault();
-        p.toggle();
+        startOrPause();
       } else if (e.key === "f" || e.key === "F") {
         e.preventDefault();
         p.setFocusMode(true);
@@ -53,21 +60,23 @@ function Timer() {
   return (
     <Card title="Timer" meta={`Block ${Math.min(run.round, settings.rounds)} of ${settings.rounds}`}>
       <div className="stack timer-box" data-phase={run.phase}>
-        <div className="phase-steps" aria-hidden="true">
-          {(["focus", "short", "long"] as const).map((ph) => (
-            <span key={ph} className={ph === run.phase ? "on" : undefined}>
-              {PHASE_LABEL[ph]}
-            </span>
-          ))}
-        </div>
-        <p className="sr-only">Now: {PHASE_LABEL[run.phase]}</p>
-        <div className="timer-face">
-          <ClockFace face={settings.face} ms={left} total={run.totalMs} />
-        </div>
-        <TimerText ms={left} phase={run.phase} paused={run.status === "paused"} />
-        <RoundDots run={run} rounds={settings.rounds} />
+        <FocusStage settings={settings} className="timer-stage">
+          <div className="phase-steps" aria-hidden="true">
+            {(["focus", "short", "long"] as const).map((ph) => (
+              <span key={ph} className={ph === run.phase ? "on" : undefined}>
+                {PHASE_LABEL[ph]}
+              </span>
+            ))}
+          </div>
+          <p className="sr-only">Now: {PHASE_LABEL[run.phase]}</p>
+          <div className="timer-face">
+            <ClockFace face={settings.face} ms={left} total={run.totalMs} />
+          </div>
+          <TimerText ms={left} phase={run.phase} paused={run.status === "paused"} />
+          <RoundDots run={run} rounds={settings.rounds} />
+        </FocusStage>
         <div className="row" style={{ justifyContent: "center" }}>
-          <button type="button" className="btn primary timer-main" onClick={p.toggle}>
+          <button type="button" className="btn primary timer-main" onClick={startOrPause}>
             {label}
           </button>
           <button type="button" className="btn" onClick={p.skip} title="End this phase and go to the next one">
@@ -99,7 +108,7 @@ function Timer() {
           </p>
         )}
         <p className="tiny muted" style={{ margin: 0 }}>
-          Space starts or pauses · F opens focus mode · a block stopped after at least a minute is saved as stopped early.
+          Start and Resume show the timer over the whole window. Space starts or pauses · F opens focus mode · a block stopped after at least a minute is saved as stopped early.
         </p>
       </div>
     </Card>
@@ -317,15 +326,17 @@ function FacePicker() {
 function BackgroundPicker() {
   const p = usePomodoro();
   const s = p.settings;
-  const [version, setVersion] = useState(0);
   const [hasImage, setHasImage] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const file = useRef<HTMLInputElement>(null);
-  const image = useBackgroundImage(hasImage, version);
+  const [busy, setBusy] = useState(false);
+  const image = useBackgroundImage(hasImage);
 
   useEffect(() => {
-    void loadImage().then((b) => setHasImage(b !== null));
-  }, [version]);
+    const check = () => void loadImage().then((b) => setHasImage(b !== null));
+    check();
+    window.addEventListener(IMAGE_CHANGED, check);
+    return () => window.removeEventListener(IMAGE_CHANGED, check);
+  }, []);
 
   async function choose(e: ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -334,18 +345,19 @@ function BackgroundPicker() {
     const why = imageProblem(f);
     setProblem(why);
     if (why) return;
+    setBusy(true);
     try {
       await saveImage(f);
-      setVersion((v) => v + 1);
       p.setSettings({ ...s, background: "image" });
     } catch {
-      setProblem("This browser could not keep the image (private window or storage full).");
+      setProblem("This browser could not keep the image (private window, blocked site data or storage full).");
+    } finally {
+      setBusy(false);
     }
   }
 
   async function remove() {
     await removeImage();
-    setVersion((v) => v + 1);
     if (s.background === "image") p.setSettings({ ...s, background: "theme" });
   }
 
@@ -370,15 +382,16 @@ function BackgroundPicker() {
           ))}
         </div>
         <div className="row">
-          <button type="button" className="btn small" onClick={() => file.current?.click()}>
-            {hasImage ? "Choose another image…" : "Choose an image…"}
-          </button>
+          {/* A real file field inside a label: some browsers ignore a script "click" on a hidden file input. */}
+          <label className="btn small file-button" aria-busy={busy}>
+            {busy ? "Saving…" : hasImage ? "Choose another image…" : "Choose an image…"}
+            <input type="file" className="sr-only" accept="image/png,image/jpeg,image/webp,image/avif,image/gif" onChange={(e) => void choose(e)} />
+          </label>
           {hasImage && (
             <button type="button" className="btn small ghost" onClick={() => void remove()}>
               Remove my image
             </button>
           )}
-          <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => void choose(e)} />
         </div>
         {problem && (
           <p className="small" role="alert" style={{ color: "var(--danger)", margin: 0 }}>
@@ -393,7 +406,7 @@ function BackgroundPicker() {
           </label>
         )}
         <p className="tiny muted" style={{ margin: 0 }}>
-          Your image stays in this browser. It is not uploaded to RecallSpring and is not in backups.
+          The timer above shows your choice. Your image stays in this browser: it is not uploaded to RecallSpring and is not in backups.
         </p>
       </div>
     </Card>

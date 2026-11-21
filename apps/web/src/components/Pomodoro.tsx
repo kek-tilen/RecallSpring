@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router";
 import { ApiError, newKey, request } from "../api";
-import { chime, loadImage, primeAudio } from "../focusMedia";
+import { IMAGE_CHANGED, chime, loadImage, primeAudio } from "../focusMedia";
 import {
   PHASE_LABEL,
   RUN_STORAGE_KEY,
@@ -350,9 +350,16 @@ export const BACKGROUNDS: { id: BackgroundId; name: string; tone: "theme" | "dar
   { id: "image", name: "My image", tone: "dark", css: "#0e1116" },
 ];
 
-/** An object URL for the learner's stored background image, or null. Revoked when no longer shown. */
-export function useBackgroundImage(enabled: boolean, version = 0): string | null {
+/** An object URL for the learner's stored background image, or null. Revoked when no longer shown; follows a
+ * newly chosen image at once. */
+export function useBackgroundImage(enabled: boolean): string | null {
   const [url, setUrl] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    const bump = () => setVersion((v) => v + 1);
+    window.addEventListener(IMAGE_CHANGED, bump);
+    return () => window.removeEventListener(IMAGE_CHANGED, bump);
+  }, []);
   useEffect(() => {
     if (!enabled) return;
     let live = true;
@@ -371,13 +378,25 @@ export function useBackgroundImage(enabled: boolean, version = 0): string | null
   return url;
 }
 
+/** The chosen background behind the timer: colours, or the learner's image darkened by `dim`. Used by focus
+ * mode and as the live preview on the Focus page, so a choice is visible at once. */
+export function FocusStage({ settings, className, children }: { settings: PomodoroSettings; className: string; children: ReactNode }) {
+  const bg = BACKGROUNDS.find((b) => b.id === settings.background) ?? BACKGROUNDS[0]!;
+  const image = useBackgroundImage(bg.id === "image");
+  return (
+    <div className={`focus-stage ${className}`} data-tone={bg.tone} style={{ background: bg.css }}>
+      {bg.id === "image" && image && <img className="focus-stage-bg" src={image} alt="" />}
+      {bg.id === "image" && <div className="focus-stage-scrim" style={{ opacity: settings.dim / 100 }} />}
+      <div className="focus-stage-body">{children}</div>
+    </div>
+  );
+}
+
 const FOCUSABLE = 'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 function FocusMode({ onClose }: { onClose: () => void }) {
   const p = usePomodoro();
   const box = useRef<HTMLDivElement>(null);
-  const bg = BACKGROUNDS.find((b) => b.id === p.settings.background) ?? BACKGROUNDS[0]!;
-  const image = useBackgroundImage(bg.id === "image");
   const opener = useRef<Element | null>(null);
 
   useEffect(() => {
@@ -423,44 +442,33 @@ function FocusMode({ onClose }: { onClose: () => void }) {
 
   const { run, settings, left } = p;
   return createPortal(
-    <div
-      ref={box}
-      className="focus-mode"
-      data-tone={bg.tone}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Focus mode"
-      onKeyDown={onKey}
-      style={{ background: bg.css }}
-    >
-      {bg.id === "image" && image && <img className="focus-mode-bg" src={image} alt="" />}
-      {bg.id === "image" && <div className="focus-mode-scrim" style={{ opacity: settings.dim / 100 }} />}
-      <div className="focus-mode-body">
-        <div className="focus-mode-phase">
-          {PHASE_LABEL[run.phase]}
-          {run.status === "paused" && " · paused"}
-        </div>
-        <ClockFace face={settings.face} ms={left} total={run.totalMs} />
-        <TimerText ms={left} phase={run.phase} paused={run.status === "paused"} />
-        <RoundDots run={run} rounds={settings.rounds} />
-        <div className="row focus-mode-controls">
-          <button type="button" className="btn primary" onClick={p.toggle}>
-            {run.status === "running" ? "Pause" : run.status === "paused" ? "Resume" : "Start"}
-          </button>
-          <button type="button" className="btn" onClick={p.skip}>
-            Skip
-          </button>
-          {typeof document !== "undefined" && document.fullscreenEnabled && (
-            <button type="button" className="btn" onClick={fullScreen}>
-              Full screen
+    <div ref={box} className="focus-mode" role="dialog" aria-modal="true" aria-label="Focus mode" onKeyDown={onKey}>
+      <FocusStage settings={settings} className="focus-mode-stage">
+          <div className="focus-mode-phase">
+            {PHASE_LABEL[run.phase]}
+            {run.status === "paused" && " · paused"}
+          </div>
+          <ClockFace face={settings.face} ms={left} total={run.totalMs} />
+          <TimerText ms={left} phase={run.phase} paused={run.status === "paused"} />
+          <RoundDots run={run} rounds={settings.rounds} />
+          <div className="row focus-mode-controls">
+            <button type="button" className="btn primary" onClick={p.toggle}>
+              {run.status === "running" ? "Pause" : run.status === "paused" ? "Resume" : "Start"}
             </button>
-          )}
-          <button type="button" className="btn" onClick={onClose}>
-            Exit focus mode
-          </button>
-        </div>
-        <p className="tiny focus-mode-hint">Space starts or pauses · Esc exits</p>
-      </div>
+            <button type="button" className="btn" onClick={p.skip}>
+              Skip
+            </button>
+            {typeof document !== "undefined" && document.fullscreenEnabled && (
+              <button type="button" className="btn" onClick={fullScreen}>
+                Full screen
+              </button>
+            )}
+            <button type="button" className="btn" onClick={onClose}>
+              Exit focus mode
+            </button>
+          </div>
+          <p className="tiny focus-mode-hint">Space starts or pauses · Esc exits</p>
+      </FocusStage>
     </div>,
     document.body,
   );
