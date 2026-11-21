@@ -7,6 +7,7 @@ import { bytes, dateLabel, dateTime, plural } from "../format";
 import { keys, useBackup, useConnector, useSession, useStudySettings } from "../queries";
 import { PreferencesEditor } from "./Import";
 import { ChatGptPanel } from "../components/ChatGpt";
+import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
 import type { BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -338,41 +339,38 @@ function BackupPanel({ b }: { b: BackupStatus }) {
   );
 }
 
-type Theme = "system" | "light" | "dark";
-
-function readTheme(): Theme {
-  try {
-    const t = localStorage.getItem("rs-theme");
-    return t === "light" || t === "dark" ? t : "system";
-  } catch {
-    return "system";
-  }
-}
-
-export function applyTheme(theme: Theme = readTheme()): void {
-  if (theme === "system") document.documentElement.removeAttribute("data-theme");
-  else document.documentElement.setAttribute("data-theme", theme);
-}
-
 function ThemePicker() {
-  const [theme, setTheme] = useState<Theme>(readTheme);
-  function pick(t: Theme) {
+  const [theme, setTheme] = useState<ThemeId>(readTheme);
+  function pick(t: ThemeId) {
     setTheme(t);
-    try {
-      if (t === "system") localStorage.removeItem("rs-theme");
-      else localStorage.setItem("rs-theme", t);
-    } catch {
-      /* storage unavailable: the choice lasts for this page only */
-    }
-    applyTheme(t);
+    saveTheme(t);
   }
   return (
-    <div className="row" role="radiogroup" aria-label="Theme">
-      {(["light", "dark", "system"] as const).map((t) => (
-        <button key={t} type="button" role="radio" aria-checked={theme === t} aria-pressed={theme === t} className="chip chip-filter" onClick={() => pick(t)}>
-          {t === "system" ? "Match system" : t === "light" ? "Light" : "Dark"}
-        </button>
-      ))}
+    <div className="stack" style={{ gap: 10 }}>
+      <div className="theme-grid" role="radiogroup" aria-label="Theme">
+        {THEMES.map((t) => (
+          <button key={t.id} type="button" role="radio" aria-checked={theme === t.id} className="theme-card" onClick={() => pick(t.id)}>
+            <span className="theme-swatch" aria-hidden="true" style={{ background: t.swatch[0], borderColor: t.swatch[1] }}>
+              <span style={{ background: t.swatch[1] }} />
+              <span style={{ background: t.swatch[2] }} />
+              <span style={{ background: t.swatch[3] }} />
+              <span style={{ background: t.swatch[4] }} />
+            </span>
+            <span className="theme-name">{t.name}</span>
+            <span className="tiny muted">
+              {t.dark ? "Dark" : "Light"} · {t.note}
+            </span>
+          </button>
+        ))}
+      </div>
+      <label className="row small" style={{ gap: 8 }}>
+        <input type="checkbox" checked={theme === "system"} onChange={(e) => pick(e.target.checked ? "system" : "light")} />
+        Match my computer (RecallSpring White or RecallSpring Dark)
+      </label>
+      <p className="tiny muted" style={{ margin: 0 }}>
+        Saved on this device. Solarized, Nord, Dracula and Gruvbox are open-source colour schemes, adapted so text stays
+        easy to read.
+      </p>
     </div>
   );
 }

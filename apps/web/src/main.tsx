@@ -3,8 +3,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router";
 import { ApiError, setUnauthenticatedHandler } from "./api";
-import { applyTheme } from "./pages/Settings";
 import { router } from "./routes";
+import { applyTheme } from "./theme";
 import "./styles.css";
 
 const queryClient = new QueryClient({

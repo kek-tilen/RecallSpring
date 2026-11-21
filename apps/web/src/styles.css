@@ -31,7 +31,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     color-scheme: dark;
     --bg: #111916;
     --surface: #18231f;
@@ -79,6 +79,110 @@
   --ramp-2: #7ccfc0;
   --ramp-3: #c3ede4;
   --gap: #111916;
+  --shadow: none;
+}
+
+/* Four popular open-source colour schemes, adapted to RecallSpring's tokens (MIT-licensed palettes: Solarized by
+   Ethan Schoonover, Nord by Arctic Ice Studio, Dracula by Zeno Rocha, Gruvbox by Pavel Pertsev). Text, links and
+   warnings use darker or lighter steps where the original tones miss WCAG AA (4.5:1); the progress ramp stays one
+   hue from light to dark. */
+:root[data-theme="solarized-light"] {
+  color-scheme: light;
+  --bg: #fdf6e3;
+  --surface: #eee8d5;
+  --surface-elevated: #fffbf0;
+  --primary: #1f6a9e;
+  --primary-hover: #185680;
+  --on-primary: #fdf6e3;
+  --ink: #073642;
+  --muted: #52666d;
+  --border: #e0d8c0;
+  --border-strong: #c4b994;
+  --warning: #8a5a00;
+  --warning-bg: #f6e7c1;
+  --danger: #b3261e;
+  --danger-bg: #f9e0d6;
+  --focus: #268bd2;
+  --ramp-0: #d5e8e2;
+  --ramp-1: #7cc4bb;
+  --ramp-2: #2a8f87;
+  --ramp-3: #0d4f4a;
+  --gap: #fdf6e3;
+  --shadow: 0 1px 2px rgb(7 54 66 / 8%);
+}
+
+:root[data-theme="nord"] {
+  color-scheme: dark;
+  --bg: #2e3440;
+  --surface: #3b4252;
+  --surface-elevated: #353c4a;
+  --primary: #88c0d0;
+  --primary-hover: #8fbcbb;
+  --on-primary: #2e3440;
+  --ink: #eceff4;
+  --muted: #b7c0cf;
+  --border: #434c5e;
+  --border-strong: #5d6a82;
+  --warning: #ebcb8b;
+  --warning-bg: #463f33;
+  --danger: #eb959c;
+  --danger-bg: #45323a;
+  --focus: #88c0d0;
+  --ramp-0: #40506a;
+  --ramp-1: #5e81ac;
+  --ramp-2: #88b4d4;
+  --ramp-3: #d2e6f3;
+  --gap: #2e3440;
+  --shadow: none;
+}
+
+:root[data-theme="dracula"] {
+  color-scheme: dark;
+  --bg: #282a36;
+  --surface: #383a4c;
+  --surface-elevated: #2f3141;
+  --primary: #bd93f9;
+  --primary-hover: #d0b2fb;
+  --on-primary: #282a36;
+  --ink: #f8f8f2;
+  --muted: #b8bcd6;
+  --border: #44475a;
+  --border-strong: #6272a4;
+  --warning: #ffb86c;
+  --warning-bg: #45382b;
+  --danger: #ff6e6e;
+  --danger-bg: #4a2a33;
+  --focus: #ff79c6;
+  --ramp-0: #4b3f6b;
+  --ramp-1: #7c63b8;
+  --ramp-2: #bd93f9;
+  --ramp-3: #ece0ff;
+  --gap: #282a36;
+  --shadow: none;
+}
+
+:root[data-theme="gruvbox"] {
+  color-scheme: dark;
+  --bg: #282828;
+  --surface: #3c3836;
+  --surface-elevated: #32302f;
+  --primary: #8ec07c;
+  --primary-hover: #a9d49a;
+  --on-primary: #1d2021;
+  --ink: #ebdbb2;
+  --muted: #c2b496;
+  --border: #504945;
+  --border-strong: #7c6f64;
+  --warning: #fabd2f;
+  --warning-bg: #45391d;
+  --danger: #fb6a55;
+  --danger-bg: #4a2723;
+  --focus: #fe8019;
+  --ramp-0: #3f5139;
+  --ramp-1: #689d6a;
+  --ramp-2: #8ec07c;
+  --ramp-3: #d5ebc7;
+  --gap: #282828;
   --shadow: none;
 }
 
@@ -186,6 +290,51 @@ a:hover {
   font-size: 1.05rem;
   color: var(--ink);
   text-decoration: none;
+}
+
+/* The menu can be hidden (Ctrl+Backslash or the button) so the page has the whole width; on phones it stays a top bar. */
+.rail-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.rail-top .brand {
+  min-width: 0;
+}
+
+.rail-hide,
+.rail-show {
+  padding: 6px;
+  line-height: 0;
+  color: var(--muted);
+}
+
+.rail-hide:hover,
+.rail-show:hover {
+  color: var(--ink);
+}
+
+.rail-show {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 20;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+}
+
+.shell.rail-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell.rail-hidden .rail {
+  display: none;
+}
+
+.shell.rail-hidden .main {
+  padding-left: max(clamp(16px, 4vw, 48px), 64px);
 }
 
 .brand img {
@@ -311,6 +460,76 @@ a:hover {
   .main {
     padding-top: 20px;
   }
+
+  .shell .rail-hide,
+  .shell .rail-show {
+    display: none;
+  }
+
+  .shell.rail-hidden .rail {
+    display: flex;
+  }
+
+  .shell.rail-hidden .main {
+    padding-left: clamp(16px, 4vw, 48px);
+  }
+}
+
+/* Theme choice in Settings (theme.ts). */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.theme-card:hover {
+  border-color: var(--border-strong);
+}
+
+.theme-card[aria-checked="true"] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+.theme-swatch {
+  display: grid;
+  grid-template-columns: 2fr 3fr 1fr 1fr;
+  gap: 4px;
+  align-items: end;
+  width: 100%;
+  height: 40px;
+  padding: 6px;
+  border: 1px solid;
+  border-radius: 8px;
+}
+
+.theme-swatch span {
+  height: 100%;
+  border-radius: 4px;
+}
+
+.theme-swatch span:nth-child(2) {
+  height: 6px;
+  align-self: center;
+}
+
+.theme-name {
+  font-weight: 600;
 }
 
 /* ------------------------------------------------------------------ surfaces */
@@ -1213,7 +1432,7 @@ pre.template {
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     --c-blue: #3987e5;
     --c-orange: #d95926;
     --c-aqua: #199e70;
@@ -1225,7 +1444,10 @@ pre.template {
   }
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+:root[data-theme="nord"],
+:root[data-theme="dracula"],
+:root[data-theme="gruvbox"] {
   --c-blue: #3987e5;
   --c-orange: #d95926;
   --c-aqua: #199e70;
@@ -1849,6 +2071,7 @@ tr.selected td {
 
 /* The thread scrolls; its content keeps a comfortable reading width. */
 .chat-scroll {
+  position: relative; /* keeps absolutely placed screen-reader text inside the scrolling thread */
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -2190,6 +2413,7 @@ a.cite:hover {
 
 /* Visual blocks drawn by RecallSpring from checked data (components/Visual.tsx). Colours come from the theme. */
 .viz {
+  position: relative;
   margin: 10px 0;
   padding: 12px;
   border: 1px solid var(--border);
