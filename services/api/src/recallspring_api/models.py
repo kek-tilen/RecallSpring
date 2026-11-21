@@ -838,7 +838,8 @@ class QuizItem(Base):
 class FocusSession(Base):
     """A Pomodoro focus block the learner timed in the web app, optionally for one course. Append-only: it records
     time spent, never learning or mastery. ``focused_seconds`` excludes pauses; ``completed`` is false when the
-    learner stopped the block early (only blocks of at least a minute are kept)."""
+    learner stopped the block early (only blocks of at least a minute are kept). A wrongly timed block can be removed
+    after the learner confirms it: a soft delete (``deleted_at``), restorable for 30 days and audited."""
 
     __tablename__ = "focus_sessions"
 
@@ -852,6 +853,7 @@ class FocusSession(Base):
     focused_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False)
     created_at: Mapped[datetime] = _created()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         UniqueConstraint("user_id", "client_session_id", name="uq_focus_sessions_user_client_session"),
