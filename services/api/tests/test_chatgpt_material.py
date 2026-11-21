@@ -66,6 +66,7 @@ def test_only_chosen_files_are_sent_and_the_excerpts_are_recorded(owner_api: Api
     sent = sent_instructions(fake)
     assert "Spike testiranje preverja" in sent and "Palačinke" not in sent  # small file: sent whole, other not chosen
     assert [m["filename"] for m in conv["material"]] == ["Kakovost.md"]
+    assert conv["material"][0]["has_text"] is True and conv["material"][0]["reading"] is False
     question, reply = conv["messages"]
     assert [c["ref"] for c in question["context"]] == ["S1", "S2"]
     assert set(reply["citations"]) == {"S2"}  # S9 was never sent, so it is not a citation

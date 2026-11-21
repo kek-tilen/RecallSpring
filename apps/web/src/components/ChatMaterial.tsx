@@ -12,6 +12,8 @@ export interface ChosenFile {
   kind: string;
   category: string;
   has_text: boolean;
+  /** RecallSpring is still extracting its text. */
+  reading?: boolean;
 }
 
 export const MAX_FILES = 20;

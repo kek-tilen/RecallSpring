@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { Link, useNavigate, useParams } from "react-router";
 import { ApiError, get, request } from "../api";
 import { ChatGptSignIn, STATUS_KEY, useChatGptStatus } from "../components/ChatGpt";
-import { MaterialPicker, type ChosenFile } from "../components/ChatMaterial";
+import { AttachDialog } from "../components/ChatAttach";
+import { MaterialPicker, MAX_FILES, type ChosenFile } from "../components/ChatMaterial";
 import { Markdown, type Cites } from "../components/Markdown";
 import type { VisualResult } from "../components/Visual";
 import { Confirm, ErrorNote, Loading } from "../components/ui";
@@ -663,6 +664,21 @@ function BookIcon() {
   );
 }
 
+function ClipIcon() {
+  return (
+    <svg {...ICON}>
+      <path
+        d="M14.5 8.5l-5.6 5.6a3.4 3.4 0 0 1-4.8-4.8l6-6a2.3 2.3 0 0 1 3.2 3.2l-6 6a1.1 1.1 0 0 1-1.6-1.6l5.5-5.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
+
 function FileIcon() {
   return (
     <svg {...ICON} width={14} height={14}>
@@ -686,6 +702,7 @@ function Composer({
   onTools,
   material,
   onMaterial,
+  onAttach,
 }: {
   canSend: boolean;
   models: Model[];
@@ -698,8 +715,9 @@ function Composer({
   onVisuals: (on: boolean) => void;
   tools: boolean;
   onTools: (on: boolean) => void;
-  material: { filename: string }[];
+  material: { filename: string; reading?: boolean }[];
   onMaterial: () => void;
+  onAttach: () => void;
 }) {
   const [text, setText] = useState("");
   const box = useRef<HTMLTextAreaElement>(null);
@@ -726,6 +744,8 @@ function Composer({
     }
   }
   const names = material.map((f) => f.filename);
+  // Files RecallSpring is still reading (reported for an existing conversation).
+  const reading = material.filter((f) => f.reading).map((f) => f.filename);
   const ready = canSend && !!text.trim() && !!model && !busy;
   return (
     <div className="composer-wrap">
@@ -739,12 +759,18 @@ function Composer({
           if (e.target === e.currentTarget) box.current?.focus();
         }}
       >
+        {reading.length > 0 && (
+          <div className="tiny muted" role="status">
+            RecallSpring is still reading {reading.join(", ")}; ChatGPT can use {reading.length === 1 ? "it" : "them"} in a moment.
+          </div>
+        )}
         {names.length > 0 && (
           <div className="composer-files" aria-label="Material ChatGPT may use">
             {names.slice(0, 3).map((n) => (
-              <span key={n} className="composer-file" title={n}>
+              <span key={n} className="composer-file" title={reading.includes(n) ? `${n} (RecallSpring is still reading it)` : n}>
                 <FileIcon />
                 <span className="composer-file-name">{n}</span>
+                {reading.includes(n) && <span className="tiny muted">reading…</span>}
               </span>
             ))}
             {names.length > 3 && (
@@ -779,6 +805,16 @@ function Composer({
           >
             <PlusIcon />
             {names.length > 0 && <span className="composer-count">{names.length}</span>}
+          </button>
+          <button
+            type="button"
+            className="composer-icon"
+            onClick={onAttach}
+            aria-haspopup="dialog"
+            aria-label="Upload files"
+            title="Upload files from this computer into your Library and this conversation"
+          >
+            <ClipIcon />
           </button>
           <button
             type="button"
@@ -840,6 +876,9 @@ export function ChatPage() {
     queryKey: [...LIST_KEY, currentId],
     queryFn: () => get<Conversation>(`/ai/chatgpt/conversations/${currentId}`),
     enabled: !!currentId,
+    // While an attached file is still being read, check again so the composer shows when it is ready.
+    refetchInterval: (q) =>
+      q.state.data?.material.some((f) => f.reading) && q.state.dataUpdateCount < 100 ? 3000 : false,
   });
   const [model, setModel] = useState(() => remembered());
   const [visuals, setVisuals] = useState(() => remembered(VISUALS_STORE) !== "off");
@@ -849,6 +888,7 @@ export function ChatPage() {
   const courses = useQuery({ queryKey: keys.courses, queryFn: () => get<Course[]>("/courses"), enabled: tools && !currentId });
   const [sideOpen, setSideOpen] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [attaching, setAttaching] = useState(false);
   // Files chosen before a new conversation's first message (an existing one keeps them on the server).
   const [draft, setDraft] = useState<{ id: string; filename: string }[]>([]);
   const available = models.data ?? [];
@@ -899,6 +939,17 @@ export function ChatPage() {
       setPicking(false);
     },
   });
+
+  /** Files uploaded from the composer join the conversation's material (up to MAX_FILES). */
+  function attach(files: { id: string; filename: string }[]) {
+    if (currentId) {
+      const ids = [...new Set([...material.map((f) => f.id), ...files.map((f) => f.id)])].slice(0, MAX_FILES);
+      saveMaterial.mutate(ids);
+    } else {
+      const seen = new Set(draft.map((f) => f.id));
+      setDraft([...draft, ...files.filter((f) => !seen.has(f.id)).map((f) => ({ id: f.id, filename: f.filename }))].slice(0, MAX_FILES));
+    }
+  }
 
   function pick(id: string) {
     setSideOpen(false);
@@ -1004,6 +1055,7 @@ export function ChatPage() {
             )}
             {send.error && <ErrorNote error={send.error} />}
             {models.error && <ErrorNote error={models.error} />}
+            {!picking && saveMaterial.error && <ErrorNote error={saveMaterial.error} />}
             <Composer
               canSend={canSend}
               models={available}
@@ -1029,6 +1081,10 @@ export function ChatPage() {
                 saveMaterial.reset();
                 setPicking(true);
               }}
+              onAttach={() => {
+                saveMaterial.reset();
+                setAttaching(true);
+              }}
               placeholder={
                 !canSend
                   ? "Sign in with ChatGPT to write"
@@ -1042,6 +1098,12 @@ export function ChatPage() {
           </div>
         </section>
       </div>
+      <AttachDialog
+        open={attaching}
+        courseId={current ? (current.course?.id ?? null) : tools && studyCourse ? studyCourse : null}
+        onClose={() => setAttaching(false)}
+        onAttached={attach}
+      />
       <MaterialPicker
         open={picking}
         chosen={material.map((f) => f.id)}

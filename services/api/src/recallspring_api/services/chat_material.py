@@ -64,6 +64,7 @@ def sources_view(db: Session, conv: AiConversation) -> list[dict[str, Any]]:
             "kind": s.kind,
             "category": s.category,
             "has_text": counts.get(s.id, 0) > 0,
+            "reading": s.parse_state in ("pending", "processing"),  # just uploaded, e.g. from the Chat composer
         }
         for s in rows
     ]

@@ -2358,6 +2358,7 @@ a.cite:hover {
 
 .composer-bar {
   display: flex;
+  flex-wrap: wrap; /* one more button (Upload files): wrap on narrow screens instead of overflowing */
   align-items: center;
   gap: 6px;
   cursor: default;

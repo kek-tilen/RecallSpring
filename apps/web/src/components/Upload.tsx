@@ -99,7 +99,16 @@ async function fromDrop(dt: DataTransfer): Promise<Picked[]> {
  * Drag-and-drop with click-to-browse: files, whole folders (their folders become library folders) and ZIPs (unpacked
  * on the server, folders kept). Extraction runs in the background worker; the list polls its state.
  */
-export function Upload({ courseId: fixedCourse, folderId }: { courseId?: string; folderId?: string | null }) {
+export function Upload({
+  courseId: fixedCourse,
+  folderId,
+  onImported,
+}: {
+  courseId?: string;
+  folderId?: string | null;
+  /** Called after an upload with what was saved and what was left out (Chat adds the files to a conversation). */
+  onImported?: (result: ImportResult) => void;
+}) {
   const courses = useCourses();
   const [courseId, setCourseId] = useState(fixedCourse ?? "");
   const [category, setCategory] = useState<MaterialCategory>("material");
@@ -170,7 +179,10 @@ export function Upload({ courseId: fixedCourse, folderId }: { courseId?: string;
         void qc.invalidateQueries({ queryKey: [key] });
       }
     },
-    onSuccess: (result) => setDone(result),
+    onSuccess: (result) => {
+      setDone(result);
+      onImported?.(result);
+    },
   });
 
   function send(all: Picked[]) {

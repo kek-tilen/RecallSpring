@@ -65,13 +65,21 @@ function routeFetch(sent: { path: string; body: unknown }[]) {
     const url = new URL(typeof input === "string" ? input : (input as Request).url, "http://localhost");
     const path = url.pathname.replace("/api/v1", "");
     const method = init?.method ?? "GET";
-    if (method !== "GET") sent.push({ path, body: init?.body ? JSON.parse(String(init.body)) : null });
+    const body = init?.body instanceof FormData ? Object.fromEntries(init.body.entries()) : init?.body ? JSON.parse(String(init.body)) : null;
+    if (method !== "GET") sent.push({ path, body });
     if (path === "/ai/chatgpt") return json(200, STATUS);
     if (path === "/ai/chatgpt/models") return json(200, [{ slug: "gpt-test", display_name: "GPT Test" }]);
     if (path === "/ai/chatgpt/conversations") {
       return json(200, { conversations: [{ id: "c1", title: "Quiz me", created_at: CONV.created_at, updated_at: CONV.updated_at, deleted_at: null, replies: 1 }], deleted: [], usage: { last_24_hours: CONV.totals, last_30_days: CONV.totals } });
     }
     if (path === "/ai/chatgpt/conversations/c1") return json(200, CONV);
+    if (path === "/sources" && method === "POST") {
+      return json(201, { id: "s9", course_id: "k1", filename: "lecture3.pdf", kind: "pdf", category: "material", parse_state: "pending", section_count: 0 });
+    }
+    if (path === "/ai/chatgpt/conversations/c1/material") {
+      const file = { id: "s9", course_id: "k1", filename: "lecture3.pdf", kind: "pdf", category: "material", has_text: false, reading: true };
+      return json(200, { ...CONV, material: [file] });
+    }
     if (path === "/questions/q1") return json(200, QUESTION);
     if (path === "/attempts") return json(201, { attempt_id: "a1", status: "saved_awaiting_evaluation", saved_at: "2026-11-21T20:01:00Z" });
     if (path === "/ai/chatgpt/messages") return json(200, { ...CONV, messages: [...CONV.messages, msg({ id: "m3", position: 3, role: "user", text: "next" })] });
@@ -125,5 +133,30 @@ describe("ChatGPT using RecallSpring in Chat", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
     await waitFor(() => expect(sent.some((s) => s.path === "/ai/chatgpt/messages")).toBe(true));
     expect((sent.find((s) => s.path === "/ai/chatgpt/messages")!.body as { recallspring: boolean }).recallspring).toBe(false);
+  });
+
+  it("uploads a file from the composer into the library and this conversation", async () => {
+    // jsdom has no modal dialogs: open and close them as attributes.
+    Object.assign(HTMLDialogElement.prototype, {
+      showModal(this: HTMLDialogElement) {
+        this.setAttribute("open", "");
+      },
+      close(this: HTMLDialogElement) {
+        this.removeAttribute("open");
+      },
+    });
+    const sent: { path: string; body: unknown }[] = [];
+    routeFetch(sent);
+    const { baseElement } = show();
+    fireEvent.click(await screen.findByRole("button", { name: "Upload files" }));
+    await screen.findByRole("heading", { name: "Add files to this conversation" });
+    expect(screen.queryByRole("combobox", { name: "Course" })).toBeNull(); // the conversation's course is used
+    const input = baseElement.querySelector<HTMLInputElement>('input[type="file"]:not([webkitdirectory])')!;
+    const file = new File(["%PDF-1.4"], "lecture3.pdf", { type: "application/pdf" });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(sent.map((s) => s.path)).toEqual(["/sources", "/ai/chatgpt/conversations/c1/material"]));
+    expect((sent[0]!.body as { course_id: string }).course_id).toBe("k1");
+    expect(sent[1]!.body).toEqual({ source_ids: ["s9"] });
+    expect(await screen.findByText(/RecallSpring is still reading lecture3\.pdf/)).toBeTruthy();
   });
 });
