@@ -649,6 +649,57 @@ class ConnectorUsage(Base):
     requests: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
 
 
+# --------------------------------------------------------------------------- conversations with an AI provider
+
+
+class AiConversation(Base):
+    """A conversation the learner had with an AI provider from RecallSpring (today: ChatGPT in Settings). Kept
+    after signing out at the provider; deleting is a soft delete the learner confirms (restorable)."""
+
+    __tablename__ = "ai_conversations"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (CheckConstraint("provider IN ('chatgpt')", name="provider"),)
+
+
+class AiMessage(Base):
+    """One turn. The learner's message is saved before the provider is called; a reply records which model and
+    version answered, when, how long it took and the token usage the provider reported. A failed request keeps the
+    learner's message with the error code (no reply row)."""
+
+    __tablename__ = "ai_messages"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_conversations.id"), nullable=False, index=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    client_request_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    model_requested: Mapped[str | None] = mapped_column(String(120))
+    model: Mapped[str | None] = mapped_column(String(120))
+    response_id: Mapped[str | None] = mapped_column(String(200))
+    account: Mapped[str | None] = mapped_column(String(320))
+    usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    error_code: Mapped[str | None] = mapped_column(String(60))
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = _created()
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("role IN ('user','assistant')", name="role"),
+        UniqueConstraint("conversation_id", "position", name="uq_ai_messages_position"),
+        UniqueConstraint("user_id", "client_request_id", name="uq_ai_messages_user_client_request"),
+    )
+
+
 # --------------------------------------------------------------------------- study targets (exams) and planning
 
 

@@ -1,11 +1,13 @@
 """Sign in with ChatGPT, proof of concept (ai/siwc.py, docs/04 Gate 0). Owner session + CSRF, except the OAuth
 callback, which is checked by its one-time state instead. Connector tokens cannot reach these routes.
 
-Every request to OpenAI starts from the learner pressing a button; nothing runs in the background. The connection
-test is not saved and is not used for tutoring or grading."""
+Every request to OpenAI starts from the learner pressing a button; nothing runs in the background. Conversations
+are saved (services/ai_conversations.py) and are not used for tutoring or grading."""
 
 from __future__ import annotations
 
+import time
+import uuid
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -16,16 +18,18 @@ from sqlalchemy.orm import Session
 from ..ai import siwc
 from ..config import get_settings
 from ..db import get_db
-from ..deps import Ctx, csrf_ctx, current_ctx
+from ..deps import Ctx, WriteCtx, csrf_ctx, current_ctx, write_ctx
 from ..errors import ApiError
-from ..schemas import ChatGptTestIn
+from ..schemas import ChatGptMessageIn
+from ..services import ai_conversations as conv_svc
 from ..services.events import audit
 
 router = APIRouter(tags=["chatgpt"])
 
-TEST_INSTRUCTIONS = (
-    "You are answering a connection test from RecallSpring, a study app the user runs on their own computer. "
-    "Answer briefly and in the language the user writes in."
+INSTRUCTIONS = (
+    "You are ChatGPT, used from RecallSpring, a study app the learner runs on their own computer. You cannot see "
+    "the learner's course material or records here. Answer clearly and briefly, in the language the learner writes "
+    "in."
 )
 MESSAGES = {
     "not_connected": (409, "Sign in with ChatGPT first."),
@@ -113,26 +117,98 @@ def models(ctx: Ctx = Depends(current_ctx)) -> list[dict[str, str]]:
         raise _api_error(exc) from exc
 
 
-@router.post("/ai/chatgpt/test")
-def test_message(payload: ChatGptTestIn, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Send one message (with the earlier turns of this test) and wait for the whole reply. Not saved."""
-    if sum(len(t.text) for t in payload.history) + len(payload.message) > 40_000:
-        raise ApiError(422, "chatgpt_test_too_long", "Clear the test conversation and start again.")
-    history = [t.model_dump() for t in payload.history] + [{"role": "user", "text": payload.message}]
+@router.get("/ai/chatgpt/conversations")
+def conversations(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Saved conversations (newest first), recently deleted ones and token usage. Readable while signed out."""
+    return conv_svc.list_view(db, ctx.user)
+
+
+@router.get("/ai/chatgpt/conversations/{conversation_id}")
+def conversation(
+    conversation_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    return conv_svc.conversation_view(db, conv_svc.get(db, ctx.user, conversation_id))
+
+
+@router.post("/ai/chatgpt/messages")
+def send_message(
+    payload: ChatGptMessageIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Save the learner's message, then ask ChatGPT and wait for the whole reply, which is saved with the model and
+    version that answered, the time it took and the token usage. A retry with the same Idempotency-Key never asks
+    twice."""
+    if (seen := conv_svc.find_request(db, ctx.user, ctx.idempotency_key)) is not None:
+        return conv_svc.conversation_view(db, conv_svc.get(db, ctx.user, seen.conversation_id))
+    state = siwc.status(ctx.user.id)
+    if not state["connected"]:
+        raise _api_error(siwc.SiwcError("not_connected"))
+    if not state["plan_usage"]:
+        raise _api_error(siwc.SiwcError("plan_usage_not_enabled"))
+    conv, question = conv_svc.save_question(
+        db, ctx.user, payload.conversation_id, payload.model, payload.message, ctx.idempotency_key
+    )
+    db.commit()  # saved before ChatGPT is asked
+    turns, _ = conv_svc.history(conv_svc._messages(db, conv.id))
+    db.commit()  # no transaction stays open while waiting for ChatGPT
+    started = time.monotonic()
     try:
-        result = siwc.reply(ctx.user.id, payload.model, TEST_INSTRUCTIONS, history)
+        result = siwc.reply(ctx.user.id, payload.model, INSTRUCTIONS, turns)
     except siwc.SiwcError as exc:
-        audit(db, actor_id=ctx.user.id, action="ai.chatgpt_test", details={"model": payload.model, "outcome": exc.code})
+        conv_svc.save_failure(db, question, exc.code, int((time.monotonic() - started) * 1000))
+        audit(
+            db,
+            actor_id=ctx.user.id,
+            action="ai.chatgpt_message",
+            target_type="ai_conversation",
+            target_id=conv.id,
+            details={"model": payload.model, "outcome": exc.code},
+            request_id=ctx.request_id,
+        )
         db.commit()
-        raise _api_error(exc) from exc
+        error = _api_error(exc)
+        error.details = {"conversation_id": str(conv.id)}
+        raise error from exc
+    reply = conv_svc.save_reply(
+        db,
+        ctx.user,
+        question,
+        text=result.text,
+        model=result.model,
+        response_id=result.response_id,
+        usage=result.usage,
+        account=state.get("email") or state.get("name"),
+        duration_ms=int((time.monotonic() - started) * 1000),
+    )
     audit(
         db,
         actor_id=ctx.user.id,
-        action="ai.chatgpt_test",
-        details={"model": result.model, "outcome": "completed", "turns": len(history)},
+        action="ai.chatgpt_message",
+        target_type="ai_conversation",
+        target_id=conv.id,
+        details={"model": result.model, "outcome": "completed", "turns": len(turns), "usage": reply.usage},
+        request_id=ctx.request_id,
     )
     db.commit()
-    return {"reply": result.text, "model": result.model, "usage": result.usage}
+    return conv_svc.conversation_view(db, conv)
+
+
+@router.delete("/ai/chatgpt/conversations/{conversation_id}")
+def delete_conversation(
+    conversation_id: uuid.UUID, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Soft delete (restorable for 30 days), after the learner confirmed it."""
+    conv_svc.set_deleted(db, ctx.user, conversation_id, True, ctx.request_id)
+    db.commit()
+    return conv_svc.list_view(db, ctx.user)
+
+
+@router.post("/ai/chatgpt/conversations/{conversation_id}/restore")
+def restore_conversation(
+    conversation_id: uuid.UUID, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    conv_svc.set_deleted(db, ctx.user, conversation_id, False, ctx.request_id)
+    db.commit()
+    return conv_svc.list_view(db, ctx.user)
 
 
 @router.post("/ai/chatgpt/disconnect")

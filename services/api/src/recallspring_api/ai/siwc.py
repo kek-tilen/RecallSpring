@@ -397,8 +397,9 @@ def _events(lines: Iterator[str]) -> Iterator[dict[str, Any]]:
 @dataclass
 class Reply:
     text: str
-    model: str
+    model: str  # the model (and version) that answered, as OpenAI reports it
     usage: dict[str, Any] | None
+    response_id: str | None = None
 
 
 def reply(user_id: uuid.UUID, model: str, instructions: str, history: list[dict[str, str]]) -> Reply:
@@ -423,7 +424,13 @@ def reply(user_id: uuid.UUID, model: str, instructions: str, history: list[dict[
                     elif kind == "response.completed":
                         response = event.get("response") if isinstance(event.get("response"), dict) else {}
                         usage = response.get("usage") if isinstance(response.get("usage"), dict) else None
-                        return Reply("".join(parts), str(response.get("model") or model), usage)
+                        rid = response.get("id")
+                        return Reply(
+                            "".join(parts),
+                            str(response.get("model") or model)[:120],
+                            usage,
+                            rid[:200] if isinstance(rid, str) else None,
+                        )
                     elif kind == "response.failed":
                         response = event.get("response") if isinstance(event.get("response"), dict) else {}
                         raise _error_from(200, response)
