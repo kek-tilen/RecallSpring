@@ -31,7 +31,7 @@ export function ConceptPage() {
                     {c.definition_draft ? (
                       <p className="reading pre">{c.definition_draft}</p>
                     ) : (
-                      <p className="muted small">No short definition recorded. Claude explains it from your material.</p>
+                      <p className="muted small">No short definition recorded. Your assistant explains it from your material.</p>
                     )}
                   </Card>
 
@@ -39,8 +39,8 @@ export function ConceptPage() {
                     {c.attempts.length === 0 ? (
                       <Empty title="No answers yet">
                         {c.study_status === "not_studied"
-                          ? "Study this concept with Claude first; practice comes after."
-                          : "Ask Claude for a question or a simulation on this concept."}
+                          ? "Study this concept with your assistant first; practice comes after."
+                          : "Ask your assistant for a question or a simulation on this concept."}
                       </Empty>
                     ) : (
                       <ul className="list">
@@ -123,7 +123,7 @@ export function ConceptPage() {
                   </Card>
                   <Card title="In your material">
                     {c.sections.length === 0 ? (
-                      <p className="small muted">Not linked to a section (inferred by Claude).</p>
+                      <p className="small muted">Not linked to a section (inferred by the assistant).</p>
                     ) : (
                       <ul className="list small">
                         {c.sections.map((s) => (

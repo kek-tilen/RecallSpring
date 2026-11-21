@@ -23,10 +23,29 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
+AssistantChoice = Literal["claude", "codex", "chatgpt"]
+
+
 class UserOut(_Out):
     id: uuid.UUID
     username: str
     timezone: str
+    assistant: AssistantChoice | None = None
+
+
+class FirstRunIn(BaseModel):
+    """The first account on a new install (first-run page; only on this computer, only while no account exists)."""
+
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9._@-]+$")
+    password: str = Field(min_length=12, max_length=256)
+    timezone: str = Field(min_length=1, max_length=64)
+
+
+class ProfileIn(BaseModel):
+    """Only the fields sent change; ``assistant: null`` means "decide later"."""
+
+    timezone: str | None = Field(default=None, min_length=1, max_length=64)
+    assistant: AssistantChoice | None = None
 
 
 class SessionOut(BaseModel):

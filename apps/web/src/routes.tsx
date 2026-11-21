@@ -22,6 +22,7 @@ import { ReviewPage } from "./pages/Review";
 import { SettingsPage } from "./pages/Settings";
 import { SimulationPage, SimulationsPage } from "./pages/Simulations";
 import { WeekPage } from "./pages/Week";
+import { WelcomePage } from "./pages/Welcome";
 import { useSession } from "./queries";
 
 function RequireSession() {
@@ -83,6 +84,7 @@ export const router = createBrowserRouter([
           { path: "history", element: <HistoryPage /> },
           { path: "guide", element: <GuidePage /> },
           { path: "settings", element: <SettingsPage /> },
+          { path: "welcome", element: <WelcomePage /> },
           { path: "*", element: <NotFound /> },
         ],
       },

@@ -68,7 +68,7 @@ function BackToAssistant({ what }: { what: string }) {
   return (
     <div className="notice stack" role="status">
       <strong>{what}</strong>
-      <span className="small">Go back to your assistant (Codex or Claude) and tell it you are done. It reads your text from RecallSpring.</span>
+      <span className="small">Go back to your assistant and tell it you are done. It reads your text from RecallSpring.</span>
     </div>
   );
 }

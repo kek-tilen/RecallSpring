@@ -58,7 +58,8 @@ Every mutating request needs the session cookie, an `X-CSRF-Token` header equal 
 | `RS_COOKIE_SECURE` | `true` | `false` only for plain-HTTP loopback development |
 | `RS_AI_EVALUATION_PROVIDER`, `RS_AI_QUESTION_PROVIDER` | `none` | `mock` for development; real adapters follow ADR-002 |
 | `RS_AI_TIMEOUT_SECONDS` | `90` | Provider call timeout |
-| `RS_DEFAULT_TIMEZONE` | `Europe/Ljubljana` | New users' timezone |
+| `RS_DEFAULT_TIMEZONE` | `UTC` | Time zone for `create-owner` without `--timezone` (the first-run page uses the browser's) |
+| `RS_FIRST_RUN_ENABLED` | `true` | The first-run page may create the first account (only from this computer, only while none exists; always off in production) |
 | `RS_BACKUP_DIR` | `local-data/backups` | Same disk as the uploads by default: point it at another disk or a synced folder |
 | `RS_BACKUP_ENABLED`, `RS_BACKUP_INTERVAL_HOURS` | `true`, `24` | Automatic backups by the worker |
 | `RS_BACKUP_KEEP_DAILY`, `RS_BACKUP_KEEP_WEEKLY` | `7`, `4` | Newest backup per day / per week kept |

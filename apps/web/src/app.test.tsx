@@ -79,7 +79,7 @@ describe("small helpers", () => {
   it("labels grades and graders honestly", () => {
     expect(gradeLabel(null)).toBe("Not graded");
     expect(gradeLabel(3)).toBe("3/4 · Solid");
-    expect(gradedBy("ai")).toBe("Claude");
+    expect(gradedBy("ai")).toBe("Assistant");
     expect(gradedBy("ai", { name: "Codex", model: "gpt-5.5-codex" })).toBe("Codex · gpt-5.5-codex");
     expect(gradedBy("ai", { name: "Claude", model: null })).toBe("Claude");
     expect(gradedBy("deterministic")).toBe("RecallSpring (answer key)");
@@ -133,7 +133,7 @@ describe("organisation helpers", () => {
     expect(daysBetween("2026-11-20", "2026-12-01")).toBe(11);
   });
 
-  it("gives Claude the simulation ID to grade", async () => {
+  it("gives the assistant the simulation ID to grade", async () => {
     const { gradingPrompt } = await import("./components/QuizForm");
     expect(gradingPrompt({ title: "Simulation 1", quiz_id: "abc-123" })).toContain("(ID abc-123)");
   });
@@ -143,10 +143,10 @@ describe("source notes", () => {
   it("explains extraction notes in plain words and keeps unknown ones", async () => {
     const { parseNoteLabel } = await import("./format");
     expect(parseNoteLabel("pictures_not_extracted:1")).toBe(
-      "1 picture inside the file is not part of the text. Claude can look at it on request.",
+      "1 picture inside the file is not part of the text. Your assistant can look at it on request.",
     );
     expect(parseNoteLabel("slides_without_text:2,5")).toBe(
-      "Slides with little or no text: 2, 5. Claude can look at their pictures on request.",
+      "Slides with little or no text: 2, 5. Your assistant can look at their pictures on request.",
     );
     expect(parseNoteLabel("hidden_sheets:1")).toBe("1 hidden sheet skipped.");
     expect(parseNoteLabel("truncated")).toBe("Only the beginning was extracted because the file is very large.");

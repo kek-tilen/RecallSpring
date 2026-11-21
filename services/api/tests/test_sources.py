@@ -68,7 +68,7 @@ def test_t05_scanned_pdf_fails_explicitly_without_invented_text(owner_api: Api) 
     run_pending()
     src = owner_api.get(f"/sources/{created['id']}").json()
     assert src["parse_state"] == "failed" and src["parse_error"] == "no_extractable_text"
-    assert src["parse_message"].startswith("No text could be extracted (scanned?). Claude can still look")
+    assert src["parse_message"].startswith("No text could be extracted (scanned?). Your assistant can still look")
     assert src["section_count"] == 0 and owner_api.sections(created["id"]) == []
 
 
@@ -79,7 +79,8 @@ def test_partially_scanned_pdf_needs_attention_and_names_pages(owner_api: Api) -
     src = owner_api.get(f"/sources/{created['id']}").json()
     assert src["parse_state"] == "needs_attention"
     assert src["parse_message"] == (
-        "Some pages have no extractable text (possibly scanned): 2, 3. Claude can look at these pages on request."
+        "Some pages have no extractable text (possibly scanned): 2, 3. Your assistant can look at "
+        "these pages on request."
     )
     assert [s["page"] for s in owner_api.sections(created["id"])] == [1]
 

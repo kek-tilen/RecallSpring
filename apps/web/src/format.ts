@@ -1,7 +1,7 @@
 import type { Band, StudyStatus } from "./types";
 
 // Dates are shown in the learner's own timezone (from the session), never the browser's guess.
-let zone = "Europe/Ljubljana";
+let zone = "UTC"; // until the session says otherwise (Settings → Profile)
 
 export function setTimezone(tz: string): void {
   zone = tz;
@@ -94,7 +94,7 @@ export function gradedBy(kind: string | null | undefined, grader?: { name: strin
   if (grader) return grader.model ? `${grader.name} · ${grader.model}` : grader.name;
   switch (kind) {
     case "ai":
-      return "Claude";
+      return "Assistant";
     case "deterministic":
       return "RecallSpring (answer key)";
     case "human":
@@ -113,7 +113,7 @@ export const CAPTURED_VIA: Record<string, string> = {
 export const DIFFICULTY_SOURCE: Record<string, string> = {
   observed: "from your results",
   learner: "your rating",
-  claude: "Claude's estimate",
+  claude: "Assistant's estimate",
   default: "default",
 };
 
@@ -180,20 +180,20 @@ export function parseNoteLabel(note: string): string {
     case "pictures_not_extracted": {
       const n = Number(value);
       const verb = n === 1 ? "is" : "are";
-      return `${plural(n, "picture")} inside the file ${verb} not part of the text. Claude can look at ${n === 1 ? "it" : "them"} on request.`;
+      return `${plural(n, "picture")} inside the file ${verb} not part of the text. Your assistant can look at ${n === 1 ? "it" : "them"} on request.`;
     }
     case "pages_without_text":
-      return `Pages without text (possibly scanned): ${list}. Claude can look at them on request.`;
+      return `Pages without text (possibly scanned): ${list}. Your assistant can look at them on request.`;
     case "slides_without_text":
-      return `Slides with little or no text: ${list}. Claude can look at their pictures on request.`;
+      return `Slides with little or no text: ${list}. Your assistant can look at their pictures on request.`;
     case "pictures_only":
-      return "Only pictures, no text. Claude can look at them on request.";
+      return "Only pictures, no text. Your assistant can look at them on request.";
     case "hidden_sheets":
       return `${plural(Number(value), "hidden sheet")} skipped.`;
     case "truncated":
       return "Only the beginning was extracted because the file is very large.";
     case "image":
-      return "Photo: no text is extracted. Claude can look at it on request.";
+      return "Photo: no text is extracted. Your assistant can look at it on request.";
     case "decoded_as":
       return "Read as Windows-1250 (Central European) text because the file is not UTF-8. If letters look wrong, save it as UTF-8 and upload it again.";
     case "includes_not_resolved": {

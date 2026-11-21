@@ -86,6 +86,18 @@ Implemented (2026-11-21, ADR-008):
   - A message that got no reply says why. The header shows usage over the last 24 hours and 30 days.
   - **RecallSpring** (plan-without-claude.md Phase 2, 2026-11-21): a `RecallSpring` switch in the composer (a pill next to Visuals, on by default, remembered on this device) lets ChatGPT read the learner's courses, material, notes and plan and save questions and feedback; its tooltip says it cannot delete anything or change settings. For a new conversation, `Study` picks a course (or "No course (general chat)"); the conversation then shows "Studying <course>" under its title. Under the learner's message, `Used RecallSpring: N steps · M saved · K not done` opens the list ("✓ Read the course outline", "+ Saved 1 question", "! Not done: …"; the marks are aria-hidden, the words carry the meaning). Forms ChatGPT asks for appear under its reply in a bordered card: the answer form (question, `Your answer`, `I used my notes or the material`, `Save and send to ChatGPT`, `I don't know`) and the summary form (topics, `Your summary`, `Save and send to ChatGPT`), both with drafts kept in the browser; a simulation shows `Open the simulation`. Saving tells ChatGPT with a `[RecallSpring] I saved my answer …` message. Only the newest turn's forms can be filled in; older ones link to the answer or summary page. While ChatGPT works: "Saved · waiting for ChatGPT (it may read or save in RecallSpring)…".
   - When signed out, conversations stay readable and a `Sign in with ChatGPT` button is shown.
+- **First run and Welcome (Phase 3 of docs/plan-without-claude.md):** while an install has no account, the sign-in page is
+  *Welcome to RecallSpring*: username, password and repeat (at least 12 characters, no e-mail reset), time zone (from
+  the browser, a list of IANA zones). Only on the computer RecallSpring runs on; elsewhere the page says where to do
+  it. Then **/welcome** (*Choose your assistant*): Claude (Claude Desktop), Codex, ChatGPT in RecallSpring or Decide
+  later, each with what it needs; after saving, the next steps for that assistant with copyable commands. Home shows a
+  short nudge while none is chosen.
+- **Settings → Profile:** username, session end, editable time zone and assistant (compact picker; *Setup steps* links
+  to /welcome). Saving a new time zone reloads every view, because "today" depends on it.
+- **Assistant wording:** pages name the chosen assistant where it helps (Home's start and continue hints, Review,
+  waiting-for-grade notices, the Guide); otherwise "your assistant". The Guide's setup card follows the choice (Claude
+  Projects, Codex study folders, or Chat), shows Claude's + menu shortcuts only to Claude users, and tells ChatGPT
+  users which planning steps need Claude or Codex for now. Factual connector text (Claude Desktop, Codex tokens) stays.
 - **Settings → ChatGPT (preview):** the connection only. It holds `Sign in with ChatGPT` per OpenAI's UI guidelines, the privacy notes, the account, plan usage, Open Chat, Sign in again and Sign out (confirmed). It states clearly when sign-in is unavailable (not on 127.0.0.1, or turned off).
 
 ### Answering from another assistant (Codex)

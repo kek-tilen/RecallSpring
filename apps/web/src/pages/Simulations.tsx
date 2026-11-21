@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { CopyButton } from "../components/Copy";
-import { AwaitingClaude, QuizForm } from "../components/QuizForm";
+import { AwaitingGrade, QuizForm } from "../components/QuizForm";
 import { Async, Card, Empty, GradeChip, PageHead } from "../components/ui";
 import { ATTEMPT_KIND, dateLabel, dateTime, gradedBy, plural } from "../format";
 import { courseTitles, useCourses, useQuiz, useQuizzes } from "../queries";
@@ -14,14 +14,14 @@ function Score({ q }: { q: Pick<QuizSummary, "status" | "earned_points" | "max_p
       <strong>
         {q.earned_points} / {q.max_points}
       </strong>
-      {!!q.pending_items && <span className="chip">{q.pending_items} awaiting Claude</span>}
+      {!!q.pending_items && <span className="chip">{q.pending_items} awaiting a grade</span>}
     </span>
   );
 }
 
 export function QuizTable({ quizzes, titles }: { quizzes: QuizSummary[]; titles?: Record<string, string> }) {
   if (quizzes.length === 0) {
-    return <Empty title="No simulations yet">Ask Claude for a kolokvij simulation once you have studied the material.</Empty>;
+    return <Empty title="No simulations yet">Ask your assistant for a kolokvij simulation once you have studied the material.</Empty>;
   }
   return (
     <div className="table-wrap">
@@ -65,7 +65,7 @@ export function SimulationsPage() {
     <div className="page">
       <PageHead
         title="Simulations"
-        sub="Kolokvij simulations. Answer open ones here or in Claude's form; multiple-choice is graded from the answer key, open answers by Claude."
+        sub="Kolokvij simulations. Answer open ones here or in your assistant's form; multiple-choice is graded from the answer key, open answers by your assistant."
       />
       <Async q={q}>{(quizzes) => <QuizTable quizzes={quizzes} titles={courseTitles(courses.data)} />}</Async>
     </div>
@@ -109,7 +109,7 @@ function Item({ item, submitted }: { item: QuizItemView; submitted: boolean }) {
         <div className="row">
           {item.grade === null || item.grade === undefined ? (
             item.type === "open" && item.kind === "answer" ? (
-              <span className="chip">Answer saved · waiting for Claude's grade</span>
+              <span className="chip">Answer saved · waiting for a grade</span>
             ) : null
           ) : (
             <GradeChip grade={item.grade} status={item.assessment_status} />
@@ -174,12 +174,12 @@ export function SimulationPage() {
               {!submitted && (
                 <>
                   <p className="small muted">
-                    Answer here or in Claude's form; both save to the same simulation. Answer keys appear after you submit.
+                    Answer here or in your assistant's form; both save to the same simulation. Answer keys appear after you submit.
                   </p>
                   <QuizForm key={quiz.quiz_id} quiz={quiz} />
                 </>
               )}
-              {submitted && !!quiz.pending_items && <AwaitingClaude quiz={quiz} />}
+              {submitted && !!quiz.pending_items && <AwaitingGrade quiz={quiz} />}
               {submitted && quiz.note && <p className="small muted">{quiz.note}</p>}
               {submitted && (
                 <label className="row small">

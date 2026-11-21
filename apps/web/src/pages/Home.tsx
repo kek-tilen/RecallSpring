@@ -1,4 +1,6 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router";
+import { useAssistant, type AssistantWords } from "../assistant";
 import { EventList } from "./History";
 import { Upload } from "../components/Upload";
 import { Async, Card, Empty, PageHead, StudyChip } from "../components/ui";
@@ -31,8 +33,72 @@ function attentionLink(a: AttentionItem): string {
   return "/history";
 }
 
+/** How to start, for the assistant chosen in Settings → Profile. */
+function firstCourseHint(a: AssistantWords): ReactNode {
+  switch (a.key) {
+    case "claude":
+      return (
+        <>
+          Start with a planning chat in Claude: tell it your courses, kolokvij dates, scope and material. The{" "}
+          <Link to="/guide">Guide</Link> has prompts to copy. Everything Claude saves appears here.
+        </>
+      );
+    case "codex":
+      return (
+        <>
+          Open the Planning folder (Documents\RecallSpring Study) in Codex and tell it your courses, kolokvij dates, scope and
+          material. The <Link to="/guide">Guide</Link> has prompts to copy. Everything Codex saves appears here.
+        </>
+      );
+    case "chatgpt":
+      return (
+        <>
+          ChatGPT in RecallSpring studies courses that are already set up. Creating courses and their concepts from your material
+          needs Claude or Codex for now (see the <Link to="/guide">Guide</Link>); then study each course in <Link to="/chat">Chat</Link>.
+        </>
+      );
+    default:
+      return (
+        <>
+          <Link to="/welcome">Choose your assistant</Link> to see how to start, or add a course under <Link to="/courses">Courses</Link>{" "}
+          and material under <Link to="/library">Library</Link>.
+        </>
+      );
+  }
+}
+
+function continueHint(a: AssistantWords, course: string): ReactNode {
+  switch (a.key) {
+    case "claude":
+      return (
+        <>
+          Open the <strong>{course}</strong> project in Claude and say “Start studying”.
+        </>
+      );
+    case "codex":
+      return (
+        <>
+          Open the <strong>{course}</strong> folder in Codex and say “Start studying”.
+        </>
+      );
+    case "chatgpt":
+      return (
+        <>
+          In <Link to="/chat">Chat</Link>, pick <strong>{course}</strong> under Study and say “Start studying”.
+        </>
+      );
+    default:
+      return (
+        <>
+          Study <strong>{course}</strong> with your assistant: say “Start studying”.
+        </>
+      );
+  }
+}
+
 export function HomePage() {
   const q = useDashboard();
+  const a = useAssistant();
   return (
     <div className="page">
       <Async q={q} lines={6}>
@@ -46,11 +112,13 @@ export function HomePage() {
                 sub={`${longToday()} · ${d.plan.planned_minutes} of ${d.plan.available_minutes} minutes planned`}
               />
 
+              {a.key === null && d.counts.courses > 0 && (
+                <p className="notice small" style={{ marginBottom: 16 }}>
+                  Which assistant do you study with? <Link to="/welcome">Choose it</Link> for setup steps and tips that fit.
+                </p>
+              )}
               {d.counts.courses === 0 ? (
-                <Empty title="Add your first course">
-                  Start with a planning chat in Claude: tell it your courses, kolokvij dates, scope and material. The{" "}
-                  <Link to="/guide">Guide</Link> has prompts to copy. Everything Claude saves appears here.
-                </Empty>
+                <Empty title="Add your first course">{firstCourseHint(a)}</Empty>
               ) : (
                 <div className="grid cols-3">
                   <Card title="Continue learning" tint>
@@ -63,9 +131,7 @@ export function HomePage() {
                           <div className="muted small">{learn.course_title}</div>
                         </div>
                         <p className="small muted">{learn.why_selected}</p>
-                        <p className="small">
-                          Open the <strong>{learn.course_title}</strong> project in Claude and say “Start studying”.
-                        </p>
+                        <p className="small">{continueHint(a, learn.course_title)}</p>
                       </div>
                     ) : (
                       <p className="muted small">Nothing new is planned for today.</p>

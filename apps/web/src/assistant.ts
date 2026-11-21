@@ -1,0 +1,41 @@
+import { useSession } from "./queries";
+import type { AssistantKey } from "./types";
+
+/**
+ * How the app names the assistant the learner studies with (Settings → Profile, or the welcome page; migration
+ * 0018). Only wording depends on it: every assistant keeps working whichever is chosen.
+ */
+export interface AssistantWords {
+  key: AssistantKey | null;
+  /** "Claude", "Codex", "ChatGPT" or "your assistant" (mid-sentence). */
+  name: string;
+  /** The same at the start of a sentence: "Your assistant". */
+  Name: string;
+  /** Where the learner studies: "in Claude", "in Codex", "in Chat" or "with your assistant". */
+  where: string;
+  /** The app a study conversation happens in: "Claude Desktop", "Codex", "RecallSpring's Chat", "your assistant". */
+  app: string;
+}
+
+export const ASSISTANTS: { key: AssistantKey; label: string; app: string }[] = [
+  { key: "claude", label: "Claude", app: "Claude Desktop" },
+  { key: "codex", label: "Codex", app: "Codex" },
+  { key: "chatgpt", label: "ChatGPT", app: "RecallSpring's Chat" },
+];
+
+export function assistantWords(key: AssistantKey | null | undefined): AssistantWords {
+  switch (key) {
+    case "claude":
+      return { key, name: "Claude", Name: "Claude", where: "in Claude", app: "Claude Desktop" };
+    case "codex":
+      return { key, name: "Codex", Name: "Codex", where: "in Codex", app: "Codex" };
+    case "chatgpt":
+      return { key, name: "ChatGPT", Name: "ChatGPT", where: "in Chat", app: "RecallSpring's Chat" };
+    default:
+      return { key: null, name: "your assistant", Name: "Your assistant", where: "with your assistant", app: "your assistant" };
+  }
+}
+
+export function useAssistant(): AssistantWords {
+  return assistantWords(useSession().data?.user.assistant);
+}

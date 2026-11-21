@@ -175,7 +175,7 @@ function Editor({ note }: { note: Note }) {
       </div>
       {state.kind === "conflict" && (
         <div className="notice warn">
-          This note changed elsewhere (for example in Claude). Both versions are kept in the revision list. Reload to continue from the
+          This note changed elsewhere (for example by your assistant). Both versions are kept in the revision list. Reload to continue from the
           newest version; your text below is still here to copy.
           <div style={{ marginTop: 8 }}>
             <button type="button" className="btn small" onClick={() => window.location.reload()}>

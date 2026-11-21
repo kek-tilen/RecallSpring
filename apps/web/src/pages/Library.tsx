@@ -278,7 +278,7 @@ export function LibraryPage() {
     <div className="page">
       <PageHead
         title="Library"
-        sub="Your material by semester and course, in your own folders if you like. Claude cites the extracted text and can look at your photos."
+        sub="Your material by semester and course, in your own folders if you like. Your assistant cites the extracted text and can look at your photos."
       >
         <Link to="/library/import" className="btn">
           Move in
@@ -291,7 +291,7 @@ export function LibraryPage() {
         {(all) => {
           const list = activeCourses(all, groups.data ?? []);
           if (list.length === 0) {
-            return <Empty title="No courses yet">Create a course in Claude, then add material here or ask Claude to import files.</Empty>;
+            return <Empty title="No courses yet">Create a course under Courses (or ask your assistant), then add material here.</Empty>;
           }
           const sections = new Map<string, Course[]>();
           for (const c of list) {
@@ -666,7 +666,7 @@ export function FolderBrowser({ courseId, folderId, href }: { courseId: string; 
         <Card title="Photos" meta={plural(images.length, "image")}>
           <Gallery images={images} selected={selected} onToggle={toggle} />
           <p className="tiny muted" style={{ marginTop: 10 }}>
-            Photos have no extracted text. Claude looks at one when you ask (for example “look at my notes from lecture 3”).
+            Photos have no extracted text. Your assistant looks at one when you ask (for example “look at my notes from lecture 3”).
           </p>
         </Card>
       )}
@@ -674,7 +674,7 @@ export function FolderBrowser({ courseId, folderId, href }: { courseId: string; 
         <Empty title={folderId ? "This folder is empty" : "No material yet"}>
           {folderId
             ? "Upload files here, or select files elsewhere and move them in (drag them onto the folder, or use Move to)."
-            : "Drop a PDF, Word, PowerPoint, Excel, Markdown or text file or a photo below, or ask Claude to import one from your computer."}
+            : "Drop a PDF, Word, PowerPoint, Excel, Markdown or text file or a photo below, or ask your assistant to import one from your computer."}
         </Empty>
       )}
       {here.length > 1 && (
@@ -876,8 +876,8 @@ export function SourcePage() {
                 <img className="image-full" src={`${API}/sources/${s.id}/file`} alt={s.filename} />
                 <p className="tiny muted" style={{ marginTop: 10 }}>
                   {s.byte_size > 4_500_000
-                    ? "This photo is larger than 4.5 MB, so Claude cannot look at it. Upload a smaller copy."
-                    : "Claude can look at this photo when you ask in a chat of this course."}
+                    ? "This photo is larger than 4.5 MB, so your assistant cannot look at it. Upload a smaller copy."
+                    : "Your assistant can look at this photo when you ask in a chat of this course."}
                 </p>
               </Card>
             );
@@ -944,7 +944,7 @@ export function SourcePage() {
               {s.hidden && (
                 <div className="notice warn small" style={{ marginBottom: 16 }}>
                   {s.archived ? "This file is archived" : "This file is in an archived folder"}: hidden from the library and from search.
-                  Claude can still read the parts it already cited.
+                  Your assistant can still read the parts it already cited.
                 </div>
               )}
               {archive.error && <ErrorNote error={archive.error} />}

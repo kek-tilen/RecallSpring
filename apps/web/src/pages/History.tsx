@@ -87,7 +87,7 @@ export function HistoryPage() {
         </Async>
       </div>
       <p className="tiny muted">
-        Filled dots are learning records; hollow dots are changes you or Claude made to settings, targets and tokens. Sign-ins are
+        Filled dots are learning records; hollow dots are changes you or your assistant made to settings, targets and tokens. Sign-ins are
         not listed.
       </p>
     </div>

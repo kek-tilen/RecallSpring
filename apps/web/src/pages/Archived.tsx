@@ -185,7 +185,7 @@ export function ArchivedPage() {
               <Card title="Folders and files" meta={plural(view.folders.length + view.sources.length, "item")}>
                 <ArchivedMaterial view={view} />
                 <p className="tiny muted" style={{ marginTop: 10 }}>
-                  Archived material is left out of search, but Claude can still read the parts it already cited.
+                  Archived material is left out of search, but your assistant can still read the parts it already cited.
                 </p>
               </Card>
             </div>

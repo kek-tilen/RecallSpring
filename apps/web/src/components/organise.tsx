@@ -167,7 +167,7 @@ export function CourseDialog({ course, open, onClose }: { course: CourseInfo; op
         {kind === "interest" && (
           <label className="field">
             Goal
-            <span className="hint">What you want to be able to do, in your own words. Claude teaches toward it.</span>
+            <span className="hint">What you want to be able to do, in your own words. Your assistant teaches toward it.</span>
             <textarea rows={3} maxLength={5000} value={goal} onChange={(e) => setGoal(e.target.value)} />
           </label>
         )}
@@ -249,7 +249,7 @@ export function NewInterestDialog({ open, onClose }: { open: boolean; onClose: (
         </label>
         <label className="field">
           Goal
-          <span className="hint">What you want to be able to do. You can also leave it empty and Claude asks.</span>
+          <span className="hint">What you want to be able to do. You can also leave it empty and your assistant asks.</span>
           <textarea rows={3} maxLength={5000} value={goal} onChange={(e) => setGoal(e.target.value)} />
         </label>
         {save.error && <ErrorNote error={save.error} />}

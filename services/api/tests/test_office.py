@@ -112,7 +112,8 @@ def test_word_with_only_pictures_fails_honestly(owner_api: Api) -> None:
     source, sections = uploaded(owner_api, "scan.docx", docx(para(), pictures=1))
     assert source["parse_state"] == "failed" and source["parse_error"] == "no_extractable_text"
     assert source["parse_message"] == (
-        "This document has no text or pictures RecallSpring can read. Export it as PDF: Claude can look at its pages."
+        "This document has no text or pictures RecallSpring can read. Export it as PDF: your "
+        "assistant can look at its pages."
     )
     assert sections == []
 
@@ -154,7 +155,7 @@ def test_picture_only_slides_need_attention_and_are_named(owner_api: Api) -> Non
     assert source["parse_state"] == "needs_attention"
     assert (
         source["parse_message"]
-        == "Many slides have little or no text: 2, 3. Claude can look at the pictures on them on request."
+        == "Many slides have little or no text: 2, 3. Your assistant can look at the pictures on them on request."
     )
     assert [s["citation_label"] for s in sections] == ["slide 1", "slide 3"]  # nothing is invented for slide 2
 

@@ -6,6 +6,7 @@ import { Async, Card, Empty, ErrorNote, PageHead } from "../components/ui";
 import { dateLabel, daysFromToday, plural, relativeDay } from "../format";
 import { courseTitles, keys, useCourses } from "../queries";
 import type { ReviewItem } from "../types";
+import { useAssistant } from "../assistant";
 
 function Row({ item, course }: { item: ReviewItem; course: string }) {
   const qc = useQueryClient();
@@ -61,11 +62,12 @@ export function ReviewPage() {
   const q = useQuery({ queryKey: keys.reviews, queryFn: () => get<{ items: ReviewItem[]; note: string }>("/reviews/due", { horizon_days: 14 }) });
   const courses = useCourses();
   const titles = courseTitles(courses.data);
+  const a = useAssistant();
   return (
     <div className="page">
       <PageHead
         title="Review"
-        sub="RecallSpring schedules reviews from your graded answers. Practise them with Claude: say “Review what is due”."
+        sub={`RecallSpring schedules reviews from your graded answers. Practise them ${a.where}: say “Review what is due”.`}
       />
       <Async q={q} lines={6}>
         {(data) => {

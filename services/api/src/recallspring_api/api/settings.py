@@ -26,10 +26,12 @@ from ..schemas import (
     FocusIn,
     PlanOut,
     PreferencesIn,
+    ProfileIn,
     StudySettingsIn,
+    UserOut,
 )
 from ..security import sha256_hex
-from ..services import assistants, chatgpt_import, interests
+from ..services import assistants, chatgpt_import, interests, timezones
 from ..services.events import audit
 from ..services.planner import today_plan
 
@@ -124,6 +126,28 @@ def update_study_preferences(
     view = chatgpt_import.set_preferences(db, user, payload.text, ctx.request_id)
     db.flush()
     return commit_with_response(db, ctx, payload, 200, view)
+
+
+@router.put("/settings/profile")
+def update_profile(
+    payload: ProfileIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Time zone (dates, "today", plans) and the assistant the learner studies with (wording only)."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    user = db.get(User, ctx.user.id, with_for_update=True)
+    assert user is not None
+    changes: dict[str, Any] = {}
+    if payload.timezone is not None and payload.timezone != user.timezone:
+        changes["timezone"] = {"from": user.timezone, "to": timezones.check(payload.timezone)}
+        user.timezone = payload.timezone
+    if "assistant" in payload.model_fields_set and payload.assistant != user.assistant:
+        changes["assistant"] = {"from": user.assistant, "to": payload.assistant}
+        user.assistant = payload.assistant
+    if changes:
+        audit(db, actor_id=user.id, action="profile.changed", details=changes, request_id=ctx.request_id)
+    db.flush()
+    return commit_with_response(db, ctx, payload, 200, UserOut.model_validate(user).model_dump(mode="json"))
 
 
 @router.put("/settings/study")

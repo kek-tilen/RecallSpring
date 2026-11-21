@@ -4,6 +4,7 @@ import { newKey, request } from "../api";
 import { plural } from "../format";
 import type { QuizView } from "../types";
 import { CopyButton } from "./Copy";
+import { useAssistant } from "../assistant";
 import { Confirm, ErrorNote } from "./ui";
 
 type Answer = { option?: string | null; text?: string | null; dont_know?: boolean };
@@ -12,17 +13,20 @@ export function gradingPrompt(quiz: { title: string; quiz_id: string }): string 
   return `I solved the simulation "${quiz.title}" in RecallSpring (ID ${quiz.quiz_id}). Please grade my open answers and tell me what to repeat.`;
 }
 
-/** Shown on a submitted simulation whose open answers still wait for Claude. */
-export function AwaitingClaude({ quiz }: { quiz: { title: string; quiz_id: string; pending_items?: number } }) {
+/** Shown on a submitted simulation whose open answers still wait for the assistant's grade. */
+export function AwaitingGrade({ quiz }: { quiz: { title: string; quiz_id: string; pending_items?: number } }) {
+  const a = useAssistant();
   return (
     <div className="notice stack" role="status" style={{ gap: 8 }}>
-      <strong>{plural(quiz.pending_items ?? 0, "open answer")} waiting for Claude's grade.</strong>
+      <strong>{plural(quiz.pending_items ?? 0, "open answer")} waiting for a grade.</strong>
       <span className="small">
-        Paste this into a chat of this course, or just tell Claude “check my simulation”. Your answers are already saved.
+        {a.key === "chatgpt"
+          ? "Paste this into Chat with this course picked under Study. Your answers are already saved."
+          : `Paste this into a chat of this course, or just tell ${a.name} “check my simulation”. Your answers are already saved.`}
       </span>
       <div className="answer small">{gradingPrompt(quiz)}</div>
       <div className="row">
-        <CopyButton text={gradingPrompt(quiz)} label="Copy message for Claude" className="btn small primary" />
+        <CopyButton text={gradingPrompt(quiz)} label={`Copy message for ${a.name}`} className="btn small primary" />
         <CopyButton text={quiz.quiz_id} label="Copy ID" />
       </div>
     </div>
@@ -38,7 +42,7 @@ function remaining(deadline: string | null | undefined, now: number): string | n
   return `${m}:${String(s).padStart(2, "0")} left`;
 }
 
-/** The simulation form in the web app: the same questions Claude's form shows, saved as a draft while you work. */
+/** The simulation form in the web app: the same questions the assistant's form shows, saved as a draft while you work. */
 export function QuizForm({ quiz }: { quiz: QuizView }) {
   const qc = useQueryClient();
   const [view, setView] = useState(quiz);
@@ -205,7 +209,7 @@ export function QuizForm({ quiz }: { quiz: QuizView }) {
         {answered < view.items.length
           ? `${plural(view.items.length - answered, "question")} left empty will count as “I don't know”. `
           : ""}
-        After submitting you cannot change your answers. Multiple-choice questions are graded right away; Claude grades the open
+        After submitting you cannot change your answers. Multiple-choice questions are graded right away; your assistant grades the open
         answers when you ask it to.
         {submit.error && <ErrorNote error={submit.error} />}
       </Confirm>

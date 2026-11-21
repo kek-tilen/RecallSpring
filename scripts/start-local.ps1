@@ -4,10 +4,11 @@
 #
 # -Restart first closes the "RecallSpring API" and "RecallSpring worker" windows this script opened (and only
 # those), then starts them again, e.g. after updating the code. The database is not touched.
+# -Stop only closes those two windows (scripts/install.ps1 does this before replacing RecallSpring's programs).
 #
 # The windows are created through WMI so they are independent of whatever started this script (for example a
 # Claude Code session, whose child processes end when Claude Desktop quits).
-param([switch]$Restart)
+param([switch]$Restart, [switch]$Stop)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $api = Join-Path $root "services\api"
@@ -18,7 +19,7 @@ function Start-Detached([string]$commandLine, [string]$directory) {
     if ($result.ReturnValue -ne 0) { throw "Could not start: $commandLine (WMI code $($result.ReturnValue))" }
 }
 
-if ($Restart) {
+if ($Restart -or $Stop) {
     $windows = Get-CimInstance Win32_Process | Where-Object {
         $_.Name -eq "powershell.exe" -and
         ($_.CommandLine -like "*WindowTitle='RecallSpring API'*" -or $_.CommandLine -like "*WindowTitle='RecallSpring worker'*")
@@ -29,6 +30,7 @@ if ($Restart) {
         Write-Output "Stopped window $($w.ProcessId)"
     }
     Start-Sleep -Seconds 2
+    if ($Stop) { exit 0 }
     $still = Get-NetTCPConnection -LocalPort 4318 -State Listen -ErrorAction SilentlyContinue
     if ($still) { throw "Port 4318 is still in use (process $($still[0].OwningProcess)). Close that program, then run this again." }
 }

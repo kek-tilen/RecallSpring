@@ -210,7 +210,7 @@ def today_plan(
             why = (
                 "New material, not studied yet: "
                 + (f"study {pages} " if pages else "study it ")
-                + "with Claude's explanation, then summarise it in your own words."
+                + "with your assistant's explanation, then summarise it in your own words."
                 + context
             )
             item = _item("Learn next", concept, courses, why, band, diff, target_name)

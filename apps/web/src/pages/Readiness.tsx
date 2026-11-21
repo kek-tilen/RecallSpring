@@ -85,7 +85,7 @@ function Groups({ r }: { r: ExamReadiness }) {
   if (r.groups.length === 0) {
     return (
       <Empty title="No concepts in scope yet">
-        Import the material for this exam and ask Claude to create concepts from it; they appear here by file.
+        Import the material for this exam and ask your assistant to create concepts from it; they appear here by file.
       </Empty>
     );
   }
@@ -168,7 +168,7 @@ function Simulations({ r }: { r: ExamReadiness }) {
           <span className="small muted">
             {q.status === "submitted"
               ? q.earned_points !== null && q.max_points
-                ? `${q.earned_points}/${q.max_points} points${q.pending_items ? ` · ${q.pending_items} waiting for Claude` : ""}`
+                ? `${q.earned_points}/${q.max_points} points${q.pending_items ? ` · ${q.pending_items} waiting for a grade` : ""}`
                 : "Submitted"
               : "Not submitted"}
             {q.mode === "diagnostic" ? " · diagnostic" : ""}

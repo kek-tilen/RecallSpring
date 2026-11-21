@@ -1,6 +1,7 @@
 # Study with Claude — connector setup (Claude Desktop, local)
 
 For Codex instead of (or as well as) Claude Desktop, do steps 1-3 below, then follow docs/codex-setup.md.
+On Windows, `scripts\install.ps1` (docs/install-windows.md) already does steps 1 and 3 and the account part of step 2.
 
 RecallSpring's Mode A: you study in the official **Claude Desktop** app on your own Claude plan, and Claude uses the RecallSpring connector (a local MCP server) to read your plan, sources and notes and to record questions, answers and grades. RecallSpring never sees your Claude login, and the connector has no tools that delete anything or change settings.
 
@@ -25,8 +26,10 @@ Or run `scripts/start-local.ps1`, which does all three.
 ## 2. Create your account (once) and a connector token
 
 ```bash
-cd services/api && .venv/Scripts/recallspring create-owner --username <you>
+cd services/api && .venv/Scripts/recallspring create-owner --username <you> [--timezone Europe/Ljubljana]
 ```
+
+(Or create it on the first visit to `http://127.0.0.1:4318/`.)
 
 ```bash
 cd services/api && .venv/Scripts/recallspring connector-token --username <you>
@@ -37,7 +40,7 @@ The token is written to `%LOCALAPPDATA%\RecallSpring\connector-token` (`~/.confi
 ## 3. Install the connector and check it
 
 ```bash
-cd services/mcp && python -m venv .venv && .venv/Scripts/python -m pip install --require-hashes -r requirements.lock && .venv/Scripts/python -m pip install --no-deps --no-build-isolation -e .
+cd services/mcp && python -m venv .venv && .venv/Scripts/python -m pip install --require-hashes -r requirements-dev.lock && .venv/Scripts/python -m pip install --no-deps --no-build-isolation -e .
 ```
 
 ```bash
@@ -45,6 +48,9 @@ services/mcp/.venv/Scripts/python services/mcp/scripts/check_connector.py
 ```
 
 Expected: `Connector started with 20 tools.` … `Connector OK.`
+
+`requirements-dev.lock` also pins `setuptools`, which installing the connector itself needs: new Python versions no
+longer put it into a fresh virtual environment.
 
 ## 4. Add it to Claude Desktop
 

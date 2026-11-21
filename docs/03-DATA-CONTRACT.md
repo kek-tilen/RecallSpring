@@ -13,7 +13,7 @@
 
 | Table | Required attributes and constraints |
 |---|---|
-| `users` | `id`, local account identity, password hash (Argon2id), login settings, timestamps |
+| `users` | `id`, local account identity, password hash (Argon2id), login settings, `timezone` (IANA name, chosen at first run; Settings → Profile), `assistant` (`claude` / `codex` / `chatgpt` / null = not chosen; only wording and setup tips depend on it; migration 0018), timestamps |
 | `ai_connections` | `id`, owner, provider (`anthropic_api`, `siwc`, `openai_compatible`, `mock`), connection state, **reference to protected server-side secret only**, limits (USD monthly / daily request %), background-AI consent; no raw keys or tokens in DB or logs |
 | `ai_routing` | owner, task (`tutor/question_generation/evaluation/concept_extraction`), provider, model, optional course/session override |
 | `ai_usage_ledger` | owner, provider, model, task, request id, input/output/cache tokens, estimated cost (USD, pricing-table version), status, timestamp |

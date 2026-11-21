@@ -10,7 +10,7 @@ import type { ChatConversation, ChatImport, ImportResult, StudyPreferences } fro
 
 const DEFAULT_FOLDER = "Chats from ChatGPT";
 
-/** The learner's own words on how they like to study; Claude reads them at the start of every session. */
+/** The learner's own words on how they like to study; the assistant reads them at the start of every session. */
 export function PreferencesEditor({ suggestion }: { suggestion?: string }) {
   const q = usePreferences();
   return <Async q={q}>{(p) => <PreferencesForm initial={p} suggestion={suggestion} />}</Async>;
@@ -33,7 +33,7 @@ function PreferencesForm({ initial, suggestion }: { initial: StudyPreferences; s
     <form className="stack" onSubmit={submit}>
       <p className="small muted" style={{ margin: 0 }}>
         How you like to learn, in your own words: for example “ask me questions before explaining” or “explain with
-        examples from medicine”. Claude follows them where they fit; they never change how answers are graded.
+        examples from medicine”. Your assistant follows them where they fit; they never change how answers are graded.
       </p>
       <label className="field">
         <span className="sr-only">Study preferences</span>
@@ -60,7 +60,7 @@ function PreferencesForm({ initial, suggestion }: { initial: StudyPreferences; s
       </div>
       {save.isSuccess && text === initial.text && (
         <span className="small muted" role="status">
-          Saved. Claude sees them the next time it starts a study session.
+          Saved. Your assistant sees them the next time it starts a study session.
         </span>
       )}
       {save.error && <ErrorNote error={save.error} />}
@@ -137,7 +137,7 @@ function ChatGptStart({ onOpen }: { onOpen: (id: string) => void }) {
       </Async>
       <p className="tiny muted" style={{ margin: 0 }}>
         Chats are saved word for word as material of the course you choose. ChatGPT's replies are not treated as
-        course material, and nothing is graded from them; Claude can go through them with you and suggest what you
+        course material, and nothing is graded from them; your assistant can go through them with you and suggest what you
         may already know.
       </p>
     </div>
@@ -344,7 +344,7 @@ function ChatPicker({ view, onBack }: { view: ChatImport; onBack: () => void }) 
         <div className="stack" style={{ gap: 16 }}>
           <Card title="Save to a course">
             {active.length === 0 ? (
-              <p className="small muted">Create a course first (ask Claude), then come back.</p>
+              <p className="small muted">Create a course first (under Courses), then come back.</p>
             ) : (
               <form
                 className="stack"
@@ -401,7 +401,7 @@ function ChatPicker({ view, onBack }: { view: ChatImport; onBack: () => void }) 
                       Open {titles[course] ?? "the course"} in the library
                     </Link>
                     <span className="tiny muted">
-                      Next: in Claude, use the “Continue from ChatGPT” prompt in that course's chat to go through them.
+                      Next: use the “Continue from ChatGPT” prompt (Guide) in that course's chat to go through them.
                     </span>
                   </div>
                 )}

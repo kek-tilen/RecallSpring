@@ -29,7 +29,14 @@ from .services.events import audit
 DEMO_TITLE = "Demo — Cellular respiration (sample data)"
 
 
-def create_owner(username: str) -> int:
+def create_owner(username: str, timezone: str | None = None) -> int:
+    from .config import get_settings
+    from .services import timezones
+
+    zone = timezone or get_settings().default_timezone
+    if zone not in timezones.names():
+        print(f"Unknown time zone {zone!r} (use an IANA name such as Europe/Ljubljana).", file=sys.stderr)
+        return 2
     password = getpass.getpass("New password (min 12 characters): ")
     if len(password) < 12:
         print("Password must have at least 12 characters.", file=sys.stderr)
@@ -41,7 +48,7 @@ def create_owner(username: str) -> int:
         if db.scalar(select(User).where(User.username == username)):
             print(f"User {username!r} already exists.", file=sys.stderr)
             return 1
-        user = User(username=username, password_hash=hash_password(password))
+        user = User(username=username, password_hash=hash_password(password), timezone=zone)
         db.add(user)
         db.flush()
         audit(db, actor_id=user.id, action="user.created", target_type="user", target_id=user.id)
@@ -210,6 +217,8 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("create-owner", "seed-demo"):
         p = sub.add_parser(name)
         p.add_argument("--username", required=True)
+        if name == "create-owner":
+            p.add_argument("--timezone", help="IANA time zone, e.g. Europe/Ljubljana (default: RS_DEFAULT_TIMEZONE)")
     token = sub.add_parser("connector-token")
     token.add_argument("--username", required=True)
     token.add_argument("--client", choices=["claude", "codex"], default="claude", help="which assistant uses it")
@@ -235,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
             return backup_status()
         return backup_restore(args.snapshot, args.database, args.storage)
     if args.command == "create-owner":
-        return create_owner(args.username)
+        return create_owner(args.username, args.timezone)
     if args.command == "connector-token":
         return connector_token(args.username, args.label, args.file or default_token_file(args.client), args.client)
     if args.command == "worker":

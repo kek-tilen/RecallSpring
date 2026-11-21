@@ -192,7 +192,7 @@ export function Upload({ courseId: fixedCourse, folderId }: { courseId?: string;
       return;
     }
     if (!chosen) {
-      setLocalError("Create a course first (ask Claude, or use the connector's create_course).");
+      setLocalError("Create a course first (under Courses, or ask your assistant).");
       return;
     }
     upload.mutate(picked);
@@ -242,7 +242,7 @@ export function Upload({ courseId: fixedCourse, folderId }: { courseId?: string;
         <span className="small">
           PDF, Word, PowerPoint, Excel, OpenDocument, Markdown, text, CSV, subtitles (.srt, .vtt), notebooks (.ipynb),
           LaTeX, code, or photos. Up to {bytes(limits.data?.document_bytes ?? 100 * MB)} per document and{" "}
-          {bytes(limits.data?.text_bytes ?? 10 * MB)} per text file; large photos are shrunk so Claude can look at them.
+          {bytes(limits.data?.text_bytes ?? 10 * MB)} per text file; large photos are shrunk so your assistant can look at them.
           Folders inside a folder or ZIP become library folders.
         </span>
         <div className="row" style={{ gap: 8, justifyContent: "center" }}>
@@ -285,7 +285,7 @@ export function Upload({ courseId: fixedCourse, folderId }: { courseId?: string;
         <span className="small muted">
           Library: {bytes(limits.data.library_used_bytes)} of {bytes(limits.data.library_bytes)} used.
           {!limits.data.page_renderer_available &&
-            " With LibreOffice installed on the RecallSpring computer, Claude can also look at whole slides and Word pages."}
+            " With LibreOffice installed on the RecallSpring computer, your assistant can also look at whole slides and Word pages."}
         </span>
       )}
       {localError && <div className="notice warn">{localError}</div>}

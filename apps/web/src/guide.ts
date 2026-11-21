@@ -1,8 +1,17 @@
-// Content of the Guide page: the recommended way to study with Claude + RecallSpring, with short prompts.
-// Prompts are learner messages to Claude, so they are offered in English and Slovenian; the app itself stays
+// Content of the Guide page: the recommended way to study with an assistant + RecallSpring, with short prompts.
+// Prompts are learner messages to the assistant, so they are offered in English and Slovenian; the app itself stays
 // English. Keep the project templates in sync with docs/claude-projects.md.
+// "{assistant}" / "{Assistant}" stand for the assistant chosen in Settings → Profile (fill()).
+
+import type { AssistantWords } from "./assistant";
+import type { AssistantKey } from "./types";
 
 export type PromptLang = "en" | "sl";
+
+/** Puts the chosen assistant's name into a guide text. */
+export function fill(text: string, a: AssistantWords): string {
+  return text.replaceAll("{Assistant}", a.Name).replaceAll("{assistant}", a.name);
+}
 
 export interface GuidePrompt {
   en: string;
@@ -17,6 +26,16 @@ export interface GuideStep {
   why: string;
   prompts: GuidePrompt[];
   check?: string;
+  /** A shortcut that exists only in Claude Desktop (its + menu). */
+  claudeTip?: string;
+  /** Needs the planning tools (courses, targets, interests), which the Chat page's ChatGPT does not have yet. */
+  planning?: boolean;
+}
+
+export interface GuideFact {
+  text: string;
+  /** Shown only for these assistants (all when missing or when none is chosen). */
+  only?: AssistantKey[];
 }
 
 export const SEMESTER_TEMPLATE = `This project is my semester in RecallSpring. Each chat has one job.
@@ -53,8 +72,9 @@ export const STEPS: GuideStep[] = [
     where: "Planning chat",
     why:
       "Dates, scope, material and the type of each kolokvij let RecallSpring plan backwards from the deadline. " +
-      "Give what you know; anything can be added or changed later. Shortcut: choose Plan semester in Claude's + menu " +
-      "and Claude asks you course by course.",
+      "Give what you know; anything can be added or changed later.",
+    claudeTip: "Shortcut: choose Plan semester in Claude's + menu and Claude asks you course by course.",
+    planning: true,
     prompts: [
       PLANNING_CHAT_START,
       {
@@ -82,7 +102,7 @@ export const STEPS: GuideStep[] = [
       {
         en: "Import my handwritten notes for [course] as my notes: [path to the photo].",
         sl: "Uvozi moje zapiske za [predmet] kot moje zapiske: [pot do fotografije].",
-        note: "Photos of notes, notebook pages or solved exercises can also be dropped in Library. Claude looks at them when you ask.",
+        note: "Photos of notes, notebook pages or solved exercises can also be dropped in Library. {Assistant} looks at them when you ask.",
       },
       {
         en: "Import the subtitles of the recorded lecture for [course]: [path to the .srt or .vtt file].",
@@ -111,7 +131,7 @@ export const STEPS: GuideStep[] = [
     title: "Learn new material",
     where: "Course chat",
     why:
-      "New material comes first: Claude explains a few pages at a time, you summarise in your own words, then a " +
+      "New material comes first: {assistant} explains a few pages at a time, you summarise in your own words, then a " +
       "few short check questions. Practice and simulations unlock for what you have studied.",
     prompts: [
       COURSE_CHAT_START,
@@ -122,7 +142,7 @@ export const STEPS: GuideStep[] = [
       {
         en: "Look at page [number] of [file]: it is scanned. Explain the diagram on it.",
         sl: "Poglej stran [številka] v [datoteka]: je skenirana. Razloži diagram na njej.",
-        note: "Claude can see scanned PDF pages, pictures on slides and pictures in Word files ([picture N] in the text).",
+        note: "Claude can see scanned PDF pages, pictures on slides and pictures in Word files ([picture N] in the text); other assistants may only read the text.",
       },
       {
         en: "I already know [topic] from the lectures. Mark it as known.",
@@ -144,7 +164,7 @@ export const STEPS: GuideStep[] = [
     title: "Practise and simulate",
     where: "Course chat",
     why:
-      "Answer in the forms Claude opens: they save your exact words. Simulations follow the style of your old " +
+      "Answer in the forms {assistant} opens: they save your exact words. Simulations follow the style of your old " +
       "papers (about 75 % past-paper style, 25 % deeper).",
     prompts: [
       {
@@ -169,7 +189,7 @@ export const STEPS: GuideStep[] = [
         sl: "Mislim, da ta ocena ni pravilna, ker [razlog]. Preveri jo še enkrat.",
       },
     ],
-    check: "Simulations shows every answer, the correct options and Claude's feedback.",
+    check: "Simulations shows every answer, the correct options and the assistant's feedback.",
   },
   {
     id: "review",
@@ -195,7 +215,9 @@ export const STEPS: GuideStep[] = [
     why:
       "An interest is something you learn in your free time, without an exam: data analysis, machine learning, a " +
       "language. Your courses come first: interests get the time left while every exam is on track, unless you keep " +
-      "a share of each day for them or focus on one for a while. Shortcut: choose Add an interest in Claude's + menu.",
+      "a share of each day for them or focus on one for a while.",
+    claudeTip: "Shortcut: choose Add an interest in Claude's + menu.",
+    planning: true,
     prompts: [
       {
         en: "Add a personal interest: [topic]. It is not for university. My goal is [goal].",
@@ -230,7 +252,8 @@ export const STEPS: GuideStep[] = [
     id: "update",
     title: "Keep the plan up to date",
     where: "Planning chat",
-    why: "Tell Claude when something changes. Passed material moves to maintenance and new material gets priority.",
+    why: "Tell {assistant} when something changes. Passed material moves to maintenance and new material gets priority.",
+    planning: true,
     prompts: [
       {
         en: "I passed the 1st kolokvij in [course] with [result].",
@@ -252,12 +275,13 @@ export const STEPS: GuideStep[] = [
   },
 ];
 
-export const GOOD_TO_KNOW: string[] = [
-  "Chat talks to ChatGPT on your own plan after you sign in (Settings → ChatGPT). Conversations are saved with the model, time and tokens of each reply. With Material you choose which of your files it may use; it cites them as S1, S2, …",
-  "Claude only keeps what is saved in RecallSpring. If you are unsure, ask: “Is this saved in RecallSpring?”",
-  "Quizzes Claude writes only in the chat do not count. Ask for the RecallSpring form or a simulation.",
-  "Grades from Claude are estimates. Challenge one whenever you disagree.",
-  "After RecallSpring is updated, quit and reopen Claude Desktop so it loads the new connector.",
-  "Your daily connector limit and study time are in Settings; every change appears in History.",
-  "Studied with ChatGPT before? Library → Move in brings your chats and custom instructions over; then use the “Continue from ChatGPT” prompt in Claude.",
+export const GOOD_TO_KNOW: GuideFact[] = [
+  { text: "Chat talks to ChatGPT on your own plan after you sign in (Settings → ChatGPT). Conversations are saved with the model, time and tokens of each reply. With Material you choose which of your files it may use; it cites them as S1, S2, …" },
+  { text: "{Assistant} only keeps what is saved in RecallSpring. If you are unsure, ask: “Is this saved in RecallSpring?”" },
+  { text: "Quizzes {assistant} writes only in the chat do not count. Ask for the RecallSpring form or a simulation." },
+  { text: "Grades from {assistant} are estimates. Challenge one whenever you disagree." },
+  { text: "After RecallSpring is updated, quit and reopen Claude Desktop so it loads the new connector.", only: ["claude"] },
+  { text: "After RecallSpring is updated, start a new Codex session so it loads the new connector.", only: ["codex"] },
+  { text: "Your daily connector limit and study time are in Settings; every change appears in History." },
+  { text: "Studied with ChatGPT before? Library → Move in brings your chats and custom instructions over; then use the “Continue from ChatGPT” prompt in a course chat." },
 ];

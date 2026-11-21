@@ -15,9 +15,17 @@ docs/agent-briefs/        Briefs for the implementing agents
 packages/contracts/       Shared JSON schemas (assessment, visual blocks)
 services/api/             FastAPI backend, migrations, tests, AI provider adapters
 services/mcp/             Claude connector (MCP server) for Claude Desktop — see docs/connector-setup.md
-scripts/start-local.ps1   Start the local database, API (serves the web app) and worker; -Restart after updates
+scripts/install.ps1       Install or update RecallSpring on Windows — see docs/install-windows.md
+scripts/start-local.ps1   Start the local database, API (serves the web app) and worker; -Restart / -Stop
 infra/compose.dev.yml     Local development database (loopback only)
 ```
+
+## Install (Windows)
+
+For your own computer: install Python 3.12+, Node 22+ and Docker Desktop, then run
+`powershell -ExecutionPolicy Bypass -File scripts\install.ps1` and open `http://127.0.0.1:4318/`. The first visit
+creates your account and asks which assistant you study with (Claude, Codex or ChatGPT in RecallSpring). Full guide:
+[docs/install-windows.md](docs/install-windows.md).
 
 ## Local development (Windows / macOS / Linux)
 
@@ -47,7 +55,8 @@ npm run build
 ```
 
 On Windows `scripts/start-local.ps1` starts the database, API and worker; run it with `-Restart` after updating the
-code. Then open `http://127.0.0.1:4318/` and sign in with your RecallSpring account.
+code. Then open `http://127.0.0.1:4318/`: on a new install the first visit creates the account (this computer only),
+afterwards it is the sign-in.
 
 While the worker runs it backs up the database and your uploaded files once a day into `local-data/backups` (checked
 by a test restore; Settings → Backups). That folder is on the same disk: set `RS_BACKUP_DIR` to another disk or a

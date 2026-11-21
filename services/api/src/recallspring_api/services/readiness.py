@@ -439,7 +439,8 @@ def _next_steps(
 ) -> list[str]:
     if total == 0:
         return [
-            "No concepts are in this exam's scope yet: import the material and ask Claude to create concepts from it."
+            "No concepts are in this exam's scope yet: import the material and ask your assistant to "
+            "create concepts from it."
         ]
     steps = []
     days = max(1, days_left)
@@ -448,14 +449,14 @@ def _next_steps(
         start = f", starting with {first_unstudied}" if first_unstudied else ""
         steps.append(
             f"Learn the {_plural(n, 'concept')} not studied yet{start}: about {math.ceil(n / days)} a day. "
-            "In Claude, start a study session for this course."
+            "Start a study session for this course with your assistant."
         )
     if counts["weak"]:
         names = ", ".join(w["term"] for w in weakest[:3])
         more = " and more" if counts["weak"] > 3 else ""
         steps.append(
             f"Strengthen {_plural(counts['weak'], 'weak concept')}: {names}{more}. "
-            "Ask Claude to practise your weak points."
+            "Ask your assistant to practise your weak points."
         )
     if counts["not_practised"]:
         steps.append(
@@ -466,7 +467,7 @@ def _next_steps(
         steps.append(f"{_plural(due, 'review is', 'reviews are')} due: open Review.")
     studied_share = 1 - counts["not_studied"] / total
     if 0 <= days_left <= 10 and studied_share >= 0.5 and not recent_simulation:
-        steps.append("Do a timed simulation in the style of your old paper, then let Claude grade it.")
+        steps.append("Do a timed simulation in the style of your old paper, then let your assistant grade it.")
     if not steps:
         steps.append("Everything in scope looks solid. Keep up the reviews until the exam.")
     return steps

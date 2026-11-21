@@ -44,7 +44,7 @@ function CourseCard({ c }: { c: CourseSummary }) {
               <strong>Goal:</strong> {c.description}
             </>
           ) : (
-            <span className="muted">No goal yet: Claude asks for it in your first session.</span>
+            <span className="muted">No goal yet: your assistant asks for it in your first session.</span>
           )}
         </div>
       ) : c.active_target ? (
@@ -189,8 +189,8 @@ export function CoursesPage() {
           if (courses.length === 0 && all.length === 0) {
             return (
               <Empty title="No courses yet">
-                In Claude, use <strong>Plan semester</strong> from the + menu (or see the <Link to="/guide">Guide</Link>). Claude creates
-                your courses and files them under your university, faculty and semester.
+                Plan your semester in a planning chat with Claude or Codex (see the <Link to="/guide">Guide</Link>):
+                it creates your courses and files them under your university, faculty and semester.
               </Empty>
             );
           }

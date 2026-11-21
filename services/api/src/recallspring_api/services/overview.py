@@ -386,7 +386,7 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         n = payload.get("sections")
         return f"{payload.get('state')}, {n} section{'' if n == 1 else 's'}"
     if event_type == "attempt.submitted":
-        via = {"answer_form": "answer form", "assistant_transcription": "copied by Claude", "app_ui": "web app"}
+        via = {"answer_form": "answer form", "assistant_transcription": "copied by your assistant", "app_ui": "web app"}
         return f"{payload.get('kind')} via {via.get(payload.get('captured_via'), payload.get('captured_via'))}"
     if event_type == "assessment.corrected":
         return f"{payload.get('old_grade')} → {payload.get('new_grade')}"
@@ -599,7 +599,7 @@ def attention(db: Session, user: User) -> list[dict[str, Any]]:
                 "id": None,
                 "course_id": None,
                 "title": f"{waiting} answer(s)",
-                "text": "Saved; feedback is still pending. Ask Claude to grade them.",
+                "text": "Saved; feedback is still pending. Ask your assistant to grade them.",
             }
         )
     return items

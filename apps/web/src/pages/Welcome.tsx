@@ -1,0 +1,277 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router";
+import { request } from "../api";
+import { ASSISTANTS } from "../assistant";
+import { CopyButton } from "../components/Copy";
+import { Card, ErrorNote, PageHead } from "../components/ui";
+import { keys, useSession } from "../queries";
+import type { AssistantKey, SessionInfo, User } from "../types";
+
+/**
+ * A new install (plan-without-claude.md, Phase 3): the first visit creates the account (FirstRunForm, shown on the
+ * sign-in page while no account exists), then /welcome asks which assistant the learner studies with and shows the
+ * next steps for it. Both can be changed later in Settings → Profile.
+ */
+
+export function browserZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+export function timeZones(current: string): string[] {
+  const supported = (Intl as unknown as { supportedValuesOf?: (key: "timeZone") => string[] }).supportedValuesOf;
+  const list = supported ? supported("timeZone") : [];
+  return [...new Set([...list, current, "UTC"])].sort();
+}
+
+export function TimeZoneSelect({ value, onChange, id }: { value: string; onChange: (tz: string) => void; id?: string }) {
+  return (
+    <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+      {timeZones(value).map((z) => (
+        <option key={z} value={z}>
+          {z.replaceAll("_", " ")}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** The first account of a new install. Only shown (and only accepted by the server) on this computer. */
+export function FirstRunForm() {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [timezone, setTimezone] = useState(browserZone);
+  const mismatch = repeat.length > 0 && repeat !== password;
+  const create = useMutation({
+    mutationFn: () => request<SessionInfo>("/auth/setup", { method: "POST", json: { username, password, timezone } }),
+    onSuccess: (session) => {
+      qc.setQueryData(keys.session, session);
+      navigate("/welcome", { replace: true });
+    },
+  });
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (password.length >= 12 && password === repeat) create.mutate();
+  }
+  return (
+    <form className="card" onSubmit={submit} aria-labelledby="setup-title">
+      <div className="row" style={{ gap: 12 }}>
+        <img src="/favicon.svg" alt="" width={36} height={36} />
+        <div>
+          <h1 id="setup-title" style={{ fontSize: "1.3rem" }}>
+            Welcome to RecallSpring
+          </h1>
+          <p className="muted small">Create your account. It stays on this computer.</p>
+        </div>
+      </div>
+      <label className="field">
+        Username
+        <input
+          type="text"
+          autoComplete="username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+          minLength={3}
+          maxLength={64}
+          pattern="[A-Za-z0-9._@\-]+"
+          aria-describedby="setup-username-hint"
+          autoFocus
+        />
+        <span id="setup-username-hint" className="hint">
+          Letters, digits and . _ @ - (at least 3).
+        </span>
+      </label>
+      <label className="field">
+        Password
+        <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} aria-describedby="setup-password-hint" />
+        <span id="setup-password-hint" className="hint">
+          At least 12 characters. There is no reset by e-mail: keep it in your password manager.
+        </span>
+      </label>
+      <label className="field">
+        Repeat password
+        <input type="password" autoComplete="new-password" value={repeat} onChange={(e) => setRepeat(e.target.value)} required aria-invalid={mismatch} />
+        {mismatch && <span className="hint chat-error">The passwords do not match.</span>}
+      </label>
+      <label className="field">
+        Time zone
+        <TimeZoneSelect value={timezone} onChange={setTimezone} />
+        <span className="hint">Used for “today”, plans and dates. Taken from this computer; change it if it is wrong.</span>
+      </label>
+      {create.error && <ErrorNote error={create.error} />}
+      <button type="submit" className="btn primary" disabled={create.isPending || password.length < 12 || password !== repeat}>
+        {create.isPending ? "Creating…" : "Create account"}
+      </button>
+      <p className="muted tiny">This account is RecallSpring&apos;s own. It is separate from Claude, ChatGPT and any AI provider.</p>
+    </form>
+  );
+}
+
+const ABOUT: Record<AssistantKey, { needs: string; summary: string }> = {
+  claude: {
+    needs: "Claude Desktop and a paid Claude plan.",
+    summary: "You study in Claude Desktop. Claude reads your plan and material through RecallSpring's connector and shows question and summary forms in the chat.",
+  },
+  codex: {
+    needs: "Codex (app, CLI or IDE extension), signed in with your ChatGPT plan.",
+    summary: "You study in Codex, in one folder per course. Codex uses RecallSpring's connector; you answer questions on RecallSpring's own pages it links to.",
+  },
+  chatgpt: {
+    needs: "A ChatGPT Plus or Pro plan. Works while RecallSpring runs on this computer (preview).",
+    summary:
+      "You study in RecallSpring's Chat page. ChatGPT reads your courses and material through RecallSpring and asks questions in forms right in the chat. " +
+      "Setting up a course (its concepts from your material, exam dates and scope) needs Claude or Codex for now.",
+  },
+};
+
+/** What to do next for the chosen assistant. */
+export function AssistantNextSteps({ assistant, username }: { assistant: AssistantKey; username: string }) {
+  if (assistant === "chatgpt") {
+    return (
+      <ol className="stack small" style={{ gap: 6, paddingLeft: 20, margin: 0 }}>
+        <li>
+          Open <Link to="/settings#chatgpt">Settings → ChatGPT</Link> and choose <strong>Sign in with ChatGPT</strong> (allow plan usage).
+        </li>
+        <li>
+          Open <Link to="/chat">Chat</Link>, start a new conversation, pick a course under <strong>Study</strong> and write “Start studying”.
+        </li>
+      </ol>
+    );
+  }
+  // The Claude script reads the token file written by connector-token; the Codex script makes its own token.
+  const commands =
+    assistant === "claude"
+      ? [
+          `services\\api\\.venv\\Scripts\\recallspring connector-token --username ${username}`,
+          "powershell -ExecutionPolicy Bypass -File scripts\\install-claude-desktop-connector.ps1",
+        ]
+      : [`powershell -ExecutionPolicy Bypass -File scripts\\install-codex-connector.ps1 -Username ${username}`];
+  return (
+    <ol className="stack small" style={{ gap: 6, paddingLeft: 20, margin: 0 }}>
+      <li>
+        {assistant === "claude" ? "Install Claude Desktop (Microsoft Store) and sign in." : "Install Codex and sign in with ChatGPT."}
+      </li>
+      <li>
+        In PowerShell, in the RecallSpring folder, run{commands.length > 1 ? " one after the other" : ""}:
+        {commands.map((command) => (
+          <div key={command} className="row" style={{ gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+            <code className="mono" style={{ overflowWrap: "anywhere" }}>
+              {command}
+            </code>
+            <CopyButton text={command} label="Copy command" />
+          </div>
+        ))}
+        {assistant === "claude"
+          ? " The first makes the connector's token (saved on this computer, never shown). After the second, quit Claude Desktop (tray icon → Quit); the script adds RecallSpring and starts it again."
+          : " It connects Codex and makes a Planning folder and one study folder per course in Documents\\RecallSpring Study."}
+      </li>
+      <li>
+        {assistant === "claude"
+          ? "In Claude Desktop, write “Start studying” (the Guide has prompts for planning and each course)."
+          : "Open a course folder in Codex, trust it when asked, and write “Start studying”."}
+      </li>
+    </ol>
+  );
+}
+
+export function AssistantPicker({ value, onChange, name = "assistant", compact = false }: {
+  value: AssistantKey | null;
+  onChange: (a: AssistantKey | null) => void;
+  name?: string;
+  /** Settings: a visible legend and no descriptions. */
+  compact?: boolean;
+}) {
+  return (
+    <fieldset className="assistant-pick">
+      <legend className={compact ? "assistant-legend" : "sr-only"}>Assistant</legend>
+      {ASSISTANTS.map((a) => (
+        <label key={a.key} className={value === a.key ? "assistant-option chosen" : "assistant-option"}>
+          <input type="radio" name={name} value={a.key} checked={value === a.key} onChange={() => onChange(a.key)} />
+          <span className="stack" style={{ gap: 2 }}>
+            <strong>{a.label}</strong>
+            {!compact && <span className="small">{ABOUT[a.key].summary}</span>}
+            <span className="tiny muted">Needs: {ABOUT[a.key].needs}</span>
+          </span>
+        </label>
+      ))}
+      <label className={value === null ? "assistant-option chosen" : "assistant-option"}>
+        <input type="radio" name={name} value="" checked={value === null} onChange={() => onChange(null)} />
+        <span className="stack" style={{ gap: 2 }}>
+          <strong>{compact ? "Not chosen" : "Decide later"}</strong>
+          {!compact && <span className="small">RecallSpring works without an assistant: material, notes, reviews and plans.</span>}
+        </span>
+      </label>
+    </fieldset>
+  );
+}
+
+export function useSaveProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { assistant?: AssistantKey | null; timezone?: string }) => request<User>("/settings/profile", { method: "PUT", json: body }),
+    onSuccess: (user) => {
+      qc.setQueryData<SessionInfo>(keys.session, (s) => (s ? { ...s, user } : s));
+    },
+  });
+}
+
+export function WelcomePage() {
+  const session = useSession();
+  const user = session.data?.user;
+  const [choice, setChoice] = useState<AssistantKey | null>(user?.assistant ?? null);
+  const [saved, setSaved] = useState(false);
+  const save = useSaveProfile();
+  return (
+    <div className="page">
+      <PageHead
+        title="Choose your assistant"
+        sub="RecallSpring keeps your records and plans your reviews; an AI assistant tutors you with them. Grades from any of them count the same and show who gave them. You can change this in Settings."
+      />
+      <Card>
+        <form
+          className="stack"
+          style={{ gap: 12 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            save.mutate({ assistant: choice }, { onSuccess: () => setSaved(true) });
+          }}
+        >
+          <AssistantPicker value={choice} onChange={(a) => { setChoice(a); setSaved(false); }} />
+          {save.error && <ErrorNote error={save.error} />}
+          <div>
+            <button type="submit" className="btn primary" disabled={save.isPending}>
+              {save.isPending ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </form>
+      </Card>
+      {saved && user && (
+        <Card title={choice ? `Next: set up ${ASSISTANTS.find((a) => a.key === choice)!.label}` : "Next"}>
+          <div className="stack" style={{ gap: 12 }} role="status">
+            {choice ? (
+              <AssistantNextSteps assistant={choice} username={user.username} />
+            ) : (
+              <p className="small" style={{ margin: 0 }}>
+                Add your courses and material under <Link to="/courses">Courses</Link> and <Link to="/library">Library</Link>. Choose an assistant any time in{" "}
+                <Link to="/settings#profile">Settings</Link>.
+              </p>
+            )}
+            <div>
+              <Link className="btn" to="/">
+                Go to Home
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}

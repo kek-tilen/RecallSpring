@@ -54,6 +54,20 @@ ufw status verbose
 - **Untrusted content:** chats and memories are the learner's own but untrusted content. A saved chat is ordinary material (wrapped as document content for Claude). Study preferences are presented to Claude as preferences that cannot override tutor or grading rules (R18).
 - **ZIP uploads** (`/sources/zip`) and attachments from exports go through the same per-file checks as a normal upload (sniffing, allowlist, size, Office guards). Paths are only used to name folders, never as file-system paths, and nothing is extracted to disk except into content-addressed storage.
 
+**Implemented: first run (2026-11-21, Phase 3).** A new install creates its first account on the first visit instead
+of the command line. `POST /auth/setup` is accepted only while no account exists (checked under a PostgreSQL advisory
+lock, so two tabs cannot both create one), only from a loopback client (127.0.0.1 / ::1), never when the request
+comes from another site (`Sec-Fetch-Site: cross-site` or a non-loopback `Origin`; there is no session or CSRF cookie
+yet), and never in production or with `RS_FIRST_RUN_ENABLED=false` (there: `recallspring create-owner`). The password
+rules are the login's (≥ 12 characters, Argon2id); the account creation is audited (`user.created`, via first_run).
+It is not self-signup: after the first account the endpoint answers 409.
+
+**Implemented: Windows installer (2026-11-21, Phase 3).** `scripts/install.ps1` installs only from the hashed lock
+files (`--require-hashes`, `npm ci`), writes the Git-ignored `.env` files only when missing (random database password
+from `secrets`, never printed), keeps the database on 127.0.0.1, changes nothing outside the repository and Docker's
+`recallspring-dev` project, stops only the two RecallSpring windows it replaces, and backs up before every database
+migration. It installs no system software and makes no scheduled tasks.
+
 **Observability:** structured request ids, metrics for error/latency/queue, sanitized logs; never log submitted source content, complete answers, prompt bodies or OAuth tokens by default. Provide audit records of deletion and grade overrides.
 
 **Supply chain:** dependency lockfiles, container base image pinning, vulnerability scans, CI tests, backup/restore tests, no secrets in build args, non-root containers, migrations with rollback plan.

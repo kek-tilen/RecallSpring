@@ -60,7 +60,7 @@ Avoid claiming FSRS accuracy without calibration/training data. Use an inspectab
 - After a meaningful first completed session: next review **1 day** later.
 - For repeated `solid`/`transfer` reviews, intervals approx `[1,3,7,14,30,60,120]` days with bounded multiplier; use stable algorithmic index per concept.
 - `partial` repeats current short interval (e.g. 1–3 days) and adjusts practice difficulty; `fragile`/`no evidence` schedules earlier review (e.g. next day) and remediation.
-- Never schedule a review in the past solely due to timezone handling; store UTC and calculate in learner's configured timezone (default Europe/Ljubljana, user-editable).
+- Never schedule a review in the past solely due to timezone handling; store UTC and calculate in learner's configured timezone (chosen at first run from the browser's zone, user-editable in Settings → Profile).
 - Skipped reviews remain due; a defer must be explicit and produce an audit event.
 - Support long-term retention goals and periodic maintenance beyond exam dates; prioritization can lower after an exam but concepts are not discarded automatically.
 

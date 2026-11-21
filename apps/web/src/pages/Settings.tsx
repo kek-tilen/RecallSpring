@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
+import { AssistantPicker, TimeZoneSelect, useSaveProfile } from "./Welcome";
 import { request } from "../api";
 import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
 import { Link } from "react-router";
@@ -8,7 +9,7 @@ import { keys, useBackup, useConnector, useSession, useStudySettings } from "../
 import { PreferencesEditor } from "./Import";
 import { ChatGptPanel } from "../components/ChatGpt";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
-import type { AssistantClient, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
+import type { AssistantClient, AssistantKey, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -387,14 +388,89 @@ function ThemePicker() {
   );
 }
 
+/** Username, time zone and the assistant the learner studies with (only wording and setup tips depend on it). */
+function ProfileForm() {
+  const qc = useQueryClient();
+  const session = useSession();
+  const user = session.data?.user;
+  const [timezone, setTimezone] = useState(user?.timezone ?? "UTC");
+  const [assistant, setAssistant] = useState<AssistantKey | null>(user?.assistant ?? null);
+  const [saved, setSaved] = useState(false);
+  const save = useSaveProfile();
+  if (!user) return null;
+  const zoneChanged = timezone !== user.timezone;
+  const changed = zoneChanged || assistant !== (user.assistant ?? null);
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    save.mutate(
+      { timezone, assistant },
+      {
+        onSuccess: () => {
+          setSaved(true);
+          // "Today", plans and due dates are computed in the time zone.
+          if (zoneChanged) void qc.invalidateQueries();
+        },
+      },
+    );
+  }
+  return (
+    <form className="stack" style={{ gap: 12 }} onSubmit={submit}>
+      <dl className="kv">
+        <dt>Username</dt>
+        <dd>{user.username}</dd>
+        <dt>Session ends</dt>
+        <dd>{session.data ? dateTime(session.data.expires_at) : ""}</dd>
+      </dl>
+      <label className="field">
+        Time zone
+        <TimeZoneSelect
+          value={timezone}
+          onChange={(z) => {
+            setTimezone(z);
+            setSaved(false);
+          }}
+        />
+        <span className="hint">“Today”, plans, reviews and dates use it.</span>
+      </label>
+      <AssistantPicker
+        compact
+        name="profile-assistant"
+        value={assistant}
+        onChange={(a) => {
+          setAssistant(a);
+          setSaved(false);
+        }}
+      />
+      <p className="hint small muted" style={{ margin: 0 }}>
+        Only the wording and setup tips follow this choice; every assistant keeps working. <Link to="/welcome">Setup steps</Link>
+      </p>
+      {save.error && <ErrorNote error={save.error} />}
+      <div className="row">
+        <button type="submit" className="btn primary" disabled={!changed || save.isPending}>
+          {save.isPending ? "Saving…" : "Save profile"}
+        </button>
+        {saved && !changed && (
+          <span className="small muted" role="status">
+            Saved.
+          </span>
+        )}
+      </div>
+    </form>
+  );
+}
+
 export function SettingsPage() {
   const study = useStudySettings();
   const connector = useConnector();
   const backup = useBackup();
-  const session = useSession();
+  useEffect(() => {
+    // Links like /settings#chatgpt (Welcome page) open at that card.
+    const id = window.location.hash.slice(1);
+    if (id) document.getElementById(id)?.scrollIntoView?.({ block: "start" });
+  }, []);
   return (
     <div className="page">
-      <PageHead title="Settings" sub="Study time, the assistant connector (Claude Desktop, Codex), ChatGPT, backups and how RecallSpring looks. Every change is recorded in History." />
+      <PageHead title="Settings" sub="Your profile, study time, the assistant connector (Claude Desktop, Codex), ChatGPT, backups and how RecallSpring looks. Every change is recorded in History." />
       <div className="grid cols-2" style={{ alignItems: "start" }}>
         <div className="stack" style={{ gap: 16 }}>
           <Card title="Study time">
@@ -406,22 +482,15 @@ export function SettingsPage() {
           <Card title="Appearance">
             <ThemePicker />
           </Card>
-          <Card title="Account">
-            <dl className="kv">
-              <dt>Username</dt>
-              <dd>{session.data?.user.username}</dd>
-              <dt>Timezone</dt>
-              <dd>{session.data?.user.timezone}</dd>
-              <dt>Session ends</dt>
-              <dd>{session.data ? dateTime(session.data.expires_at) : ""}</dd>
-            </dl>
+          <Card title="Profile" id="profile">
+            <ProfileForm />
           </Card>
         </div>
         <div className="stack" style={{ gap: 16 }}>
           <Card title="Assistant connector">
             <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
           </Card>
-          <Card title="ChatGPT (preview)">
+          <Card title="ChatGPT (preview)" id="chatgpt">
             <ChatGptPanel />
           </Card>
           <Card title="Backups">

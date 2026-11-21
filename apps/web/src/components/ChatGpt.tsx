@@ -131,7 +131,7 @@ export function ChatGptPanel() {
                 <ul className="small muted" style={{ margin: 0, paddingLeft: 18 }}>
                   <li>Only what you send from Chat goes to OpenAI, and only when you press Send.</li>
                   <li>Your sign-in stays protected on this computer (encrypted on Windows), never in the browser or in backups.</li>
-                  <li>Preview: a plain chat, saved here with the model, time and tokens of each reply. Claude remains your tutor.</li>
+                  <li>Preview: each reply is saved here with its model, time and tokens. With a course picked under Study, ChatGPT tutors you from your RecallSpring records.</li>
                 </ul>
                 <div>
                   <ChatGptSignIn status={s} />

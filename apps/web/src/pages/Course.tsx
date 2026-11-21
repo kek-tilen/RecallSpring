@@ -76,7 +76,7 @@ export function CoursePage() {
                       <p className="small pre">{o.course.description}</p>
                     ) : (
                       <p className="small muted">
-                        No goal yet. Claude asks for it at the start of a session, or add it with Edit interest.
+                        No goal yet. Your assistant asks for it at the start of a session, or add it with Edit interest.
                       </p>
                     )}
                   </Card>
@@ -94,7 +94,7 @@ export function CoursePage() {
                       <div className="small pre">{active.scope_description}</div>
                     </div>
                   ) : (
-                    <p className="small muted">No exam or kolokvij is set. Claude asks for it at the start of a study session.</p>
+                    <p className="small muted">No exam or kolokvij is set. Your assistant asks for it at the start of a study session.</p>
                   )}
                 </Card>
                 )}
@@ -156,7 +156,7 @@ function ConceptsTab({ o }: { o: CourseOverview }) {
   }, [o.concepts, filter, text]);
 
   if (o.concepts.length === 0) {
-    return <Empty title="No concepts yet">Claude creates concepts from your material when it reads it with you.</Empty>;
+    return <Empty title="No concepts yet">Your assistant creates concepts from your material when it reads it with you.</Empty>;
   }
   return (
     <div className="stack">
@@ -231,7 +231,7 @@ function ConceptTr({ c }: { c: ConceptRow }) {
 const BLOOM = ["", "Remember", "Understand", "Apply", "Analyse", "Evaluate", "Create"];
 const pct = (x: unknown) => `${Math.round(Number(x) * 100)}%`;
 
-/** Claude's exam-profile fields, summarised as plain text (never rendered as markup). */
+/** The assistant's exam-profile fields, summarised as plain text (never rendered as markup). */
 function ItemTypes({ value }: { value: TargetProfile["item_types"] }) {
   if (!value?.length) return <span className="muted">—</span>;
   return <>{value.map((v) => `${v.type} ${pct(v.share)}`).join(" · ")}</>;
@@ -265,7 +265,7 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
     return (
       <>
         <Empty title="No exams or kolokviji yet">
-          Add one here, or Claude asks what you prepare for at the start of a study session and records it.
+          Add one here, or your assistant asks what you prepare for at the start of a study session and records it.
           <div style={{ marginTop: 10 }}>
             <button type="button" className="btn primary" onClick={() => setAdding(true)}>
               Add exam
@@ -396,7 +396,7 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
                     )}
                   </dl>
                   <p className="tiny muted">
-                    Analysed by {t.profile.derived_by === "assistant" ? "Claude" : t.profile.derived_by} on {dateTime(t.profile.created_at)}.
+                    Analysed by {t.profile.derived_by === "assistant" ? "your assistant" : t.profile.derived_by} on {dateTime(t.profile.created_at)}.
                   </p>
                 </div>
               </details>
@@ -417,7 +417,7 @@ function AnswersTab({ courseId }: { courseId: string }) {
     <Async q={q}>
       {(rows) =>
         rows.length === 0 ? (
-          <Empty title="No answers yet">Answers you give in Claude's forms are saved here word for word.</Empty>
+          <Empty title="No answers yet">Answers you give in your assistant's forms are saved here word for word.</Empty>
         ) : (
           <div className="table-wrap">
             <table>

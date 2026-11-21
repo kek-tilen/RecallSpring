@@ -295,7 +295,7 @@ export function ExamsPage() {
               <DuplicatesPanel targets={all.filter((t) => !archivedCourses.has(t.course_id))} />
               {visible.length === 0 ? (
                 <Empty title="No exams yet">
-                  Add one here, or use <strong>Plan semester</strong> in Claude's + menu to set up all your kolokviji at once.
+                  Add one here, or plan your semester in a planning chat with your assistant (see the Guide) to set up all your kolokviji at once.
                 </Empty>
               ) : (
                 <Timeline targets={visible} onMove={(t, to) => move.mutate({ target: t, to, from: t.due_date })} onEdit={setEditing} />

@@ -197,7 +197,7 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
           <legend className="small" style={{ fontWeight: 600 }}>
             Material it covers
           </legend>
-          <span className="small muted">Leave the pages empty to include a whole file. Claude can refine this mapping.</span>
+          <span className="small muted">Leave the pages empty to include a whole file. Your assistant can refine this mapping.</span>
           {rows.map((r, i) => (
             <div key={i} className="row" style={{ alignItems: "flex-end" }}>
               <label className="field" style={{ flex: 2, minWidth: 180 }}>
@@ -277,7 +277,7 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
           onConfirm={() => remove.mutate()}
           onClose={() => setConfirmDelete(false)}
         >
-          {target.name} on {dateLabel(target.due_date)} disappears from your plan, the timeline and Claude. Simulations, answers and
+          {target.name} on {dateLabel(target.due_date)} disappears from your plan, the timeline and your assistant. Simulations, answers and
           grades stay. You can restore it from Exams → Recently deleted for 30 days.
           {likelyDuplicate && (
             <div className="notice" style={{ marginTop: 10 }}>

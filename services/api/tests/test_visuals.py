@@ -39,7 +39,7 @@ def png_size(data: bytes) -> tuple[int, int]:
 def test_pdf_pages_render_as_png_sized_for_claude(owner_api: Api, conn: ConnectorApi) -> None:
     source = upload(owner_api, "skeni.pdf", make_pdf(["Hash funkcije: SHA-256 in MD5.", ""]))
     assert source["parse_state"] == "needs_attention"
-    assert source["parse_message"].endswith("Claude can look at these pages on request.")
+    assert source["parse_message"].endswith("Your assistant can look at these pages on request.")
 
     r = conn.get(f"/sources/{source['id']}/visual", page=2)  # the "scanned" page without text
     assert r.status_code == 200, r.json()
@@ -124,7 +124,7 @@ def test_word_document_of_only_pictures_needs_attention_not_invented_text(owner_
     content = docx(para(extra=word_picture("rIdImg1")), images={"rIdImg1": ("scan.png", PNG_1PX)})
     source = upload(owner_api, "scan.docx", content)
     assert source["parse_state"] == "needs_attention" and "pictures_only" in source["parse_notes"]
-    assert source["parse_message"] == "This document has only pictures. Claude can look at them on request."
+    assert source["parse_message"] == "This document has only pictures. Your assistant can look at them on request."
     assert [s["text"] for s in owner_api.sections(source["id"])] == ["[picture 1]"]
 
 

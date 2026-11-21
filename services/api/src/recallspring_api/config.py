@@ -27,8 +27,11 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_failure_window_seconds: int = 900
 
-    # Learner defaults
-    default_timezone: str = "Europe/Ljubljana"
+    # Learner defaults: accounts made with the CLI get this time zone (the first-run page uses the browser's).
+    default_timezone: str = "UTC"
+    # The first-run page may create the first account (only from this computer, only while none exists). Never in
+    # production: there the account is made with the CLI.
+    first_run_enabled: bool = True
 
     # Input bounds
     max_answer_chars: int = 20_000

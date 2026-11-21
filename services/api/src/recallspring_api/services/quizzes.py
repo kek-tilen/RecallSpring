@@ -367,6 +367,6 @@ def results_view(db: Session, quiz: Quiz, *, for_learner: bool = False) -> dict[
             if quiz.mode == "diagnostic"
             else ""
         )
-        + "Open answers are graded by Claude (an AI estimate you can challenge); multiple-choice items are "
+        + "Open answers are graded by your assistant (an AI estimate you can challenge); multiple-choice items are "
         "graded by RecallSpring from the answer key.",
     }

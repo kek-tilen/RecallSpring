@@ -1,0 +1,101 @@
+# Install RecallSpring on Windows
+
+For one person on their own Windows 10 or 11 computer. Everything stays on that computer: your account, material,
+notes, grades and backups. Nothing is sent to the RecallSpring authors. (Owner decision 2026-11-21: Windows first,
+the database keeps running in Docker; docs/10.)
+
+## 1. What you need
+
+Install these yourself (the installer checks them but installs none):
+
+| Program | Why | Get it |
+| --- | --- | --- |
+| Python 3.12 or newer | RecallSpring's server | python.org, or `winget install Python.Python.3.12` |
+| Node.js 22 or newer (LTS) | builds the web app | nodejs.org, or `winget install OpenJS.NodeJS.LTS` |
+| Docker Desktop | runs the database (reachable from this computer only) | docker.com, or `winget install Docker.DockerDesktop` |
+| Git | gets and updates the code | git-scm.com, or `winget install Git.Git` |
+
+Start Docker Desktop and wait until it says *Engine running*. About 3 GB of free disk space is enough to begin.
+
+## 2. Get the code and install
+
+In PowerShell, in the folder where RecallSpring should live:
+
+```powershell
+git clone <repository URL> recallspring
+cd recallspring
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
+
+The installer (`scripts/install.ps1`) changes nothing outside this folder and Docker's `recallspring-dev` project:
+
+1. checks Python, Node and Docker;
+2. makes the settings files `infra\.env` (a random database password) and `services\api\.env`, only if they are
+   missing (they are Git-ignored, never overwritten, and the password is never printed);
+3. starts the database (`127.0.0.1:55432`, this computer only) and waits for it;
+4. installs RecallSpring's Python packages from the hashed lock files into `services\api\.venv` and
+   `services\mcp\.venv` (the connector for Claude Desktop and Codex);
+5. creates or updates the database structure, after a backup when it already holds data;
+6. builds the web app;
+7. starts RecallSpring and opens `http://127.0.0.1:4318/`.
+
+`-NoStart` does everything except step 7.
+
+## 3. First visit: your account and your assistant
+
+The first visit to `http://127.0.0.1:4318/` asks you to create your account: a username, a password of at least 12
+characters (there is no e-mail reset, so keep it in your password manager) and your time zone (taken from this
+computer). This works only on the computer RecallSpring runs on and only while no account exists; afterwards the page
+is the normal sign-in. `services\api\.venv\Scripts\recallspring create-owner --username <name> [--timezone <zone>]`
+does the same from the command line.
+
+Then RecallSpring asks which assistant you study with. RecallSpring itself keeps your records and plans your reviews;
+the assistant tutors you with them. Grades from any of them count the same and show who gave them.
+
+| Assistant | You need | Set up |
+| --- | --- | --- |
+| **Claude** (Claude Desktop) | Claude Desktop from the Microsoft Store, a paid Claude plan | the welcome page shows two commands: `recallspring connector-token --username <you>`, then `scripts\install-claude-desktop-connector.ps1` (docs/connector-setup.md) |
+| **Codex** | Codex (app, CLI or IDE extension), signed in with your ChatGPT plan | `scripts\install-codex-connector.ps1 -Username <you>` (docs/codex-setup.md) |
+| **ChatGPT in RecallSpring** (preview) | a ChatGPT Plus or Pro plan | Settings → ChatGPT → Sign in with ChatGPT, then Chat |
+| Decide later | nothing | material, notes, reviews and plans work without an assistant |
+
+ChatGPT in RecallSpring studies courses that are already set up. It cannot yet create courses, their concepts or
+exam dates; do that once with Claude or Codex (exam dates can also be added under Exams).
+
+You can change the assistant and the time zone any time in **Settings → Profile**. Only wording and setup tips follow
+the choice; every assistant keeps working.
+
+## 4. Every day
+
+- After a restart of the computer: start Docker Desktop, then `scripts\start-local.ps1`. It opens two windows,
+  "RecallSpring API" and "RecallSpring worker"; keep them open while you study.
+- The worker backs up the database and your files once a day into `local-data\backups` (Settings → Backups). That is
+  on the same disk: set `RS_BACKUP_DIR` in `services\api\.env` to another disk or a synced folder for real
+  protection. Restore steps: docs/08 → Backups.
+
+## 5. Updating
+
+```powershell
+git pull
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
+
+The installer closes the two RecallSpring windows first (Windows does not let running programs be replaced), backs up
+your data before changing the database, and starts RecallSpring again. With Claude Desktop, quit and reopen it
+afterwards so it loads the new connector; with Codex, start a new session.
+
+## Troubleshooting
+
+| Message | What to do |
+| --- | --- |
+| *Python 3.12 or newer is needed* / *Node.js 22* | install it (table above), open a new PowerShell window, run the installer again |
+| *Docker Desktop is installed but not running* | start it, wait for *Engine running*, run the installer again |
+| *The database did not become ready* | Docker Desktop → Containers → `recallspring-dev` → logs |
+| *RecallSpring did not start* | read the error in the "RecallSpring API" window |
+| Port 4318 or 55432 is in use | another program uses it; stop that program (RecallSpring does not change ports by itself) |
+| *For safety, the first account can only be created on the computer RecallSpring runs on* | open `http://127.0.0.1:4318/` on that computer |
+
+Uninstalling: `scripts\start-local.ps1 -Stop`, then
+`docker compose -p recallspring-dev -f infra\compose.dev.yml --env-file infra\.env down` (keeps the data volume;
+add `-v` only if you really want to delete all your data, after copying `local-data\backups` somewhere safe), then
+delete the folder. The Codex and Claude Desktop scripts have their own removal options.

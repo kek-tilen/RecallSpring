@@ -3,10 +3,13 @@
 export type StudyStatus = "not_studied" | "studied" | "known";
 export type Band = "not_started" | "emerging" | "developing" | "reliable";
 
+export type AssistantKey = "claude" | "codex" | "chatgpt";
+
 export interface User {
   id: string;
   username: string;
   timezone: string;
+  assistant: AssistantKey | null;
 }
 
 export interface SessionInfo {

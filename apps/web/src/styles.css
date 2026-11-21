@@ -3418,3 +3418,38 @@ a.cite:hover {
     margin: 0 8px;
   }
 }
+
+/* Welcome / Settings → Profile: choosing the assistant (pages/Welcome.tsx) */
+.assistant-pick {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.assistant-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.assistant-option input {
+  margin-top: 3px;
+}
+.assistant-option.chosen {
+  border-color: var(--primary);
+  background: var(--surface);
+}
+.assistant-option:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.assistant-legend {
+  font-weight: 550;
+  font-size: 0.925rem;
+  margin-bottom: 6px;
+  padding: 0;
+}

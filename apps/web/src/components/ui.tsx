@@ -4,7 +4,8 @@ import { ApiError } from "../api";
 import { BAND_LABEL, DIFFICULTY_SOURCE, STUDY_LABEL, gradeLabel } from "../format";
 import type { Band, Progress, StudyStatus } from "../types";
 
-export function Card({ title, meta, children, tint, action }: {
+export function Card({ title, meta, children, tint, action, id }: {
+  id?: string;
   title?: ReactNode;
   meta?: ReactNode;
   children: ReactNode;
@@ -12,7 +13,7 @@ export function Card({ title, meta, children, tint, action }: {
   action?: ReactNode;
 }) {
   return (
-    <section className={tint ? "card tint" : "card"}>
+    <section id={id} className={tint ? "card tint" : "card"}>
       {(title || meta || action) && (
         <div className="card-head">
           {title && <h2>{title}</h2>}
