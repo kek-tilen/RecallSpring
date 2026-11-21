@@ -690,6 +690,9 @@ class AiMessage(Base):
     usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     error_code: Mapped[str | None] = mapped_column(String(60))
     duration_ms: Mapped[int | None] = mapped_column(Integer)
+    # On a learner's message: the excerpts of their chosen material sent with it ([{ref, section_id, source_id,
+    # filename, label, chars}]); replies cite them by ref ("S1").
+    context: Mapped[list[Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = _created()
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -698,6 +701,17 @@ class AiMessage(Base):
         UniqueConstraint("conversation_id", "position", name="uq_ai_messages_position"),
         UniqueConstraint("user_id", "client_request_id", name="uq_ai_messages_user_client_request"),
     )
+
+
+class AiConversationSource(Base):
+    """A file the learner chose for a conversation: excerpts of it that match each message are sent along."""
+
+    __tablename__ = "ai_conversation_sources"
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_conversations.id"), primary_key=True)
+    source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sources.id"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = _owner()
+    added_at: Mapped[datetime] = _created()
 
 
 # --------------------------------------------------------------------------- study targets (exams) and planning
