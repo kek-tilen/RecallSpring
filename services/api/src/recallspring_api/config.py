@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     ai_evaluation_provider: Literal["none", "mock"] = "none"
     ai_question_provider: Literal["none", "mock"] = "none"
     ai_timeout_seconds: float = 90.0
+    # Sign in with ChatGPT (ai/siwc.py, docs/04): only while RecallSpring runs on the learner's own computer (the
+    # sign-in returns to http://127.0.0.1). Credentials stay in secrets_dir, outside the database and backups.
+    chatgpt_signin_enabled: bool = True
+    chatgpt_auth_base: str = "https://auth.openai.com"
+    chatgpt_api_base: str = "https://api.openai.com/v1"
+    secrets_dir: Path = _REPO_ROOT / "local-data" / "secrets"
     ai_evaluation_lease_seconds: int = 180
     mock_ai_behavior: Literal["normal", "timeout", "error", "invalid"] = "normal"
 

@@ -157,6 +157,19 @@ class ChatImportSaveIn(BaseModel):
     include_files: bool = True
 
 
+class ChatGptTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    text: str = Field(min_length=1, max_length=20_000)
+
+
+class ChatGptTestIn(BaseModel):
+    """A message to try the ChatGPT connection; earlier turns are kept by the app and sent again in full."""
+
+    model: str = Field(min_length=1, max_length=120)
+    message: str = Field(min_length=1, max_length=4000)
+    history: list[ChatGptTurn] = Field(default_factory=list, max_length=20)
+
+
 class PreferencesIn(BaseModel):
     text: str = Field(max_length=8000)
 

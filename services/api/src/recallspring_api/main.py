@@ -7,9 +7,11 @@ import logging
 from fastapi import FastAPI
 
 from . import __version__, errors, web
+from .ai.siwc import RedactCallbackQuery
 from .api import (
     attempts,
     auth,
+    chatgpt,
     connector,
     courses,
     health,
@@ -43,6 +45,7 @@ def create_app() -> FastAPI:
     )
     app.state.login_limiter = LoginRateLimiter(config.login_max_failures, config.login_failure_window_seconds)
     errors.install(app)
+    logging.getLogger("uvicorn.access").addFilter(RedactCallbackQuery())
     modules = (
         health,
         auth,
@@ -58,6 +61,7 @@ def create_app() -> FastAPI:
         organise,
         library,
         imports,
+        chatgpt,
         connector,
     )
     for module in modules:
