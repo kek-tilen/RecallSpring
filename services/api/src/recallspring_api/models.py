@@ -830,3 +830,33 @@ class QuizItem(Base):
     position: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     question_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("questions.id"), nullable=False)
     points: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="1", default=1)
+
+
+# --------------------------------------------------------------------------- Pomodoro focus time
+
+
+class FocusSession(Base):
+    """A Pomodoro focus block the learner timed in the web app, optionally for one course. Append-only: it records
+    time spent, never learning or mastery. ``focused_seconds`` excludes pauses; ``completed`` is false when the
+    learner stopped the block early (only blocks of at least a minute are kept)."""
+
+    __tablename__ = "focus_sessions"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    course_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courses.id"))
+    client_session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    planned_minutes: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    focused_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    completed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "client_session_id", name="uq_focus_sessions_user_client_session"),
+        Index("ix_focus_sessions_user_ended", "user_id", "ended_at"),
+        CheckConstraint("planned_minutes BETWEEN 1 AND 240", name="planned_minutes"),
+        CheckConstraint("focused_seconds BETWEEN 60 AND 14400", name="focused_seconds"),
+        CheckConstraint("ended_at >= started_at", name="ended_after_start"),
+    )
