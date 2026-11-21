@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from .. import clock
 from ..errors import ApiError
 from ..models import AiConversation, AiMessage, User
+from . import visual_blocks
 from .events import audit
 
 PROVIDER = "chatgpt"
@@ -67,6 +68,8 @@ def message_view(m: AiMessage) -> dict[str, Any]:
         "usage": m.usage,
         "duration_ms": m.duration_ms,
         "error_code": m.error_code,
+        # Checked again on every read, so a stricter check also applies to replies saved earlier.
+        "visuals": visual_blocks.from_reply(m.text) if m.role == "assistant" else [],
     }
 
 

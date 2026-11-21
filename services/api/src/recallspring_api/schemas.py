@@ -164,6 +164,9 @@ class ChatGptMessageIn(BaseModel):
     conversation_id: uuid.UUID | None = None
     model: str = Field(min_length=1, max_length=120)
     message: str = Field(min_length=1, max_length=4000)
+    # Tell ChatGPT it may add visual explanations as allowlisted JSON (services/visual_blocks.py); the learner
+    # can switch this off.
+    visuals: bool = True
 
 
 class ChatGptConversationPatch(BaseModel):

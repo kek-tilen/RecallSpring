@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { ApiError, get, request } from "../api";
 import { ChatGptSignIn, STATUS_KEY, useChatGptStatus } from "../components/ChatGpt";
 import { Markdown } from "../components/Markdown";
+import type { VisualResult } from "../components/Visual";
 import { Confirm, ErrorNote, Loading, PageHead } from "../components/ui";
 import { dateTime, plural } from "../format";
 
@@ -29,6 +30,7 @@ interface AiMessage {
   usage: Usage | null;
   duration_ms: number | null;
   error_code: string | null;
+  visuals: VisualResult[];
 }
 
 interface Totals {
@@ -71,6 +73,7 @@ interface Model {
 
 const LIST_KEY = [...STATUS_KEY, "conversations"] as const;
 const MODEL_STORE = "rs.chatgpt.model";
+const VISUALS_STORE = "rs.chatgpt.visuals";
 
 const NOT_ANSWERED: Record<string, string> = {
   usage_limit: "your ChatGPT plan's usage limit was reached",
@@ -108,17 +111,17 @@ function totalsLine(t: Totals): string {
     : `${plural(t.replies, "reply", "replies")} · ${number(t.total_tokens)} tokens`;
 }
 
-function remembered(): string {
+function remembered(key = MODEL_STORE): string {
   try {
-    return localStorage.getItem(MODEL_STORE) ?? "";
+    return localStorage.getItem(key) ?? "";
   } catch {
     return "";
   }
 }
 
-function remember(slug: string): void {
+function remember(value: string, key = MODEL_STORE): void {
   try {
-    localStorage.setItem(MODEL_STORE, slug);
+    localStorage.setItem(key, value);
   } catch {
     /* private window: the choice is simply not remembered */
   }
@@ -233,7 +236,7 @@ function Thread({ conv, names, pending }: { conv: Conversation | null; names: Ma
             </>
           ) : (
             <>
-              <Markdown text={m.text} />
+              <Markdown text={m.text} visuals={m.visuals ?? []} source="ChatGPT" />
               <ReplyMeta m={m} names={names} />
             </>
           )}
@@ -422,6 +425,8 @@ function Composer({
   busy,
   onSend,
   placeholder,
+  visuals,
+  onVisuals,
 }: {
   canSend: boolean;
   models: Model[];
@@ -430,6 +435,8 @@ function Composer({
   busy: boolean;
   onSend: (text: string) => Promise<unknown>;
   placeholder: string;
+  visuals: boolean;
+  onVisuals: (on: boolean) => void;
 }) {
   const [text, setText] = useState("");
   async function submit() {
@@ -475,6 +482,10 @@ function Composer({
         ) : (
           <span className="tiny muted">{canSend ? "Loading models…" : ""}</span>
         )}
+        <label className="row small" style={{ gap: 6 }} title="Lets ChatGPT add diagrams, charts or a slider, drawn by RecallSpring from checked data. Nothing it writes is run.">
+          <input type="checkbox" checked={visuals} onChange={(e) => onVisuals(e.target.checked)} />
+          <span>Visuals</span>
+        </label>
         <span className="row" style={{ gap: 8 }}>
           <span className="tiny muted hide-narrow">Enter sends · Shift+Enter new line</span>
           <button type="submit" className="btn primary" disabled={!canSend || !text.trim() || !model || busy}>
@@ -502,7 +513,8 @@ export function ChatPage() {
     queryFn: () => get<Conversation>(`/ai/chatgpt/conversations/${currentId}`),
     enabled: !!currentId,
   });
-  const [model, setModel] = useState(remembered);
+  const [model, setModel] = useState(() => remembered());
+  const [visuals, setVisuals] = useState(() => remembered(VISUALS_STORE) !== "off");
   const [sideOpen, setSideOpen] = useState(false);
   const available = models.data ?? [];
   const names = new Map(available.map((m) => [m.slug, m.display_name]));
@@ -510,7 +522,7 @@ export function ChatPage() {
 
   const send = useMutation({
     mutationFn: (text: string) =>
-      request<Conversation>("/ai/chatgpt/messages", { json: { conversation_id: currentId, model: chosen, message: text } }),
+      request<Conversation>("/ai/chatgpt/messages", { json: { conversation_id: currentId, model: chosen, message: text, visuals } }),
     onSuccess: (c) => {
       qc.setQueryData([...LIST_KEY, c.id], c);
       void qc.invalidateQueries({ queryKey: LIST_KEY, exact: true });
@@ -617,6 +629,11 @@ export function ChatPage() {
             }}
             busy={send.isPending}
             onSend={(text) => send.mutateAsync(text)}
+            visuals={visuals}
+            onVisuals={(on) => {
+              setVisuals(on);
+              remember(on ? "on" : "off", VISUALS_STORE);
+            }}
             placeholder={canSend ? (current ? "Write a message" : "Start a new conversation") : "Sign in with ChatGPT to write"}
           />
         </section>

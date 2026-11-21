@@ -22,6 +22,7 @@ from ..deps import Ctx, WriteCtx, csrf_ctx, current_ctx, write_ctx
 from ..errors import ApiError
 from ..schemas import ChatGptConversationPatch, ChatGptMessageIn
 from ..services import ai_conversations as conv_svc
+from ..services import visual_blocks
 from ..services.events import audit
 
 router = APIRouter(tags=["chatgpt"])
@@ -152,7 +153,8 @@ def send_message(
     db.commit()  # no transaction stays open while waiting for ChatGPT
     started = time.monotonic()
     try:
-        result = siwc.reply(ctx.user.id, payload.model, INSTRUCTIONS, turns)
+        instructions = "\n\n".join((INSTRUCTIONS, visual_blocks.INSTRUCTIONS)) if payload.visuals else INSTRUCTIONS
+        result = siwc.reply(ctx.user.id, payload.model, instructions, turns)
     except siwc.SiwcError as exc:
         conv_svc.save_failure(db, question, exc.code, int((time.monotonic() - started) * 1000))
         audit(
@@ -185,7 +187,14 @@ def send_message(
         action="ai.chatgpt_message",
         target_type="ai_conversation",
         target_id=conv.id,
-        details={"model": result.model, "outcome": "completed", "turns": len(turns), "usage": reply.usage},
+        details={
+            "model": result.model,
+            "outcome": "completed",
+            "turns": len(turns),
+            "usage": reply.usage,
+            "visuals_allowed": payload.visuals,
+            "visuals": [v["ok"] for v in visual_blocks.from_reply(result.text)],
+        },
         request_id=ctx.request_id,
     )
     db.commit()

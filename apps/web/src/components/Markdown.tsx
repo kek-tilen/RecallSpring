@@ -1,10 +1,14 @@
 import { Fragment, type ReactNode } from "react";
+import { Visual, type VisualResult } from "./Visual";
 
 /**
  * Shows Markdown from a model as React elements only: paragraphs, headings, lists, quotes, tables, code and
  * inline bold/italic/code/links. Nothing is ever inserted as HTML, so HTML, scripts or styles in a reply are shown
- * as text and never run (AGENTS.md: no model-generated HTML/JS/CSS).
+ * as text and never run (AGENTS.md: no model-generated HTML/JS/CSS). A fence tagged `recallspring-visual` is drawn
+ * from the server's checked copy (`visuals`, in the same order), never from the raw text.
  */
+
+export const VISUAL_LANG = "recallspring-visual";
 
 type Block =
   | { kind: "p"; lines: string[] }
@@ -171,7 +175,8 @@ function List({ items, ordered, start }: { items: { text: string; depth: number 
   );
 }
 
-export function Markdown({ text }: { text: string }) {
+export function Markdown({ text, visuals, source = "the model" }: { text: string; visuals?: VisualResult[]; source?: string }) {
+  let visual = 0;
   return (
     <div className="md">
       {parseBlocks(text).map((b, i) => {
@@ -181,6 +186,9 @@ export function Markdown({ text }: { text: string }) {
             return <Tag key={i}>{inline(b.text, `h${i}`)}</Tag>;
           }
           case "code":
+            if (visuals && b.lang.toLowerCase() === VISUAL_LANG) {
+              return <Visual key={i} result={visuals[visual++]} raw={b.text} source={source} />;
+            }
             return (
               <pre key={i} className="md-code" aria-label={b.lang ? `${b.lang} code` : "Code"}>
                 <code>{b.text}</code>

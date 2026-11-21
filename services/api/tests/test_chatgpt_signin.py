@@ -414,3 +414,40 @@ def test_the_access_log_never_shows_the_authorization_code() -> None:
     )
     siwc.RedactCallbackQuery().filter(record)
     assert "secret" not in record.getMessage() and "?[redacted]" in record.getMessage()
+
+
+def test_replies_carry_checked_visuals_and_the_learner_can_switch_them_off(owner_api: Api, openai: FakeOpenAI) -> None:
+    sign_in(owner_api, openai)
+    flow = {
+        "type": "process_flow",
+        "title": "PDCA",
+        "alt_text": "Plan leads to Do.",
+        "data": {
+            "nodes": [{"id": "p", "label": "Plan"}, {"id": "d", "label": "Do"}],
+            "edges": [{"from": "p", "to": "d"}],
+        },
+    }
+    good = f"```recallspring-visual\n{json.dumps(flow)}\n```"
+    text = f"Here it is.\n\n{good}\n\n```recallspring-visual\n<script>x</script>\n```"
+    openai.events = reply_events(text)
+    conv = owner_api.post("/ai/chatgpt/messages", {"model": "gpt-test", "message": "Show PDCA"}).json()
+    reply = conv["messages"][1]
+    assert reply["text"] == text  # saved exactly as written
+    assert [v["ok"] for v in reply["visuals"]] == [True, False]
+    assert reply["visuals"][0]["block"]["title"] == "PDCA"
+    assert "recallspring-visual" in json.loads(openai.requests[-1].content)["instructions"]
+    assert _audits("ai.chatgpt_message")[0].details["visuals"] == [True, False]
+
+    openai.events = reply_events("Plain.", 2)
+    owner_api.post(
+        "/ai/chatgpt/messages",
+        {"conversation_id": conv["id"], "model": "gpt-test", "message": "No pictures", "visuals": False},
+    )
+    sent = json.loads(openai.requests[-1].content)
+    assert "recallspring-visual" not in sent["instructions"] and list(sent) == [
+        "model",
+        "instructions",
+        "input",
+        "store",
+        "stream",
+    ]

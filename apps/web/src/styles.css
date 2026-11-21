@@ -1979,3 +1979,148 @@ tr.selected td {
     display: none;
   }
 }
+
+/* Visual blocks drawn by RecallSpring from checked data (components/Visual.tsx). Colours come from the theme. */
+.viz {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  display: grid;
+  gap: 8px;
+}
+.viz-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.viz-body {
+  overflow-x: auto;
+}
+.viz-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+.viz-node {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1.2;
+}
+.viz-label {
+  fill: var(--ink);
+  font: 13px var(--font);
+}
+.viz-tick {
+  fill: var(--muted);
+  font: 12px var(--font);
+}
+.viz-axis-label {
+  fill: var(--ink);
+  font: 600 13px var(--font);
+}
+.viz-edge {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+.viz-edge.back {
+  stroke-dasharray: 5 4;
+}
+.viz-arrow {
+  fill: var(--muted);
+}
+.viz-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.viz-axis {
+  stroke: var(--border-strong);
+  stroke-width: 1.2;
+}
+.viz-bar {
+  fill: var(--ramp-2);
+}
+.viz-line {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.viz-point {
+  fill: var(--primary);
+  stroke: var(--bg);
+  stroke-width: 1.5;
+}
+.viz-circle {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+}
+.viz-guide {
+  stroke: var(--warning);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+.viz-table th {
+  text-transform: none;
+  letter-spacing: normal;
+}
+.viz-table th[scope="row"] {
+  text-align: left;
+  font-weight: 600;
+}
+.viz-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 18px;
+  border-left: 2px solid var(--ramp-1);
+  display: grid;
+  gap: 10px;
+}
+.viz-timeline li {
+  position: relative;
+  display: grid;
+  gap: 2px;
+}
+.viz-timeline li::before {
+  content: "";
+  position: absolute;
+  left: -27px;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--surface-elevated);
+}
+.viz-slider {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+.viz-slider input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--primary);
+}
+.viz-failed details {
+  margin-top: 6px;
+}
+@media (max-width: 560px) {
+  .viz-slider {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .viz-chart .viz-tick {
+    font-size: 16px;
+  }
+  .viz-chart .viz-axis-label {
+    font-size: 17px;
+  }
+}
