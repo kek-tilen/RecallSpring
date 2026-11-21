@@ -87,6 +87,17 @@ Implemented (2026-11-21, ADR-008):
   - When signed out, conversations stay readable and a `Sign in with ChatGPT` button is shown.
 - **Settings → ChatGPT (preview):** the connection only. It holds `Sign in with ChatGPT` per OpenAI's UI guidelines, the privacy notes, the account, plan usage, Open Chat, Sign in again and Sign out (confirmed). It states clearly when sign-in is unavailable (not on 127.0.0.1, or turned off).
 
+### Focus (Pomodoro timer)
+
+Built (owner decision 2026-11-21). `/focus` in the main menu.
+
+- **Cycle:** focus blocks with a short break after each and a long break after the last block of a cycle. Defaults are 45 min focus, 10 min short break, 15 min long break, 4 blocks per cycle. All four can be changed (focus 1–180 min, breaks 1–60 / 1–90 min, 1–12 blocks); a new length applies from the next phase that has not started.
+- **Controls:** Start / Pause / Resume, Skip (ends the phase; never starts the next one by itself), Reset (back to block 1), Focus mode. Optional: start the next phase automatically, a chime (Web Audio, no sound files), a desktop notification (asked for only when the learner turns it on).
+- **Six clock faces** (Settings are per device): Default, Flip Clock, Progress Bar, Dot Matrix (one dot per minute, up to 60), Pie and Ring (a pie with a hole, the time in the middle). The bright part is the time left, so every face empties as the phase runs. Faces are visual only (`aria-hidden`); screen readers get the phase and whole minutes left, and phase changes are announced once.
+- **Focus mode:** the timer alone over a background the learner picks: the theme, five colour backgrounds (Night, Forest, Dusk, Ocean, Sand) or their own image. The image (PNG, JPEG, WebP or GIF, up to 20 MB) stays in this browser (IndexedDB) and is never uploaded or backed up; a "Darken the image" slider keeps the time readable. Space starts or pauses, `F` opens focus mode from the Focus page, `Esc` exits; focus stays inside the dialog and returns to where it was. Optional browser full screen.
+- **Keeps running:** the timer is a timestamp in this browser, so it survives reloads, page changes and other tabs (they follow each other). While a phase is under way a small timer with a pause button sits in the menu, or beside Show menu when the menu is hidden. The browser tab title shows the time left.
+- **Study time:** the learner may pick a course. A focus block that runs to the end, or is stopped after at least a minute, is saved as study time (pauses excluded); breaks are not. A block is kept in the browser first and sent when RecallSpring is reachable, so none is lost offline. Focus time shows on the Focus page (today, the last 7 days by day and by course, the latest blocks), on Today, in History ("Focus block finished" / "stopped early") and to Claude in `get_study_context` as `focus_time`. It is labelled as effort only, never as learning or mastery.
+
 ### Insights
 
 Course coverage, due forecasts, recurring misconceptions, evidence per topic, exam-date planning. Avoid mastery percentages unless they are clearly labeled approximations with evidence. `Learning history` should show exactly when an answer was saved, evaluated, scheduled and corrected.
@@ -122,6 +133,7 @@ Do not hide primary features behind keyboard commands. Optional:
 - `/explain`, `/visual`, `/quiz`, `/review` optional command palette.
 - `Ctrl/Cmd+K` opens global search; `Esc` closes dialogs.
 - `Ctrl/Cmd+\` hides or shows the menu rail (built).
+- On the Focus page: `Space` starts or pauses the timer, `F` opens focus mode, `Esc` leaves it (built).
 
 Provide full mouse/touch alternatives. In-context help should be short, not a tutorial maze.
 
