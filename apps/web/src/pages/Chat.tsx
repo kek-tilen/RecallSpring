@@ -3,9 +3,10 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { Link, useNavigate, useParams } from "react-router";
 import { ApiError, get, request } from "../api";
 import { ChatGptSignIn, STATUS_KEY, useChatGptStatus } from "../components/ChatGpt";
-import { Markdown } from "../components/Markdown";
+import { MaterialPicker, type ChosenFile } from "../components/ChatMaterial";
+import { Markdown, type Cites } from "../components/Markdown";
 import type { VisualResult } from "../components/Visual";
-import { Confirm, ErrorNote, Loading, PageHead } from "../components/ui";
+import { Confirm, ErrorNote, Loading } from "../components/ui";
 import { dateTime, plural } from "../format";
 
 interface Usage {
@@ -31,6 +32,18 @@ interface AiMessage {
   duration_ms: number | null;
   error_code: string | null;
   visuals: VisualResult[];
+  citations: Cites;
+  context: SentExcerpt[];
+}
+
+/** An excerpt of a chosen file that was sent with the learner's message. */
+interface SentExcerpt {
+  ref: string;
+  section_id: string;
+  source_id: string;
+  filename: string;
+  label: string;
+  chars: number;
 }
 
 interface Totals {
@@ -47,6 +60,7 @@ interface Conversation {
   updated_at: string;
   deleted_at: string | null;
   messages: AiMessage[];
+  material: ChosenFile[];
   totals: Totals;
   older_turns_not_sent: boolean;
 }
@@ -202,53 +216,93 @@ function ReplyMeta({ m, names }: { m: AiMessage; names: Map<string, string> }) {
   );
 }
 
+/** What went to ChatGPT with a message: which excerpts of which chosen files. */
+function SentWith({ items }: { items: SentExcerpt[] }) {
+  const files = [...new Set(items.map((c) => c.filename))];
+  return (
+    <details className="chat-sent tiny muted">
+      <summary>
+        Sent with {plural(items.length, "excerpt")} from {files.length === 1 ? files[0] : plural(files.length, "file")}
+      </summary>
+      <ul>
+        {items.map((c) => (
+          <li key={c.ref}>
+            <strong>{c.ref}</strong> <Link to={`/library/${c.source_id}`}>{c.filename}</Link> · {c.label}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function CitedSources({ cites }: { cites: Cites }) {
+  const refs = Object.keys(cites).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+  if (!refs.length) return null;
+  return (
+    <ul className="chat-cited tiny" aria-label="Sources cited">
+      {refs.map((r) => (
+        <li key={r}>
+          <span className="cite">{r}</span> <Link to={`/library/${cites[r]!.source_id}`}>{cites[r]!.filename}</Link>
+          <span className="muted"> · {cites[r]!.label}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Thread({ conv, names, pending }: { conv: Conversation | null; names: Map<string, string>; pending: string | null }) {
-  const box = useRef<HTMLOListElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   const count = conv?.messages.length ?? 0;
   useEffect(() => {
     // Keep the newest message in view inside the thread (never scrolls the page itself).
     if (box.current) box.current.scrollTop = box.current.scrollHeight;
   }, [count, pending, conv?.id]);
   const messages = conv?.messages ?? [];
-  if (!messages.length && !pending) {
-    return (
-      <div className="chat-empty muted">
-        <p>Ask ChatGPT anything. It can't see your courses here; Claude stays your tutor.</p>
-      </div>
-    );
-  }
   return (
-    <ol ref={box} className="chat-thread" aria-label="Messages" aria-live="polite">
-      {messages.map((m) => (
-        <li key={m.id} className={m.role === "user" ? "chat-msg you" : "chat-msg ai"}>
-          {m.role === "user" ? (
-            <>
-              <div className="chat-bubble pre">{m.text}</div>
-              <div className="tiny muted" title={exactTime(m.created_at)}>
-                {shortTime(m.created_at)}
-                {m.model_requested && ` · to ${names.get(m.model_requested) ?? m.model_requested}`}
-              </div>
-              {m.error_code && (
-                <div className="tiny chat-error">
-                  Not answered: {NOT_ANSWERED[m.error_code] ?? m.error_code}. Saved; not sent again.
-                </div>
+    <div ref={box} className="chat-scroll">
+      {!messages.length && !pending ? (
+        <div className="chat-empty muted">
+          <p>
+            Ask ChatGPT anything. With <strong>Material</strong> you choose which of your files it may use; it cites them
+            as S1, S2, … Claude stays your tutor.
+          </p>
+        </div>
+      ) : (
+        <ol className="chat-thread" aria-label="Messages" aria-live="polite">
+          {messages.map((m) => (
+            <li key={m.id} className={m.role === "user" ? "chat-msg you" : "chat-msg ai"}>
+              {m.role === "user" ? (
+                <>
+                  <div className="chat-bubble pre">{m.text}</div>
+                  <div className="tiny muted" title={exactTime(m.created_at)}>
+                    {shortTime(m.created_at)}
+                    {m.model_requested && ` · to ${names.get(m.model_requested) ?? m.model_requested}`}
+                  </div>
+                  {(m.context?.length ?? 0) > 0 && <SentWith items={m.context} />}
+                  {m.error_code && (
+                    <div className="tiny chat-error">
+                      Not answered: {NOT_ANSWERED[m.error_code] ?? m.error_code}. Saved; not sent again.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Markdown text={m.text} visuals={m.visuals ?? []} cites={m.citations ?? {}} source="ChatGPT" />
+                  <CitedSources cites={m.citations ?? {}} />
+                  <ReplyMeta m={m} names={names} />
+                </>
               )}
-            </>
-          ) : (
-            <>
-              <Markdown text={m.text} visuals={m.visuals ?? []} source="ChatGPT" />
-              <ReplyMeta m={m} names={names} />
-            </>
+            </li>
+          ))}
+          {pending && (
+            <li className="chat-msg you">
+              <div className="chat-bubble pre">{pending}</div>
+              <div className="tiny muted">Saved · waiting for ChatGPT…</div>
+            </li>
           )}
-        </li>
-      ))}
-      {pending && (
-        <li className="chat-msg you">
-          <div className="chat-bubble pre">{pending}</div>
-          <div className="tiny muted">Saved · waiting for ChatGPT…</div>
-        </li>
+        </ol>
       )}
-    </ol>
+    </div>
   );
 }
 
@@ -292,7 +346,7 @@ function ConversationSide({
       {list.conversations.length === 0 ? (
         <p className="small muted" style={{ margin: 0 }}>No conversations yet.</p>
       ) : (
-        <ul className="chat-list" aria-label="Conversations">
+        <ul className="chat-convs" aria-label="Conversations">
           {shown.map((c) => (
             <li key={c.id}>
               <button
@@ -378,7 +432,14 @@ function TitleBar({ conv, busy }: { conv: Conversation; busy: boolean }) {
         </form>
       ) : (
         <>
-          <h2 className="chat-title">{conv.title}</h2>
+          <div style={{ minWidth: 0 }}>
+            <h2 className="chat-title">{conv.title}</h2>
+            {conv.totals.replies > 0 && (
+              <span className="tiny muted">
+                {totalsLine(conv.totals)} ({number(conv.totals.input_tokens)} in, {number(conv.totals.output_tokens)} out)
+              </span>
+            )}
+          </div>
           <span className="row" style={{ gap: 4 }}>
             <button
               type="button"
@@ -427,6 +488,8 @@ function Composer({
   placeholder,
   visuals,
   onVisuals,
+  material,
+  onMaterial,
 }: {
   canSend: boolean;
   models: Model[];
@@ -437,6 +500,8 @@ function Composer({
   placeholder: string;
   visuals: boolean;
   onVisuals: (on: boolean) => void;
+  material: { filename: string }[];
+  onMaterial: () => void;
 }) {
   const [text, setText] = useState("");
   async function submit() {
@@ -455,6 +520,7 @@ function Composer({
       void submit();
     }
   }
+  const names = material.map((f) => f.filename);
   return (
     <form
       className="chat-composer"
@@ -463,30 +529,41 @@ function Composer({
         void submit();
       }}
     >
+      {names.length > 0 && (
+        <div className="chat-material-line tiny">
+          <span className="muted">ChatGPT may use:</span>
+          {names.slice(0, 3).map((n) => (
+            <span key={n} className="chip">
+              {n}
+            </span>
+          ))}
+          {names.length > 3 && <span className="muted">+{names.length - 3} more</span>}
+        </div>
+      )}
       <label className="field">
         <span className="sr-only">Message to ChatGPT</span>
-        <textarea rows={3} value={text} maxLength={4000} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} placeholder={placeholder} disabled={!canSend} />
+        <textarea rows={2} value={text} maxLength={4000} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} placeholder={placeholder} disabled={!canSend} />
       </label>
-      <div className="row" style={{ gap: 8, justifyContent: "space-between", flexWrap: "wrap" }}>
-        {models.length > 0 ? (
-          <label className="row small" style={{ gap: 6 }}>
-            <span className="muted">Model</span>
-            <select value={model} onChange={(e) => onModel(e.target.value)} aria-label="Model">
-              {models.map((m) => (
-                <option key={m.slug} value={m.slug}>
-                  {m.display_name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <span className="tiny muted">{canSend ? "Loading models…" : ""}</span>
-        )}
+      <div className="chat-tools">
+        <button type="button" className="btn small ghost" onClick={onMaterial} aria-haspopup="dialog" title={names.join("\n") || "Choose files ChatGPT may use"}>
+          Material{names.length ? ` (${names.length})` : ""}
+        </button>
         <label className="row small" style={{ gap: 6 }} title="Lets ChatGPT add diagrams, charts or a slider, drawn by RecallSpring from checked data. Nothing it writes is run.">
           <input type="checkbox" checked={visuals} onChange={(e) => onVisuals(e.target.checked)} />
           <span>Visuals</span>
         </label>
-        <span className="row" style={{ gap: 8 }}>
+        {models.length > 0 ? (
+          <select value={model} onChange={(e) => onModel(e.target.value)} aria-label="Model" className="chat-model">
+            {models.map((m) => (
+              <option key={m.slug} value={m.slug}>
+                {m.display_name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="tiny muted">{canSend ? "Loading models…" : ""}</span>
+        )}
+        <span className="chat-tools-end">
           <span className="tiny muted hide-narrow">Enter sends · Shift+Enter new line</span>
           <button type="submit" className="btn primary" disabled={!canSend || !text.trim() || !model || busy}>
             {busy ? "Waiting…" : "Send"}
@@ -516,25 +593,52 @@ export function ChatPage() {
   const [model, setModel] = useState(() => remembered());
   const [visuals, setVisuals] = useState(() => remembered(VISUALS_STORE) !== "off");
   const [sideOpen, setSideOpen] = useState(false);
+  const [picking, setPicking] = useState(false);
+  // Files chosen before a new conversation's first message (an existing one keeps them on the server).
+  const [draft, setDraft] = useState<{ id: string; filename: string }[]>([]);
   const available = models.data ?? [];
   const names = new Map(available.map((m) => [m.slug, m.display_name]));
   const chosen = available.some((m) => m.slug === model) ? model : (available[0]?.slug ?? "");
+  const current = currentId ? (conv.data ?? null) : null;
+  const material = current ? current.material : currentId ? [] : draft;
 
   const send = useMutation({
     mutationFn: (text: string) =>
-      request<Conversation>("/ai/chatgpt/messages", { json: { conversation_id: currentId, model: chosen, message: text, visuals } }),
+      request<Conversation>("/ai/chatgpt/messages", {
+        json: {
+          conversation_id: currentId,
+          model: chosen,
+          message: text,
+          visuals,
+          ...(currentId ? {} : { source_ids: draft.map((f) => f.id) }),
+        },
+      }),
     onSuccess: (c) => {
       qc.setQueryData([...LIST_KEY, c.id], c);
       void qc.invalidateQueries({ queryKey: LIST_KEY, exact: true });
-      if (c.id !== currentId) navigate(`/chat/${c.id}`, { replace: isNew });
+      if (c.id !== currentId) {
+        setDraft([]);
+        navigate(`/chat/${c.id}`, { replace: isNew });
+      }
     },
     onError: (err) => {
       const id = err instanceof ApiError ? err.details?.conversation_id : undefined;
       if (typeof id === "string") {
         void qc.invalidateQueries({ queryKey: [...LIST_KEY, id] });
         void qc.invalidateQueries({ queryKey: LIST_KEY, exact: true });
-        if (id !== currentId) navigate(`/chat/${id}`, { replace: isNew });
+        if (id !== currentId) {
+          setDraft([]);
+          navigate(`/chat/${id}`, { replace: isNew });
+        }
       }
+    },
+  });
+  const saveMaterial = useMutation({
+    mutationFn: (ids: string[]) =>
+      request<Conversation>(`/ai/chatgpt/conversations/${currentId}/material`, { method: "PUT", json: { source_ids: ids } }),
+    onSuccess: (c) => {
+      qc.setQueryData([...LIST_KEY, c.id], c);
+      setPicking(false);
     },
   });
 
@@ -545,24 +649,23 @@ export function ChatPage() {
   }
 
   const usage = list.data?.usage;
-  const current = currentId ? (conv.data ?? null) : null;
 
   return (
-    <div className="page chat-page">
-      <PageHead
-        title="Chat"
-        sub={
-          s?.connected
-            ? `ChatGPT on your own plan${s.email ? ` (${s.email})` : ""}. Saved here; Claude stays your tutor.`
-            : "ChatGPT on your own plan. Your conversations are saved here."
-        }
-      >
+    <div className="chat-page">
+      <header className="chat-top">
+        <div style={{ minWidth: 0 }}>
+          <h1>Chat</h1>
+          <p className="tiny muted" style={{ margin: 0 }}>
+            ChatGPT on your own plan{s?.connected && s.email ? ` (${s.email})` : ""}. Saved here; Claude stays your tutor ·{" "}
+            <Link to="/settings#chatgpt">Sign-in and privacy</Link>
+          </p>
+        </div>
         {usage && (
-          <span className="small muted" title="As ChatGPT reports it. Your plan's remaining limit: chatgpt.com/settings/usage">
+          <span className="tiny muted" title="As ChatGPT reports it. Your plan's remaining limit: chatgpt.com/settings/usage">
             Last 24 h: {totalsLine(usage.last_24_hours)} · 30 days: {totalsLine(usage.last_30_days)}
           </span>
         )}
-      </PageHead>
+      </header>
 
       {status.error && <ErrorNote error={status.error} />}
       {s && !canSend && (
@@ -587,6 +690,7 @@ export function ChatPage() {
               onPick={pick}
               onNew={() => {
                 setSideOpen(false);
+                setDraft([]);
                 send.reset();
                 navigate("/chat/new");
               }}
@@ -599,48 +703,70 @@ export function ChatPage() {
           )}
         </aside>
 
-        <section className="card chat-main">
-          {current && <TitleBar key={current.id} conv={current} busy={send.isPending} />}
+        <section className="chat-main" aria-label="Conversation">
+          {current ? (
+            <TitleBar key={current.id} conv={current} busy={send.isPending} />
+          ) : (
+            <div className="chat-head">
+              <h2 className="chat-title">New conversation</h2>
+            </div>
+          )}
           {currentId && conv.isPending ? (
-            <Loading lines={4} />
+            <div className="chat-scroll">
+              <Loading lines={4} />
+            </div>
           ) : conv.error && currentId ? (
-            <ErrorNote error={conv.error} />
+            <div className="chat-scroll">
+              <ErrorNote error={conv.error} />
+            </div>
           ) : (
             <Thread conv={current} names={names} pending={send.isPending ? (send.variables ?? null) : null} />
           )}
-          {current?.older_turns_not_sent && (
-            <div className="notice small">Long conversation: only the newest messages are sent to ChatGPT. Start a new one for a new topic.</div>
-          )}
-          {current && current.totals.replies > 0 && (
-            <p className="tiny muted" style={{ margin: 0 }}>
-              This conversation: {totalsLine(current.totals)} ({number(current.totals.input_tokens)} in,{" "}
-              {number(current.totals.output_tokens)} out).
-            </p>
-          )}
-          {send.error && <ErrorNote error={send.error} />}
-          {models.error && <ErrorNote error={models.error} />}
-          <Composer
-            canSend={canSend}
-            models={available}
-            model={chosen}
-            onModel={(slug) => {
-              setModel(slug);
-              remember(slug);
-            }}
-            busy={send.isPending}
-            onSend={(text) => send.mutateAsync(text)}
-            visuals={visuals}
-            onVisuals={(on) => {
-              setVisuals(on);
-              remember(on ? "on" : "off", VISUALS_STORE);
-            }}
-            placeholder={canSend ? (current ? "Write a message" : "Start a new conversation") : "Sign in with ChatGPT to write"}
-          />
+          <div className="chat-foot">
+            {current?.older_turns_not_sent && (
+              <div className="notice small">Long conversation: only the newest messages are sent to ChatGPT. Start a new one for a new topic.</div>
+            )}
+            {send.error && <ErrorNote error={send.error} />}
+            {models.error && <ErrorNote error={models.error} />}
+            <Composer
+              canSend={canSend}
+              models={available}
+              model={chosen}
+              onModel={(slug) => {
+                setModel(slug);
+                remember(slug);
+              }}
+              busy={send.isPending}
+              onSend={(text) => send.mutateAsync(text)}
+              visuals={visuals}
+              onVisuals={(on) => {
+                setVisuals(on);
+                remember(on ? "on" : "off", VISUALS_STORE);
+              }}
+              material={material}
+              onMaterial={() => {
+                saveMaterial.reset();
+                setPicking(true);
+              }}
+              placeholder={canSend ? (current ? "Write a message" : "Start a new conversation") : "Sign in with ChatGPT to write"}
+            />
+          </div>
         </section>
       </div>
-      <p className="tiny muted" style={{ margin: 0 }}>
-        Sign-in and privacy: <Link to="/settings#chatgpt">Settings → ChatGPT</Link>.
-      </p>
+      <MaterialPicker
+        open={picking}
+        chosen={material.map((f) => f.id)}
+        busy={saveMaterial.isPending}
+        error={saveMaterial.error}
+        onClose={() => setPicking(false)}
+        onSave={(ids, files) => {
+          if (currentId) saveMaterial.mutate(ids);
+          else {
+            setDraft(files.map((f) => ({ id: f.id, filename: f.filename })));
+            setPicking(false);
+          }
+        }}
+      />
     </div>
   );
 }

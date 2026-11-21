@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 import { Markdown } from "./components/Markdown";
 import { hub, levels, ticks, wrap, type VisualBlock, type VisualResult } from "./components/Visual";
@@ -99,5 +100,33 @@ describe("Visual blocks", () => {
     expect(hub(star)).toBe("m");
     expect(ticks(0, 12)).toEqual([0, 2.5, 5, 7.5, 10, 12.5]);
     expect(wrap("a very long label that keeps going and going on", 10, 2)).toHaveLength(2);
+  });
+});
+
+describe("Citations of the learner's material", () => {
+  const cites = { S1: { section_id: "sec1", source_id: "src1", filename: "Kakovost.md", label: "Testiranje" } };
+
+  it("links only references the server confirmed were sent", () => {
+    render(
+      <MemoryRouter>
+        <Markdown text={"Spike je nenaden porast [S1]. Glej **tudi [S9]**."} cites={cites} />
+      </MemoryRouter>,
+    );
+    const link = screen.getByRole("link", { name: "Source S1: Kakovost.md, Testiranje" });
+    expect(link.getAttribute("href")).toBe("/library/src1");
+    expect(screen.getByText(/tudi \[S9\]/)).toBeTruthy();
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("says which excerpts a visual is based on", () => {
+    const block: VisualBlock = { ...blocks[2]!, source_refs: ["S1"] } as VisualBlock;
+    render(
+      <MemoryRouter>
+        <Markdown text={fence(1)} visuals={[{ ok: true, block }]} cites={cites} source="ChatGPT" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/based on/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Source S1/ })).toBeTruthy();
+    expect(screen.queryByText(/not checked against your material/)).toBeNull();
   });
 });

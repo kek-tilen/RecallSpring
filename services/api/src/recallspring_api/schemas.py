@@ -167,10 +167,18 @@ class ChatGptMessageIn(BaseModel):
     # Tell ChatGPT it may add visual explanations as allowlisted JSON (services/visual_blocks.py); the learner
     # can switch this off.
     visuals: bool = True
+    # Only for a new conversation: the files whose matching excerpts may be sent (services/chat_material.py).
+    source_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
 
 
 class ChatGptConversationPatch(BaseModel):
     title: str = Field(min_length=1, max_length=200)
+
+
+class ChatGptMaterialIn(BaseModel):
+    """The files a conversation may use; an empty list sends no material."""
+
+    source_ids: list[uuid.UUID] = Field(max_length=20)
 
 
 class PreferencesIn(BaseModel):

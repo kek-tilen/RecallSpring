@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections.abc import Collection
 from typing import Any
 
 from ..contracts import schema_errors
@@ -41,8 +42,9 @@ Allowed types and their "data":
 - "interactive_parameter" (a slider the learner moves): {{"parameter": "name and unit", "minimum": n, "maximum": n,
   "step": n, "initial": n, "preset": "linear_growth" (y = p·x) | "exponential_decay" (y = e^(−p·x)) |
   "quadratic_curve" (y = p·x²) | "unit_circle" (angle p in degrees)}}
-Write titles, labels and descriptions in the learner's language. Never write HTML, SVG, CSS, JavaScript, Mermaid or any
-other drawing code: it is not run and is shown only as text.
+When excerpts of the learner's files were sent and a visual is based on them, add "source_refs": ["S1"] with the
+references it uses. Write titles, labels and descriptions in the learner's language. Never write HTML, SVG, CSS,
+JavaScript, Mermaid or any other drawing code: it is not run and is shown only as text.
 """.strip()
 
 
@@ -110,11 +112,12 @@ def _rule_errors(block: dict[str, Any]) -> list[str]:
     return []
 
 
-def check(raw: str, *, grounded: bool = False) -> dict[str, Any]:
+def check(raw: str, *, refs: Collection[str] | None = None) -> dict[str, Any]:
     """One block: ``{"ok": True, "block": {...}}`` or ``{"ok": False, "error": "..."}`` (no values echoed).
 
-    ``grounded`` is False for providers that cannot see the learner's material (ChatGPT here): any ``source_refs``
-    are removed, since they could not be real, and numeric charts are marked illustrative."""
+    ``refs`` are the excerpt references really sent with the question ("S1", …); ``None`` means the model saw no
+    material. ``source_refs`` keep only references in ``refs`` (anything else could not be real), and a chart
+    without any is marked illustrative."""
     if len(raw) > MAX_BLOCK_CHARS:
         return {"ok": False, "error": "The visual is too large."}
     try:
@@ -129,21 +132,23 @@ def check(raw: str, *, grounded: bool = False) -> dict[str, Any]:
     rules = _rule_errors(block)
     if rules:
         return {"ok": False, "error": f"The visual is inconsistent: {rules[0]}."}
-    if not grounded:
+    known = set(refs or ())
+    kept = list(dict.fromkeys(r for r in block.get("source_refs", []) if r in known))
+    if kept:
+        block["source_refs"] = kept
+    else:
         block.pop("source_refs", None)
         if block["type"] == "data_chart":
             block["illustrative"] = True
-    elif block["type"] == "data_chart" and not block.get("source_refs"):
-        block["illustrative"] = True
     return {"ok": True, "block": block}
 
 
-def from_reply(text: str, *, grounded: bool = False) -> list[dict[str, Any]]:
+def from_reply(text: str, *, refs: Collection[str] | None = None) -> list[dict[str, Any]]:
     """Every ``recallspring-visual`` block of a reply, checked, in order (beyond ``MAX_BLOCKS`` refused)."""
     out = []
     for i, raw in enumerate(fenced_blocks(text)):
         if i >= MAX_BLOCKS:
             out.append({"ok": False, "error": f"At most {MAX_BLOCKS} visuals are shown per reply."})
         else:
-            out.append(check(raw, grounded=grounded))
+            out.append(check(raw, refs=refs))
     return out

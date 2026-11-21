@@ -1,4 +1,5 @@
 import { useId, useState, type ReactNode } from "react";
+import { inline, type Cites } from "./Markdown";
 
 /**
  * RecallSpring's own drawings for the allowlisted visual blocks (packages/contracts/schemas/visual-block.schema.json),
@@ -32,12 +33,19 @@ interface ParameterData {
   preset: "linear_growth" | "exponential_decay" | "quadratic_curve" | "unit_circle";
 }
 
+interface Common {
+  title: string;
+  alt_text: string;
+  illustrative?: boolean;
+  source_refs?: string[];
+}
+
 export type VisualBlock =
-  | { type: "process_flow" | "concept_map"; title: string; alt_text: string; illustrative?: boolean; data: GraphData }
-  | { type: "comparison"; title: string; alt_text: string; illustrative?: boolean; data: ComparisonData }
-  | { type: "timeline"; title: string; alt_text: string; illustrative?: boolean; data: TimelineData }
-  | { type: "data_chart"; title: string; alt_text: string; illustrative?: boolean; data: ChartData }
-  | { type: "interactive_parameter"; title: string; alt_text: string; illustrative?: boolean; data: ParameterData };
+  | (Common & { type: "process_flow" | "concept_map"; data: GraphData })
+  | (Common & { type: "comparison"; data: ComparisonData })
+  | (Common & { type: "timeline"; data: TimelineData })
+  | (Common & { type: "data_chart"; data: ChartData })
+  | (Common & { type: "interactive_parameter"; data: ParameterData });
 
 export type VisualResult = { ok: true; block: VisualBlock } | { ok: false; error: string };
 
@@ -529,7 +537,7 @@ function Body({ block }: { block: VisualBlock }): ReactNode {
 }
 
 /** A checked visual with its title, labels and the full text description; or why it could not be shown. */
-export function Visual({ result, raw, source }: { result: VisualResult | undefined; raw: string; source: string }) {
+export function Visual({ result, raw, source, cites }: { result: VisualResult | undefined; raw: string; source: string; cites?: Cites }) {
   if (!result || !result.ok) {
     return (
       <div className="notice small viz-failed">
@@ -555,7 +563,20 @@ export function Visual({ result, raw, source }: { result: VisualResult | undefin
         <Body block={b} />
       </div>
       <p className="tiny muted" style={{ margin: 0 }}>
-        Drawn by RecallSpring from data {source} sent · not checked against your material
+        Drawn by RecallSpring from data {source} sent ·{" "}
+        {b.source_refs?.length ? (
+          <>
+            based on {b.source_refs.map((r, i) => (
+              <span key={r}>
+                {i > 0 && ", "}
+                {inline(`[${r}]`, `v${r}`, cites)}
+              </span>
+            ))}{" "}
+            from your material · values not checked
+          </>
+        ) : (
+          "not checked against your material"
+        )}
       </p>
       <details>
         <summary className="tiny">Text description</summary>

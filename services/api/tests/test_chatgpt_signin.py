@@ -83,14 +83,18 @@ class FakeOpenAI:
         return {k: v[0] for k, v in parse_qs(request.content.decode()).items()}
 
 
-@pytest.fixture
-def openai(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> FakeOpenAI:
+def install_fake_openai(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> FakeOpenAI:
     monkeypatch.setattr(get_settings(), "secrets_dir", tmp_path / "secrets")
     monkeypatch.setattr(siwc, "is_local", lambda host: True)  # the test client calls itself "testserver"
     fake = FakeOpenAI()
     monkeypatch.setattr(siwc, "transport", httpx.MockTransport(fake.handle))
     siwc._pending.clear()
     return fake
+
+
+@pytest.fixture
+def openai(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> FakeOpenAI:
+    return install_fake_openai(monkeypatch, tmp_path)
 
 
 def sign_in(api: Api, fake: FakeOpenAI, client_id: str = "oaiapp_test", scopes: str = SCOPES) -> tuple[dict, Any]:

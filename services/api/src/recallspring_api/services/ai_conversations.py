@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from .. import clock
 from ..errors import ApiError
 from ..models import AiConversation, AiMessage, User
-from . import visual_blocks
+from . import chat_material, visual_blocks
 from .events import audit
 
 PROVIDER = "chatgpt"
@@ -53,7 +53,15 @@ def _usage(raw: dict[str, Any] | None) -> dict[str, int] | None:
     return kept or None
 
 
-def message_view(m: AiMessage) -> dict[str, Any]:
+def message_view(m: AiMessage, refs: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+    """``refs``: the excerpts sent so far in the conversation (ref -> record); a reply's citations and visuals are
+    resolved against them only."""
+    visuals = visual_blocks.from_reply(m.text, refs=list(refs) if refs else None) if m.role == "assistant" else []
+    cited = chat_material.citations(m.text, refs or {}) if m.role == "assistant" else {}
+    for v in visuals:
+        for ref in v.get("block", {}).get("source_refs", []):
+            if refs and ref in refs and ref not in cited:
+                cited[ref] = {k: refs[ref][k] for k in ("section_id", "source_id", "filename", "label")}
     return {
         "id": str(m.id),
         "position": m.position,
@@ -69,7 +77,10 @@ def message_view(m: AiMessage) -> dict[str, Any]:
         "duration_ms": m.duration_ms,
         "error_code": m.error_code,
         # Checked again on every read, so a stricter check also applies to replies saved earlier.
-        "visuals": visual_blocks.from_reply(m.text) if m.role == "assistant" else [],
+        "visuals": visuals,
+        "citations": cited,
+        # On the learner's message: which excerpts of their chosen files were sent with it.
+        "context": m.context or [] if m.role == "user" else [],
     }
 
 
@@ -108,13 +119,15 @@ def _totals(rows: list[AiMessage]) -> dict[str, int]:
 def conversation_view(db: Session, conv: AiConversation) -> dict[str, Any]:
     messages = _messages(db, conv.id)
     _, trimmed = history(messages)
+    views = [message_view(m, chat_material.refs_for(messages, m.position)) for m in messages]
     return {
         "id": str(conv.id),
         "title": conv.title,
         "created_at": conv.created_at.isoformat(),
         "updated_at": conv.updated_at.isoformat(),
         "deleted_at": conv.deleted_at.isoformat() if conv.deleted_at else None,
-        "messages": [message_view(m) for m in messages],
+        "messages": views,
+        "material": chat_material.sources_view(db, conv),
         "totals": _totals(messages),
         "older_turns_not_sent": trimmed,
     }

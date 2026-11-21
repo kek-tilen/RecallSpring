@@ -20,17 +20,17 @@ from ..config import get_settings
 from ..db import get_db
 from ..deps import Ctx, WriteCtx, csrf_ctx, current_ctx, write_ctx
 from ..errors import ApiError
-from ..schemas import ChatGptConversationPatch, ChatGptMessageIn
+from ..schemas import ChatGptConversationPatch, ChatGptMaterialIn, ChatGptMessageIn
 from ..services import ai_conversations as conv_svc
-from ..services import visual_blocks
+from ..services import chat_material, visual_blocks
 from ..services.events import audit
 
 router = APIRouter(tags=["chatgpt"])
 
 INSTRUCTIONS = (
     "You are ChatGPT, used from RecallSpring, a study app the learner runs on their own computer. You cannot see "
-    "the learner's course material or records here. Answer clearly and briefly, in the language the learner writes "
-    "in."
+    "the learner's records here, only excerpts of files they choose for a conversation (when there are any). Answer "
+    "clearly and briefly, in the language the learner writes in."
 )
 MESSAGES = {
     "not_connected": (409, "Sign in with ChatGPT first."),
@@ -148,13 +148,23 @@ def send_message(
     conv, question = conv_svc.save_question(
         db, ctx.user, payload.conversation_id, payload.model, payload.message, ctx.idempotency_key
     )
+    if payload.conversation_id is None and payload.source_ids:
+        chat_material.set_chosen(db, ctx.user, conv, payload.source_ids, ctx.request_id)
     db.commit()  # saved before ChatGPT is asked
-    turns, _ = conv_svc.history(conv_svc._messages(db, conv.id))
-    db.commit()  # no transaction stays open while waiting for ChatGPT
+    messages = conv_svc._messages(db, conv.id)
+    earlier = [m for m in messages if m.id != question.id]
+    records, excerpts, how = chat_material.gather(db, conv, payload.message, earlier)
+    question.context = records or None
+    turns, _ = conv_svc.history(messages)
+    db.commit()  # what is sent is recorded before the request; no transaction stays open while waiting
+    parts = [INSTRUCTIONS]
+    if payload.visuals:
+        parts.append(visual_blocks.INSTRUCTIONS)
+    if excerpts:
+        parts.append(chat_material.instructions(excerpts, how))
     started = time.monotonic()
     try:
-        instructions = "\n\n".join((INSTRUCTIONS, visual_blocks.INSTRUCTIONS)) if payload.visuals else INSTRUCTIONS
-        result = siwc.reply(ctx.user.id, payload.model, instructions, turns)
+        result = siwc.reply(ctx.user.id, payload.model, "\n\n".join(parts), turns)
     except siwc.SiwcError as exc:
         conv_svc.save_failure(db, question, exc.code, int((time.monotonic() - started) * 1000))
         audit(
@@ -163,7 +173,7 @@ def send_message(
             action="ai.chatgpt_message",
             target_type="ai_conversation",
             target_id=conv.id,
-            details={"model": payload.model, "outcome": exc.code},
+            details={"model": payload.model, "outcome": exc.code, "excerpts": len(records)},
             request_id=ctx.request_id,
         )
         db.commit()
@@ -193,7 +203,9 @@ def send_message(
             "turns": len(turns),
             "usage": reply.usage,
             "visuals_allowed": payload.visuals,
-            "visuals": [v["ok"] for v in visual_blocks.from_reply(result.text)],
+            "visuals": [v["ok"] for v in visual_blocks.from_reply(result.text, refs=[r["ref"] for r in records])],
+            "excerpts": len(records),
+            "excerpts_chosen_by": how,
         },
         request_id=ctx.request_id,
     )
@@ -209,6 +221,22 @@ def rename_conversation(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     conv = conv_svc.rename(db, ctx.user, conversation_id, payload.title)
+    db.commit()
+    return conv_svc.conversation_view(db, conv)
+
+
+@router.put("/ai/chatgpt/conversations/{conversation_id}/material")
+def choose_material(
+    conversation_id: uuid.UUID,
+    payload: ChatGptMaterialIn,
+    ctx: Ctx = Depends(csrf_ctx),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """The files whose matching excerpts are sent with this conversation's next messages (empty: none)."""
+    conv = conv_svc.get(db, ctx.user, conversation_id, for_update=True)
+    if conv.deleted_at is not None:
+        raise ApiError(409, "conversation_deleted", "This conversation was deleted. Restore it to continue.")
+    chat_material.set_chosen(db, ctx.user, conv, payload.source_ids, ctx.request_id)
     db.commit()
     return conv_svc.conversation_view(db, conv)
 

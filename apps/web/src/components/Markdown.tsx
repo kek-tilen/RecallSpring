@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { Link } from "react-router";
 import { Visual, type VisualResult } from "./Visual";
 
 /**
@@ -9,6 +10,15 @@ import { Visual, type VisualResult } from "./Visual";
  */
 
 export const VISUAL_LANG = "recallspring-visual";
+
+/** An excerpt of the learner's own material that was really sent with the question ("S2"), resolved by the server. */
+export interface Cite {
+  section_id: string;
+  source_id: string;
+  filename: string;
+  label: string;
+}
+export type Cites = Record<string, Cite>;
 
 type Block =
   | { kind: "p"; lines: string[] }
@@ -117,7 +127,8 @@ export function parseBlocks(source: string): Block[] {
   return blocks;
 }
 
-const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*|__[^_\n]+__)|(\*[^*\s][^*\n]*\*|_[^_\s][^_\n]*_)|(\[[^\]\n]+\]\((https?:\/\/[^\s)]+)\))/;
+const INLINE =
+  /(`[^`\n]+`)|(\*\*[^*\n]+\*\*|__[^_\n]+__)|(\*[^*\s][^*\n]*\*|_[^_\s][^_\n]*_)|(\[[^\]\n]+\]\((https?:\/\/[^\s)]+)\))|\[(S\d{1,4})\]/;
 
 function safeUrl(url: string): string | null {
   try {
@@ -128,7 +139,17 @@ function safeUrl(url: string): string | null {
   }
 }
 
-export function inline(text: string, key = "i"): ReactNode[] {
+/** A citation such as [S2]: a link to the cited file when the server confirmed it was sent, otherwise plain text. */
+function Citation({ id, cite }: { id: string; cite: Cite | undefined }) {
+  if (!cite) return <>{`[${id}]`}</>;
+  return (
+    <Link className="cite" to={`/library/${cite.source_id}`} title={`${cite.filename} · ${cite.label}`} aria-label={`Source ${id}: ${cite.filename}, ${cite.label}`}>
+      {id}
+    </Link>
+  );
+}
+
+export function inline(text: string, key = "i", cites?: Cites): ReactNode[] {
   const out: ReactNode[] = [];
   let rest = text;
   let n = 0;
@@ -142,8 +163,9 @@ export function inline(text: string, key = "i"): ReactNode[] {
     const token = m[0];
     const k = `${key}-${n++}`;
     if (m[1]) out.push(<code key={k}>{token.slice(1, -1)}</code>);
-    else if (m[2]) out.push(<strong key={k}>{inline(token.slice(2, -2), k)}</strong>);
-    else if (m[3]) out.push(<em key={k}>{inline(token.slice(1, -1), k)}</em>);
+    else if (m[2]) out.push(<strong key={k}>{inline(token.slice(2, -2), k, cites)}</strong>);
+    else if (m[3]) out.push(<em key={k}>{inline(token.slice(1, -1), k, cites)}</em>);
+    else if (m[6]) out.push(cites ? <Citation key={k} id={m[6]} cite={cites[m[6]]} /> : token);
     else if (m[4]) {
       const label = token.slice(1, token.indexOf("]("));
       const href = safeUrl(m[5]!);
@@ -162,20 +184,30 @@ export function inline(text: string, key = "i"): ReactNode[] {
   return out;
 }
 
-function List({ items, ordered, start }: { items: { text: string; depth: number }[]; ordered: boolean; start: number }) {
+function List({ items, ordered, start, cites }: { items: { text: string; depth: number }[]; ordered: boolean; start: number; cites?: Cites }) {
   const Tag = ordered ? "ol" : "ul";
   return (
     <Tag start={ordered && start !== 1 ? start : undefined}>
       {items.map((it, i) => (
         <li key={i} style={it.depth ? { marginLeft: `${it.depth * 1.25}em` } : undefined}>
-          {inline(it.text, `l${i}`)}
+          {inline(it.text, `l${i}`, cites)}
         </li>
       ))}
     </Tag>
   );
 }
 
-export function Markdown({ text, visuals, source = "the model" }: { text: string; visuals?: VisualResult[]; source?: string }) {
+export function Markdown({
+  text,
+  visuals,
+  source = "the model",
+  cites,
+}: {
+  text: string;
+  visuals?: VisualResult[];
+  source?: string;
+  cites?: Cites;
+}) {
   let visual = 0;
   return (
     <div className="md">
@@ -183,11 +215,11 @@ export function Markdown({ text, visuals, source = "the model" }: { text: string
         switch (b.kind) {
           case "h": {
             const Tag = b.level <= 2 ? "h3" : b.level === 3 ? "h4" : "h5";
-            return <Tag key={i}>{inline(b.text, `h${i}`)}</Tag>;
+            return <Tag key={i}>{inline(b.text, `h${i}`, cites)}</Tag>;
           }
           case "code":
             if (visuals && b.lang.toLowerCase() === VISUAL_LANG) {
-              return <Visual key={i} result={visuals[visual++]} raw={b.text} source={source} />;
+              return <Visual key={i} result={visuals[visual++]} raw={b.text} source={source} cites={cites} />;
             }
             return (
               <pre key={i} className="md-code" aria-label={b.lang ? `${b.lang} code` : "Code"}>
@@ -195,9 +227,9 @@ export function Markdown({ text, visuals, source = "the model" }: { text: string
               </pre>
             );
           case "list":
-            return <List key={i} items={b.items} ordered={b.ordered} start={b.start} />;
+            return <List key={i} items={b.items} ordered={b.ordered} start={b.start} cites={cites} />;
           case "quote":
-            return <blockquote key={i}>{b.lines.map((l, j) => <p key={j}>{inline(l, `q${i}-${j}`)}</p>)}</blockquote>;
+            return <blockquote key={i}>{b.lines.map((l, j) => <p key={j}>{inline(l, `q${i}-${j}`, cites)}</p>)}</blockquote>;
           case "table":
             return (
               <div key={i} className="table-wrap">
@@ -205,7 +237,7 @@ export function Markdown({ text, visuals, source = "the model" }: { text: string
                   <thead>
                     <tr>
                       {b.head.map((c, j) => (
-                        <th key={j}>{inline(c, `t${i}-${j}`)}</th>
+                        <th key={j}>{inline(c, `t${i}-${j}`, cites)}</th>
                       ))}
                     </tr>
                   </thead>
@@ -213,7 +245,7 @@ export function Markdown({ text, visuals, source = "the model" }: { text: string
                     {b.rows.map((r, j) => (
                       <tr key={j}>
                         {r.map((c, k) => (
-                          <td key={k}>{inline(c, `t${i}-${j}-${k}`)}</td>
+                          <td key={k}>{inline(c, `t${i}-${j}-${k}`, cites)}</td>
                         ))}
                       </tr>
                     ))}
@@ -229,7 +261,7 @@ export function Markdown({ text, visuals, source = "the model" }: { text: string
                 {b.lines.map((l, j) => (
                   <Fragment key={j}>
                     {j > 0 && <br />}
-                    {inline(l, `p${i}-${j}`)}
+                    {inline(l, `p${i}-${j}`, cites)}
                   </Fragment>
                 ))}
               </p>
