@@ -667,6 +667,8 @@ class AiConversation(Base):
     user_id: Mapped[uuid.UUID] = _owner()
     provider: Mapped[str] = mapped_column(String(20), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Study mode (migration 0017): the course this conversation studies; null for a general chat.
+    course_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courses.id"))
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -698,6 +700,9 @@ class AiMessage(Base):
     # On a learner's message: the excerpts of their chosen material sent with it ([{ref, section_id, source_id,
     # filename, label, chars}]); replies cite them by ref ("S1").
     context: Mapped[list[Any] | None] = mapped_column(JSONB)
+    # On a learner's message (migration 0017): what ChatGPT read or saved in RecallSpring while answering it
+    # ([{call_id, name, arguments, status, error_code, summary, ms, form?}]); the tools' outputs are not stored.
+    tool_calls: Mapped[list[Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = _created()
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
