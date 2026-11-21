@@ -53,6 +53,7 @@
 | OpenAI: "Sign in with ChatGPT" in the local app first (proof of concept: sign-in, models, saved conversations, sign-out; not used for tutoring yet), a ChatGPT connector later (needs public HTTPS and OAuth; plan only) | Approved 2026-11-21 (owner in chat; ADR-008, `docs/chatgpt-connector-plan.md`) |
 | ChatGPT conversations are saved in RecallSpring, and each reply records the model and version that answered, time, duration, account and token usage. They stay after signing out of ChatGPT or RecallSpring (the ChatGPT sign-in also stays across RecallSpring sign-outs); deleting is confirmed, soft and restorable for 30 days | Approved 2026-11-21 (owner in chat) |
 | ChatGPT conversations get their own **Chat** page in the main navigation (list, thread, composer, rename/delete, reply details on click); Settings keeps only the connection; replies are shown with formatting from a built-in Markdown subset that never runs model-written HTML/JS/CSS | Approved 2026-11-21 (owner in chat) |
+| ChatGPT replies may include **visual explanations** as allowlisted JSON blocks (`recallspring-visual`: process flow, concept map, comparison, timeline, chart, slider over built-in formulas), checked on the server and drawn by RecallSpring; never model HTML/JS/CSS; a `Visuals` switch by the composer; ChatGPT charts always labelled illustrative and "not checked against your material" | Approved 2026-11-21 (owner in chat) |
 
 ## Working assumptions (do not mistake for owner approval)
 
