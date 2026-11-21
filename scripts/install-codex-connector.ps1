@@ -41,7 +41,8 @@ try {
 
 if ($NewToken -or -not (Test-Path $tokenFile)) {
     if (-not $Username) { throw "Pass -Username <your RecallSpring user name> so a Codex token can be created." }
-    & $cli connector-token --username $Username --client codex --file $tokenFile
+    Push-Location (Join-Path $root "services\api")   # the CLI reads the database settings from services\api\.env
+    try { & $cli connector-token --username $Username --client codex --file $tokenFile } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "Could not create the Codex token (see the message above)." }
 } else {
     Write-Host "Using the existing Codex token in $tokenFile (pass -NewToken to replace it)."
