@@ -632,11 +632,16 @@ class ConnectorToken(Base):
     label: Mapped[str] = mapped_column(String(100), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     scope: Mapped[str] = mapped_column(String(20), nullable=False, server_default="connector", default="connector")
+    # Which assistant uses this token; labels its grades ("Claude", "Codex"). Migration 0016.
+    client: Mapped[str] = mapped_column(String(20), nullable=False, server_default="claude", default="claude")
     created_at: Mapped[datetime] = _created()
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    __table_args__ = (CheckConstraint("scope IN ('connector')", name="scope"),)
+    __table_args__ = (
+        CheckConstraint("scope IN ('connector')", name="scope"),
+        CheckConstraint("client IN ('claude','codex')", name="client"),
+    )
 
 
 class ConnectorUsage(Base):
