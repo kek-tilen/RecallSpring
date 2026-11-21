@@ -9,6 +9,7 @@ import {
   RUN_STORAGE_KEY,
   advance,
   clockText,
+  focusOn,
   pause,
   phaseEndMessage,
   readQueue,
@@ -44,6 +45,8 @@ interface PomodoroApi {
   skip: () => void;
   reset: () => void;
   setCourse: (courseId: string | null) => void;
+  /** Focus on this course now, with only the timer over the window (the plan's Start focus). */
+  startFocus: (courseId: string) => void;
 }
 
 const Ctx = createContext<PomodoroApi | null>(null);
@@ -210,6 +213,11 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
       skip: () => apply(advance(runRef.current, settingsRef.current, Date.now(), false, newKey), false),
       reset: () => apply(resetRun(runRef.current, settingsRef.current, Date.now()), false),
       setCourse: (courseId) => commit({ ...runRef.current, courseId }),
+      startFocus: (courseId) => {
+        primeAudio();
+        commit(focusOn(runRef.current, settingsRef.current, Date.now(), courseId, newKey));
+        setFocusMode(true);
+      },
     }),
     [settings, run, now, left, unsaved, focusMode, commit, apply],
   );

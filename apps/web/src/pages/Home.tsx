@@ -5,6 +5,7 @@ import { Async, Card, Empty, PageHead, StudyChip } from "../components/ui";
 import { WeekCard } from "./Week";
 import { dateLabel, longToday, plural } from "../format";
 import { useDashboard, useFocusSummary } from "../queries";
+import { usePomodoro } from "../components/Pomodoro";
 import { FocusTime } from "./Focus";
 import type { AttentionItem, PlanItem, TargetCapacity } from "../types";
 
@@ -131,7 +132,10 @@ export function HomePage() {
                                 </div>
                               )}
                             </div>
-                            <span className="muted small">{item.estimated_minutes} min</span>
+                            <div className="plan-side">
+                              <span className="muted small">{item.estimated_minutes} min</span>
+                              <StartFocus courseId={item.course_id} course={item.course_title} />
+                            </div>
                           </li>
                         ))}
                       </ul>
@@ -221,5 +225,21 @@ function FocusCard() {
     <Card title="Focus time" action={<Link to="/focus" className="small">Open Focus</Link>}>
       <FocusTime s={summary.data} compact />
     </Card>
+  );
+}
+
+/** Starts a Pomodoro focus block for this item's course at once and shows only the timer. */
+function StartFocus({ courseId, course }: { courseId: string; course: string }) {
+  const p = usePomodoro();
+  const busy = p.run.status === "running" && p.run.phase === "focus" && p.run.courseId === courseId;
+  return (
+    <button
+      type="button"
+      className="btn small"
+      aria-label={busy ? `Show the focus timer for ${course}` : `Start focus on ${course}`}
+      onClick={() => p.startFocus(courseId)}
+    >
+      {busy ? "Show focus" : "Start focus"}
+    </button>
   );
 }

@@ -256,6 +256,22 @@ export function advance(
   return { run: next, log, from: run.phase };
 }
 
+/**
+ * "Start focus" from the plan on Today: a focus block for this course, now. A break is ended early (breaks are never
+ * saved); a focus block already under way continues and counts for this course.
+ */
+export function focusOn(
+  run: RunState,
+  settings: PomodoroSettings,
+  now: number,
+  courseId: string,
+  newId: () => string,
+): RunState {
+  const inFocus = run.phase === "focus" ? run : advance(run, settings, now, false, newId).run;
+  const next = { ...inFocus, courseId };
+  return next.status === "running" ? next : start(next, now, newId);
+}
+
 /** Back to the first focus block of a cycle. A focus block with a minute of focus is kept as stopped early. */
 export function reset(run: RunState, settings: PomodoroSettings, now: number): Transition {
   return { run: initialRun(settings, run.courseId), log: logFor(run, now, false), from: run.phase };

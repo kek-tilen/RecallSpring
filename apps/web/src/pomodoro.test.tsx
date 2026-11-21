@@ -7,6 +7,7 @@ import {
   advance,
   cleanSettings,
   clockText,
+  focusOn,
   initialRun,
   pause,
   readRun,
@@ -123,6 +124,22 @@ describe("Pomodoro timer", () => {
     expect(readRun(DEFAULT_SETTINGS)).toEqual(run);
     localStorage.setItem("rs-pomodoro-run", '{"phase":"nap"}');
     expect(readRun(DEFAULT_SETTINGS)).toEqual(initialRun(DEFAULT_SETTINGS));
+  });
+
+  it("starts focus on a course from the plan", () => {
+    const s = DEFAULT_SETTINGS;
+    // Not started: a focus block for this course, running now.
+    const fresh = focusOn(initialRun(s), s, 0, "stats", id);
+    expect(fresh).toMatchObject({ phase: "focus", status: "running", courseId: "stats", endsAt: 45 * MIN });
+    // Paused focus block: resumed, and it counts for the chosen course.
+    const paused = pause(start(initialRun(s, "other"), 0, id), 5 * MIN);
+    const resumed = focusOn(paused, s, 10 * MIN, "stats", id);
+    expect(resumed).toMatchObject({ status: "running", courseId: "stats", blockId: paused.blockId, endsAt: 50 * MIN });
+    // During a break: the break ends early (nothing saved) and focus block 2 starts.
+    const brk = finish(initialRun(s), s, 0).run;
+    expect(brk.phase).toBe("short");
+    const next = focusOn(start(brk, 45 * MIN, id), s, 47 * MIN, "stats", id);
+    expect(next).toMatchObject({ phase: "focus", round: 2, status: "running", courseId: "stats", endsAt: 92 * MIN });
   });
 
   it("formats the clock", () => {

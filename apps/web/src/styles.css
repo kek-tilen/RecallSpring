@@ -1155,6 +1155,22 @@ tbody tr:hover td {
   }
 }
 
+.plan-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .plan-side {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
 .plan-item .why {
   color: var(--muted);
   font-size: 0.875rem;
