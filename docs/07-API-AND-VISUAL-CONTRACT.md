@@ -84,7 +84,9 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/ai/chatgpt/conversations/{id}/restore` | Restore within 30 days; audited |
 | POST | `/ai/chatgpt/disconnect` | Revoke at OpenAI (best effort) and delete the tokens here; audited |
 | POST | `/focus-sessions` | One finished or stopped Pomodoro focus block `{client_session_id, course_id?, started_at, ended_at, planned_minutes 1–240, focused_seconds 60–14 400, completed}` (owner session + CSRF). Same `client_session_id` again returns the saved block (200, `Idempotent-Replay`). `422` for `ended_before_start`, `focus_time_out_of_range` (in the future or over 7 days old), `focus_longer_than_block`; `404` for a course that is not the learner's. Records `focus.completed` / `focus.stopped` |
-| GET | `/focus/summary` | Focus time today, the last 7 days by day (learner's time zone) and by course, and the latest 8 blocks |
+| GET | `/focus/summary` | Focus time today, the last 7 days by day (learner's time zone) and by course, the latest 8 blocks, `removed` (blocks removed in the last `restore_days` = 30 days) |
+| DELETE | `/focus-sessions/{id}` | Remove a wrongly timed block after the learner confirmed it (owner session + CSRF): soft delete, no longer counted anywhere (summary, Claude's `focus_time`); audited `focus.deleted`; returns the summary. Removing again changes nothing |
+| POST | `/focus-sessions/{id}/restore` | Count a removed block again within 30 days (`409 restore_period_over` after); audited `focus.restored`; returns the summary |
 | GET | `/health/live` | Liveness, no secrets |
 | GET | `/health/ready` | DB and storage checks, restricted if exposed |
 

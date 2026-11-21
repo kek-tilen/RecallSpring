@@ -39,7 +39,7 @@
 | `assessments` | `id`, attempt, evaluator/model/version, grade 0–4 or NULL, rubric subscores, feedback, evidence, uncertainty, status (`final/provisional/ungraded`), created_at |
 | `mastery_state` | user/concept key, evidence_count, last_success_at, estimated level band, confidence low/medium/high, last recomputed_at |
 | `review_state` | user/concept key, interval_days, last_review_at, due_at, consecutive_successes, lapse_count, scheduling policy version |
-| `focus_sessions` | id, owner, optional course, client session id (unique per owner, so a retry is not counted twice), started/ended at, planned minutes (1–240), focused seconds (60–14 400, pauses excluded), completed or stopped early; append-only time spent, never evidence of learning (migration 0014) |
+| `focus_sessions` | id, owner, optional course, client session id (unique per owner, so a retry is not counted twice), started/ended at, planned minutes (1–240), focused seconds (60–14 400, pauses excluded), completed or stopped early, `deleted_at` (a wrongly timed block the learner removed after confirming; restorable for 30 days, audited; migration 0015); time spent, never evidence of learning (migration 0014) |
 | `learning_events` | id, owner, entity, event type, immutable payload, timestamp, correlation id |
 | `sync_operations` | owner/device/idempotency key unique, object, base revision, patch checksum, state, server timestamp |
 | `jobs` | id, owner, type, payload ref, state, retries, locked_until, attempt count, last_error (sanitized), created/updated |

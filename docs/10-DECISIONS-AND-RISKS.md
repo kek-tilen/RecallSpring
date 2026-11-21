@@ -59,6 +59,7 @@
 | Themes: RecallSpring White and RecallSpring Dark plus Solarized Light, Nord, Dracula and Gruvbox Dark (adapted to WCAG AA); the menu rail can be hidden | Approved 2026-11-21 (owner in chat) |
 | Pomodoro timer: 45 / 10 / 15 min and a long break after 4 blocks by default, all changeable; faces Default, Flip Clock, Progress Bar, Dot Matrix, Pie and Ring; focus mode with colour backgrounds or the learner's own image kept only in the browser; finished focus blocks saved per course as study time (effort, not mastery) and shown to Claude; a chime and an optional desktop notification when a phase ends | Approved 2026-11-21 (owner chose own image + colours, logging per course, chime + notification; the sixth face in the screenshot was left out) |
 | `Start focus` on each item of Today's plan: starts a Pomodoro focus block for that course at once (ends a break early) and shows the timer over the window | Approved 2026-11-21 (owner in chat) |
+| A wrongly timed focus block can be removed after confirming (soft delete, restorable for 30 days, audited); its learning event stays | Approved 2026-11-21 (owner asked for it) |
 
 ## Working assumptions (do not mistake for owner approval)
 
