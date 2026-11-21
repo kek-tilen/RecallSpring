@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock
 from ..errors import ApiError
-from ..models import AiConversation, AiMessage, User
+from ..models import AiConversation, AiMessage, Course, User
 from . import chat_material, visual_blocks
 from .events import audit
 
@@ -53,6 +53,26 @@ def _usage(raw: dict[str, Any] | None) -> dict[str, int] | None:
     return kept or None
 
 
+def combine_usage(raws: list[dict[str, Any] | None]) -> dict[str, Any] | None:
+    """Usage of all responses of one turn (with tools there is one per round), in OpenAI's shape."""
+    parts = [u for u in (_usage(r) for r in raws) if u]
+    if not parts:
+        return None
+
+    def total(key: str) -> int | None:
+        values = [p[key] for p in parts if key in p]
+        return sum(values) if values else None
+
+    out: dict[str, Any] = {
+        "input_tokens": total("input_tokens"),
+        "output_tokens": total("output_tokens"),
+        "total_tokens": total("total_tokens"),
+        "input_tokens_details": {"cached_tokens": total("cached_tokens")},
+        "output_tokens_details": {"reasoning_tokens": total("reasoning_tokens")},
+    }
+    return out
+
+
 def message_view(m: AiMessage, refs: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     """``refs``: the excerpts sent so far in the conversation (ref -> record); a reply's citations and visuals are
     resolved against them only."""
@@ -81,6 +101,8 @@ def message_view(m: AiMessage, refs: dict[str, dict[str, Any]] | None = None) ->
         "citations": cited,
         # On the learner's message: which excerpts of their chosen files were sent with it.
         "context": m.context or [] if m.role == "user" else [],
+        # On the learner's message: what ChatGPT read or saved in RecallSpring while answering it.
+        "tool_calls": m.tool_calls or [] if m.role == "user" else [],
     }
 
 
@@ -120,9 +142,13 @@ def conversation_view(db: Session, conv: AiConversation) -> dict[str, Any]:
     messages = _messages(db, conv.id)
     _, trimmed = history(messages)
     views = [message_view(m, chat_material.refs_for(messages, m.position)) for m in messages]
+    course = db.get(Course, conv.course_id) if conv.course_id else None
     return {
         "id": str(conv.id),
         "title": conv.title,
+        "course": {"id": str(course.id), "title": course.title}
+        if course is not None and course.deleted_at is None
+        else None,
         "created_at": conv.created_at.isoformat(),
         "updated_at": conv.updated_at.isoformat(),
         "deleted_at": conv.deleted_at.isoformat() if conv.deleted_at else None,
@@ -215,12 +241,20 @@ def save_question(
     model: str,
     text: str,
     client_request_id: uuid.UUID,
+    course_id: uuid.UUID | None = None,
 ) -> tuple[AiConversation, AiMessage]:
-    """Save the learner's message (a new conversation when none is given). The caller commits before calling
-    ChatGPT."""
+    """Save the learner's message (a new conversation when none is given; ``course_id`` makes it a study
+    conversation, checked by the caller). The caller commits before calling ChatGPT."""
     now = clock.now()
     if conversation_id is None:
-        conv = AiConversation(user_id=user.id, provider=PROVIDER, title=_title(text), created_at=now, updated_at=now)
+        conv = AiConversation(
+            user_id=user.id,
+            provider=PROVIDER,
+            title=_title(text),
+            course_id=course_id,
+            created_at=now,
+            updated_at=now,
+        )
         db.add(conv)
         db.flush()
     else:

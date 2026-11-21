@@ -11,6 +11,9 @@ import type { ConceptRow } from "../types";
  * Pages an assistant links to when it cannot show RecallSpring's forms inside its chat (e.g. Codex): answer one
  * question, or summarise what was just taught. The text is saved exactly as typed, before any assistant sees it.
  * A draft stays in this browser until it is saved, so closing the tab loses nothing.
+ *
+ * The same forms appear inside RecallSpring's Chat when ChatGPT asks for them (ChatAnswerForm, ChatSummaryForm):
+ * there, saving also tells ChatGPT (onSaved), so the learner does not have to.
  */
 
 interface QuestionView {
@@ -89,13 +92,21 @@ export function AnswerPage() {
   );
 }
 
-function AnswerForm({ q, sessionId }: { q: QuestionView; sessionId: string | null }) {
+/** In Chat: the answer form ChatGPT asked for. ``onSaved`` runs after the answer is saved (then ChatGPT is told). */
+export function ChatAnswerForm({ questionId, onSaved }: { questionId: string; onSaved: (kind: AnswerKind) => void }) {
+  const question = useQuery({ queryKey: ["questions", questionId], queryFn: () => get<QuestionView>(`/questions/${questionId}`) });
+  return <Async q={question}>{(q) => <AnswerForm q={q} sessionId={null} onSaved={onSaved} />}</Async>;
+}
+
+export type AnswerKind = "answer" | "dont_know";
+
+function AnswerForm({ q, sessionId, onSaved }: { q: QuestionView; sessionId: string | null; onSaved?: (kind: AnswerKind) => void }) {
   const qc = useQueryClient();
   const [draft, setText, clearDraft] = useDraft(`rs-answer-draft:${q.id}`);
   const [openNotes, setOpenNotes] = useState(false);
   const [saved, setSaved] = useState<Saved | null>(null);
   const save = useMutation({
-    mutationFn: (kind: "answer" | "dont_know") =>
+    mutationFn: (kind: AnswerKind) =>
       request<Saved>("/attempts", {
         key: draft.key,
         json: {
@@ -107,13 +118,22 @@ function AnswerForm({ q, sessionId }: { q: QuestionView; sessionId: string | nul
           answer_mode: openNotes ? "open_notes" : "closed_notes",
         },
       }),
-    onSuccess: (s) => {
+    onSuccess: (s, kind) => {
       clearDraft();
       setSaved(s);
       void qc.invalidateQueries({ queryKey: keys.dashboard });
+      void qc.invalidateQueries({ queryKey: ["questions", q.id] });
+      onSaved?.(kind);
     },
   });
 
+  if (saved && onSaved) {
+    return (
+      <p className="notice small" role="status" style={{ margin: 0 }}>
+        Your answer was saved at {dateTime(saved.saved_at)} and ChatGPT was told.
+      </p>
+    );
+  }
   if (saved) {
     return (
       <Card title="Saved">
@@ -156,7 +176,7 @@ function AnswerForm({ q, sessionId }: { q: QuestionView; sessionId: string | nul
         {save.error && <ErrorNote error={save.error} />}
         <div className="row">
           <button type="submit" className="btn primary" disabled={!draft.text.trim() || save.isPending}>
-            Save answer
+            {onSaved ? "Save and send to ChatGPT" : "Save answer"}
           </button>
           <button type="button" className="btn ghost" disabled={save.isPending} onClick={() => save.mutate("dont_know")}>
             I don't know
@@ -206,7 +226,45 @@ export function SummaryPage() {
   );
 }
 
-function SummaryForm({ courseId, title, covered, concepts }: { courseId: string; title: string; covered: string | null; concepts: ConceptRow[] }) {
+/** In Chat: the summary form ChatGPT asked for after teaching a chunk. */
+export function ChatSummaryForm({
+  courseId,
+  conceptIds,
+  title,
+  covered,
+  onSaved,
+}: {
+  courseId: string;
+  conceptIds: string[];
+  title: string;
+  covered: string | null;
+  onSaved: () => void;
+}) {
+  const concepts = useQuery({ queryKey: ["courses", courseId, "concepts"], queryFn: () => get<ConceptRow[]>(`/courses/${courseId}/concepts`) });
+  return (
+    <Async q={concepts}>
+      {(rows) => {
+        const chosen = rows.filter((c) => conceptIds.includes(c.id));
+        if (chosen.length === 0) return <p className="notice warn small">These topics are no longer in the course.</p>;
+        return <SummaryForm courseId={courseId} title={title} covered={covered} concepts={chosen} onSaved={onSaved} />;
+      }}
+    </Async>
+  );
+}
+
+function SummaryForm({
+  courseId,
+  title,
+  covered,
+  concepts,
+  onSaved,
+}: {
+  courseId: string;
+  title: string;
+  covered: string | null;
+  concepts: ConceptRow[];
+  onSaved?: () => void;
+}) {
   const qc = useQueryClient();
   const [draft, setText, clearDraft] = useDraft(`rs-summary-draft:${courseId}:${title}`);
   const [done, setDone] = useState<SummarySaved | null>(null);
@@ -221,9 +279,17 @@ function SummaryForm({ courseId, title, covered, concepts }: { courseId: string;
       setDone(s);
       void qc.invalidateQueries({ queryKey: keys.dashboard });
       void qc.invalidateQueries({ queryKey: keys.course(courseId) });
+      onSaved?.();
     },
   });
 
+  if (done && onSaved) {
+    return (
+      <p className="notice small" role="status" style={{ margin: 0 }}>
+        {done.note_id ? "Your summary was saved as a note" : "Saved"}; these topics now count as studied. ChatGPT was told.
+      </p>
+    );
+  }
   if (done) {
     return (
       <Card title="Saved">
@@ -257,7 +323,7 @@ function SummaryForm({ courseId, title, covered, concepts }: { courseId: string;
         {save.error && <ErrorNote error={save.error} />}
         <div>
           <button type="submit" className="btn primary" disabled={save.isPending}>
-            Save summary
+            {onSaved ? "Save and send to ChatGPT" : "Save summary"}
           </button>
         </div>
       </form>

@@ -8,6 +8,9 @@ import { Markdown, type Cites } from "../components/Markdown";
 import type { VisualResult } from "../components/Visual";
 import { Confirm, ErrorNote, Loading } from "../components/ui";
 import { dateTime, plural } from "../format";
+import { keys } from "../queries";
+import type { Course } from "../types";
+import { ChatAnswerForm, ChatSummaryForm } from "./Answer";
 
 interface Usage {
   input_tokens?: number;
@@ -34,6 +37,25 @@ interface AiMessage {
   visuals: VisualResult[];
   citations: Cites;
   context: SentExcerpt[];
+  tool_calls: ToolStep[];
+}
+
+/** A form ChatGPT asked RecallSpring to show (services/chat_tools.py). */
+type ToolForm =
+  | { kind: "answer"; question_id: string }
+  | { kind: "summary"; course_id: string; concept_ids: string[]; title: string; covered: string | null }
+  | { kind: "quiz"; quiz_id: string; title: string | null };
+
+/** What ChatGPT read or saved in RecallSpring while answering a message. */
+interface ToolStep {
+  call_id: string;
+  name: string;
+  status: "ok" | "error";
+  error_code: string | null;
+  summary: string;
+  writes: boolean;
+  ms: number;
+  form?: ToolForm;
 }
 
 /** An excerpt of a chosen file that was sent with the learner's message. */
@@ -63,6 +85,7 @@ interface Conversation {
   material: ChosenFile[];
   totals: Totals;
   older_turns_not_sent: boolean;
+  course: { id: string; title: string } | null;
 }
 
 interface ConversationSummary {
@@ -88,6 +111,7 @@ interface Model {
 const LIST_KEY = [...STATUS_KEY, "conversations"] as const;
 const MODEL_STORE = "rs.chatgpt.model";
 const VISUALS_STORE = "rs.chatgpt.visuals";
+const TOOLS_STORE = "rs.chatgpt.recallspring";
 
 const NOT_ANSWERED: Record<string, string> = {
   usage_limit: "your ChatGPT plan's usage limit was reached",
@@ -250,7 +274,111 @@ function CitedSources({ cites }: { cites: Cites }) {
   );
 }
 
-function Thread({ conv, names, pending }: { conv: Conversation | null; names: Map<string, string>; pending: string | null }) {
+/** The steps ChatGPT took in RecallSpring for one message (collapsed; saved steps and problems counted). */
+function ToolSteps({ steps }: { steps: ToolStep[] }) {
+  const saved = steps.filter((s) => s.writes && s.status === "ok").length;
+  const failed = steps.filter((s) => s.status === "error").length;
+  return (
+    <details className="chat-steps tiny">
+      <summary>
+        Used RecallSpring: {plural(steps.length, "step")}
+        {saved > 0 && ` · ${saved} saved`}
+        {failed > 0 && ` · ${failed} not done`}
+      </summary>
+      <ol>
+        {steps.map((s) => (
+          <li key={s.call_id} className={s.status === "error" ? "is-error" : s.writes ? "is-saved" : undefined}>
+            <span className="chat-step-mark" aria-hidden="true">
+              {s.status === "error" ? "!" : s.writes ? "+" : "✓"}
+            </span>
+            {s.status === "error" ? `Not done: ${s.summary}` : s.summary}
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
+
+const FORM_MESSAGES = {
+  answer: (id: string) => `[RecallSpring] I saved my answer to question ${id} in the form. Please give me feedback.`,
+  dont_know: (id: string) => `[RecallSpring] I answered "I don't know" to question ${id} in the form.`,
+  summary: (title: string) => `[RecallSpring] I saved my summary of "${title}" in the form. Please continue.`,
+};
+
+function summaryLink(f: Extract<ToolForm, { kind: "summary" }>): string {
+  const q = new URLSearchParams({ course: f.course_id, concepts: f.concept_ids.join(","), title: f.title });
+  if (f.covered) q.set("covered", f.covered);
+  return `/summary?${q.toString()}`;
+}
+
+/** A form inside the chat. Only the newest turn's forms can be filled in here; older ones link to their page. */
+function ChatForm({ form, live, onSend }: { form: ToolForm; live: boolean; onSend: ((text: string) => void) | null }) {
+  if (form.kind === "quiz") {
+    return (
+      <div className="chat-form-card row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <span className="small">
+          <strong>Simulation{form.title ? `: ${form.title}` : ""}</strong>
+          <span className="muted"> · the clock starts when you open it</span>
+        </span>
+        <Link className="btn small primary" to={`/simulations/${form.quiz_id}`}>
+          Open the simulation
+        </Link>
+      </div>
+    );
+  }
+  if (!live || !onSend) {
+    return (
+      <p className="tiny muted" style={{ margin: 0 }}>
+        {form.kind === "answer" ? (
+          <Link to={`/answer/${form.question_id}`}>Answer form</Link>
+        ) : (
+          <Link to={summaryLink(form)}>Summary form “{form.title}”</Link>
+        )}{" "}
+        (shown earlier)
+      </p>
+    );
+  }
+  return (
+    <div className="chat-form-card">
+      {form.kind === "answer" ? (
+        <ChatAnswerForm questionId={form.question_id} onSaved={(kind) => onSend(FORM_MESSAGES[kind](form.question_id))} />
+      ) : (
+        <ChatSummaryForm
+          courseId={form.course_id}
+          conceptIds={form.concept_ids}
+          title={form.title}
+          covered={form.covered}
+          onSaved={() => onSend(FORM_MESSAGES.summary(form.title))}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Forms of each turn go under that turn's reply (or under the message when there is no reply). */
+function formsByMessage(messages: AiMessage[]): Map<string, { forms: ToolForm[]; live: boolean }> {
+  const out = new Map<string, { forms: ToolForm[]; live: boolean }>();
+  const lastUser = messages.map((m) => m.role).lastIndexOf("user");
+  messages.forEach((m, i) => {
+    const forms = (m.tool_calls ?? []).flatMap((s) => (s.status === "ok" && s.form ? [s.form] : []));
+    if (m.role !== "user" || forms.length === 0) return;
+    const next = messages[i + 1];
+    out.set(next?.role === "assistant" ? next.id : m.id, { forms, live: i === lastUser });
+  });
+  return out;
+}
+
+function Thread({
+  conv,
+  names,
+  pending,
+  onFormSaved,
+}: {
+  conv: Conversation | null;
+  names: Map<string, string>;
+  pending: string | null;
+  onFormSaved: ((text: string) => void) | null;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const count = conv?.messages.length ?? 0;
   useEffect(() => {
@@ -258,13 +386,16 @@ function Thread({ conv, names, pending }: { conv: Conversation | null; names: Ma
     if (box.current) box.current.scrollTop = box.current.scrollHeight;
   }, [count, pending, conv?.id]);
   const messages = conv?.messages ?? [];
+  const forms = formsByMessage(messages);
   return (
     <div ref={box} className="chat-scroll">
       {!messages.length && !pending ? (
         <div className="chat-empty muted">
           <p>
-            Ask ChatGPT anything. With <strong>Material</strong> you choose which of your files it may use; it cites them
-            as S1, S2, … Claude stays your tutor.
+            Ask ChatGPT anything. With <strong>RecallSpring</strong> on, it tutors you from your own courses: it reads your
+            plan, material and notes, asks questions in RecallSpring&apos;s forms and saves feedback, which counts like any
+            assistant&apos;s. Choose a course above to study it. With <strong>+</strong> you add files whose excerpts it gets
+            (cited as S1, S2, …).
           </p>
         </div>
       ) : (
@@ -279,6 +410,7 @@ function Thread({ conv, names, pending }: { conv: Conversation | null; names: Ma
                     {m.model_requested && ` · to ${names.get(m.model_requested) ?? m.model_requested}`}
                   </div>
                   {(m.context?.length ?? 0) > 0 && <SentWith items={m.context} />}
+                  {(m.tool_calls?.length ?? 0) > 0 && <ToolSteps steps={m.tool_calls} />}
                   {m.error_code && (
                     <div className="tiny chat-error">
                       Not answered: {NOT_ANSWERED[m.error_code] ?? m.error_code}. Saved; not sent again.
@@ -292,12 +424,19 @@ function Thread({ conv, names, pending }: { conv: Conversation | null; names: Ma
                   <ReplyMeta m={m} names={names} />
                 </>
               )}
+              {forms.has(m.id) && (
+                <div className="chat-forms">
+                  {forms.get(m.id)!.forms.map((f, i) => (
+                    <ChatForm key={`${f.kind}-${i}`} form={f} live={forms.get(m.id)!.live && !pending} onSend={onFormSaved} />
+                  ))}
+                </div>
+              )}
             </li>
           ))}
           {pending && (
             <li className="chat-msg you">
               <div className="chat-bubble pre">{pending}</div>
-              <div className="tiny muted">Saved · waiting for ChatGPT…</div>
+              <div className="tiny muted">Saved · waiting for ChatGPT (it may read or save in RecallSpring)…</div>
             </li>
           )}
         </ol>
@@ -434,6 +573,12 @@ function TitleBar({ conv, busy }: { conv: Conversation; busy: boolean }) {
         <>
           <div style={{ minWidth: 0 }}>
             <h2 className="chat-title">{conv.title}</h2>
+            {conv.course && (
+              <span className="tiny">
+                Studying <Link to={`/courses/${conv.course.id}`}>{conv.course.title}</Link>
+                {conv.totals.replies > 0 ? " · " : ""}
+              </span>
+            )}
             {conv.totals.replies > 0 && (
               <span className="tiny muted">
                 {totalsLine(conv.totals)} ({number(conv.totals.input_tokens)} in, {number(conv.totals.output_tokens)} out)
@@ -504,6 +649,20 @@ function ChartIcon() {
   );
 }
 
+function BookIcon() {
+  return (
+    <svg {...ICON} width={16} height={16}>
+      <path
+        d="M2.5 4h4.2c1.3 0 2.3 1 2.3 2.2v8c0-.9-.8-1.7-1.8-1.7H2.5zM15.5 4h-4.2C10 4 9 5 9 6.2v8c0-.9.8-1.7 1.8-1.7h4.7z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
+
 function FileIcon() {
   return (
     <svg {...ICON} width={14} height={14}>
@@ -523,6 +682,8 @@ function Composer({
   placeholder,
   visuals,
   onVisuals,
+  tools,
+  onTools,
   material,
   onMaterial,
 }: {
@@ -535,6 +696,8 @@ function Composer({
   placeholder: string;
   visuals: boolean;
   onVisuals: (on: boolean) => void;
+  tools: boolean;
+  onTools: (on: boolean) => void;
   material: { filename: string }[];
   onMaterial: () => void;
 }) {
@@ -620,6 +783,16 @@ function Composer({
           <button
             type="button"
             className="composer-pill"
+            aria-pressed={tools}
+            onClick={() => onTools(!tools)}
+            title="Lets ChatGPT read your courses, material, notes and plan, and save questions and feedback in RecallSpring. It cannot delete anything or change settings."
+          >
+            <BookIcon />
+            RecallSpring
+          </button>
+          <button
+            type="button"
+            className="composer-pill"
             aria-pressed={visuals}
             onClick={() => onVisuals(!visuals)}
             title="Lets ChatGPT add diagrams, charts or a slider, drawn by RecallSpring from checked data. Nothing it writes is run."
@@ -670,6 +843,10 @@ export function ChatPage() {
   });
   const [model, setModel] = useState(() => remembered());
   const [visuals, setVisuals] = useState(() => remembered(VISUALS_STORE) !== "off");
+  const [tools, setTools] = useState(() => remembered(TOOLS_STORE) !== "off");
+  // Study mode for a new conversation: the course ChatGPT starts from ("" = a general chat).
+  const [studyCourse, setStudyCourse] = useState("");
+  const courses = useQuery({ queryKey: keys.courses, queryFn: () => get<Course[]>("/courses"), enabled: tools && !currentId });
   const [sideOpen, setSideOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   // Files chosen before a new conversation's first message (an existing one keeps them on the server).
@@ -688,14 +865,17 @@ export function ChatPage() {
           model: chosen,
           message: text,
           visuals,
-          ...(currentId ? {} : { source_ids: draft.map((f) => f.id) }),
+          recallspring: tools,
+          ...(currentId ? {} : { source_ids: draft.map((f) => f.id), course_id: tools && studyCourse ? studyCourse : null }),
         },
       }),
     onSuccess: (c) => {
       qc.setQueryData([...LIST_KEY, c.id], c);
       void qc.invalidateQueries({ queryKey: LIST_KEY, exact: true });
+      if (tools) void qc.invalidateQueries({ queryKey: keys.dashboard });
       if (c.id !== currentId) {
         setDraft([]);
+        setStudyCourse("");
         navigate(`/chat/${c.id}`, { replace: isNew });
       }
     },
@@ -734,7 +914,7 @@ export function ChatPage() {
         <div style={{ minWidth: 0 }}>
           <h1>Chat</h1>
           <p className="tiny muted" style={{ margin: 0 }}>
-            ChatGPT on your own plan{s?.connected && s.email ? ` (${s.email})` : ""}. Saved here; Claude stays your tutor ·{" "}
+            ChatGPT on your own plan{s?.connected && s.email ? ` (${s.email})` : ""}. Conversations are saved here ·{" "}
             <Link to="/settings#chatgpt">Sign-in and privacy</Link>
           </p>
         </div>
@@ -787,6 +967,19 @@ export function ChatPage() {
           ) : (
             <div className="chat-head">
               <h2 className="chat-title">New conversation</h2>
+              {tools && (courses.data?.length ?? 0) > 0 && (
+                <label className="chat-study small">
+                  Study
+                  <select value={studyCourse} onChange={(e) => setStudyCourse(e.target.value)}>
+                    <option value="">No course (general chat)</option>
+                    {courses.data!.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
           )}
           {currentId && conv.isPending ? (
@@ -798,7 +991,12 @@ export function ChatPage() {
               <ErrorNote error={conv.error} />
             </div>
           ) : (
-            <Thread conv={current} names={names} pending={send.isPending ? (send.variables ?? null) : null} />
+            <Thread
+              conv={current}
+              names={names}
+              pending={send.isPending ? (send.variables ?? null) : null}
+              onFormSaved={canSend && chosen ? (text) => send.mutate(text) : null}
+            />
           )}
           <div className="chat-foot">
             {current?.older_turns_not_sent && (
@@ -821,12 +1019,25 @@ export function ChatPage() {
                 setVisuals(on);
                 remember(on ? "on" : "off", VISUALS_STORE);
               }}
+              tools={tools}
+              onTools={(on) => {
+                setTools(on);
+                remember(on ? "on" : "off", TOOLS_STORE);
+              }}
               material={material}
               onMaterial={() => {
                 saveMaterial.reset();
                 setPicking(true);
               }}
-              placeholder={canSend ? (current ? "Write a message" : "Start a new conversation") : "Sign in with ChatGPT to write"}
+              placeholder={
+                !canSend
+                  ? "Sign in with ChatGPT to write"
+                  : current
+                    ? "Write a message"
+                    : studyCourse && tools
+                      ? "Write e.g. “Start studying”"
+                      : "Start a new conversation"
+              }
             />
           </div>
         </section>

@@ -2,7 +2,8 @@
 callback, which is checked by its one-time state instead. Connector tokens cannot reach these routes.
 
 Every request to OpenAI starts from the learner pressing a button; nothing runs in the background. Conversations
-are saved (services/ai_conversations.py) and are not used for tutoring or grading."""
+are saved (services/ai_conversations.py). With "Use RecallSpring" on, ChatGPT tutors through RecallSpring's tools
+(services/chat_tools.py): a few rounds per message, each started by that message, never in the background."""
 
 from __future__ import annotations
 
@@ -20,10 +21,12 @@ from ..config import get_settings
 from ..db import get_db
 from ..deps import Ctx, WriteCtx, csrf_ctx, current_ctx, write_ctx
 from ..errors import ApiError
+from ..models import AiMessage, Course
 from ..schemas import ChatGptConversationPatch, ChatGptMaterialIn, ChatGptMessageIn
 from ..services import ai_conversations as conv_svc
-from ..services import chat_material, visual_blocks
+from ..services import chat_material, chat_tools, visual_blocks
 from ..services.events import audit
+from ..services.ownership import owned
 
 router = APIRouter(tags=["chatgpt"])
 
@@ -31,6 +34,14 @@ INSTRUCTIONS = (
     "You are ChatGPT, used from RecallSpring, a study app the learner runs on their own computer. You cannot see "
     "the learner's records here, only excerpts of files they choose for a conversation (when there are any). Answer "
     "clearly and briefly, in the language the learner writes in."
+)
+TOOL_INSTRUCTIONS = (
+    "You are ChatGPT, used as a tutor from RecallSpring, a study app the learner runs on their own computer. Answer "
+    "clearly, in the language the learner writes in."
+)
+STOPPED_NOTE = (
+    "(RecallSpring stopped here: ChatGPT used the maximum number of RecallSpring steps for one message. Write "
+    '"continue" to go on.)'
 )
 MESSAGES = {
     "not_connected": (409, "Sign in with ChatGPT first."),
@@ -55,9 +66,54 @@ MESSAGES = {
 }
 
 
-def _api_error(exc: siwc.SiwcError) -> ApiError:
+def _api_error(exc: siwc.SiwcError, tools: bool = False) -> ApiError:
     status, message = MESSAGES.get(exc.code, MESSAGES["upstream_error"])
-    return ApiError(status, f"chatgpt_{exc.code}", message)
+    details: dict[str, Any] = {}
+    if exc.code == "unsupported":
+        if exc.detail:
+            message = f"{message} OpenAI named: {exc.detail}."
+            details["param"] = exc.detail
+        if tools:
+            message += " Turn off \u201cUse RecallSpring\u201d to chat without RecallSpring's tools."
+    return ApiError(status, f"chatgpt_{exc.code}", message, details or None)
+
+
+def _tool_turn(
+    db: Session, ctx: WriteCtx, question: AiMessage, model: str, instructions: str, turns: list[dict[str, str]]
+) -> tuple[str, siwc.Reply, list[dict[str, Any] | None], int, bool]:
+    """Rounds of one learner message with RecallSpring's tools: ChatGPT answers or asks for calls; RecallSpring runs
+    them as the learner and sends the outputs back, up to chat_tools.MAX_ROUNDS responses and MAX_CALLS calls. Each
+    step is saved on the learner's message as soon as it ran. Returns (text, last response, usages, rounds,
+    stopped at the limit)."""
+    items = siwc.history_items(turns)
+    tools = chat_tools.definitions()
+    texts: list[str] = []
+    usages: list[dict[str, Any] | None] = []
+    steps: list[dict[str, Any]] = list(question.tool_calls or [])
+    last: siwc.Reply | None = None
+    for n in range(1, chat_tools.MAX_ROUNDS + 1):
+        out = siwc.respond(ctx.user.id, model, instructions, items, tools)
+        last = out
+        usages.append(out.usage)
+        if out.text.strip():
+            texts.append(out.text.strip())
+        if not out.calls:
+            return "\n\n".join(texts), out, usages, n, False
+        items.extend(out.items)
+        for call in out.calls:
+            if len(steps) >= chat_tools.MAX_CALLS:
+                entry, output = chat_tools.refused(
+                    call, "too_many_calls", "Step limit for this message reached; answer with what you have."
+                )
+            else:
+                entry, output = chat_tools.run(db, ctx, out.model, question.id, call)
+            steps.append(entry)
+            question.tool_calls = list(steps)
+            db.commit()  # each step is on record before the next request
+            items.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
+    assert last is not None
+    texts.append(STOPPED_NOTE)
+    return "\n\n".join(texts), last, usages, chat_tools.MAX_ROUNDS, True
 
 
 def _availability(request: Request) -> str | None:
@@ -145,8 +201,11 @@ def send_message(
         raise _api_error(siwc.SiwcError("not_connected"))
     if not state["plan_usage"]:
         raise _api_error(siwc.SiwcError("plan_usage_not_enabled"))
+    course_id = payload.course_id if payload.conversation_id is None else None
+    if course_id is not None:
+        owned(db, Course, course_id, ctx.user.id)
     conv, question = conv_svc.save_question(
-        db, ctx.user, payload.conversation_id, payload.model, payload.message, ctx.idempotency_key
+        db, ctx.user, payload.conversation_id, payload.model, payload.message, ctx.idempotency_key, course_id
     )
     if payload.conversation_id is None and payload.source_ids:
         chat_material.set_chosen(db, ctx.user, conv, payload.source_ids, ctx.request_id)
@@ -157,15 +216,27 @@ def send_message(
     question.context = records or None
     turns, _ = conv_svc.history(messages)
     db.commit()  # what is sent is recorded before the request; no transaction stays open while waiting
-    parts = [INSTRUCTIONS]
+    use_tools = payload.recallspring
+    parts = [TOOL_INSTRUCTIONS if use_tools else INSTRUCTIONS]
+    if use_tools:
+        parts.append(chat_tools.instructions(db, conv))
     if payload.visuals:
         parts.append(visual_blocks.INSTRUCTIONS)
     if excerpts:
         parts.append(chat_material.instructions(excerpts, how))
+    instructions = "\n\n".join(parts)
+    db.commit()
     started = time.monotonic()
+    rounds, stopped = 1, False
     try:
-        result = siwc.reply(ctx.user.id, payload.model, "\n\n".join(parts), turns)
+        if use_tools:
+            text, result, usages, rounds, stopped = _tool_turn(db, ctx, question, payload.model, instructions, turns)
+            usage = conv_svc.combine_usage(usages)
+        else:
+            result = siwc.reply(ctx.user.id, payload.model, instructions, turns)
+            text, usage = result.text, result.usage
     except siwc.SiwcError as exc:
+        db.rollback()
         conv_svc.save_failure(db, question, exc.code, int((time.monotonic() - started) * 1000))
         audit(
             db,
@@ -173,21 +244,28 @@ def send_message(
             action="ai.chatgpt_message",
             target_type="ai_conversation",
             target_id=conv.id,
-            details={"model": payload.model, "outcome": exc.code, "excerpts": len(records)},
+            details={
+                "model": payload.model,
+                "outcome": exc.code,
+                "param": exc.detail if exc.code == "unsupported" else None,
+                "excerpts": len(records),
+                "recallspring_tools": use_tools,
+                "tool_calls": [s["name"] for s in question.tool_calls or []],
+            },
             request_id=ctx.request_id,
         )
         db.commit()
-        error = _api_error(exc)
-        error.details = {"conversation_id": str(conv.id)}
+        error = _api_error(exc, use_tools)
+        error.details = {**(error.details or {}), "conversation_id": str(conv.id)}
         raise error from exc
     reply = conv_svc.save_reply(
         db,
         ctx.user,
         question,
-        text=result.text,
+        text=text,
         model=result.model,
         response_id=result.response_id,
-        usage=result.usage,
+        usage=usage,
         account=state.get("email") or state.get("name"),
         duration_ms=int((time.monotonic() - started) * 1000),
     )
@@ -203,9 +281,16 @@ def send_message(
             "turns": len(turns),
             "usage": reply.usage,
             "visuals_allowed": payload.visuals,
-            "visuals": [v["ok"] for v in visual_blocks.from_reply(result.text, refs=[r["ref"] for r in records])],
+            "visuals": [v["ok"] for v in visual_blocks.from_reply(text, refs=[r["ref"] for r in records])],
             "excerpts": len(records),
             "excerpts_chosen_by": how,
+            "recallspring_tools": use_tools,
+            "rounds": rounds,
+            "stopped_at_limit": stopped,
+            "tool_calls": [
+                {"name": s["name"], "status": s["status"], "error_code": s.get("error_code")}
+                for s in question.tool_calls or []
+            ],
         },
         request_id=ctx.request_id,
     )

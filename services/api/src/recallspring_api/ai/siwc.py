@@ -12,9 +12,12 @@ Follows OpenAI's SIWC documentation for open-source apps as read on 2026-11-21 (
   allowlist; fields the preview rejects (temperature, max_output_tokens, metadata, previous_response_id, ...) can
   never be sent. Only ``response.completed`` counts as success.
 - Plan usage errors stop the request with a clear status. There is no fallback to any other billing path.
+- Function tools (Chat with "Use RecallSpring" on, services/chat_tools.py) go in ``tools`` grouped in one namespace,
+  as the preview requires; the function calls ChatGPT made and RecallSpring's outputs are sent back in ``input``.
+  ``include`` is not sent (the preview does not list it), so reasoning items are not sent back.
 
-Nothing here runs in the background: every call starts from the learner pressing a button. This module is not yet
-used for tutoring or grading; docs/10 records when it may be.
+Nothing here runs in the background: every call starts from the learner pressing a button. Tutoring and grading
+happen only through RecallSpring's tools in Chat (services/chat_tools.py, docs/04).
 
 The ID token is received directly from the token endpoint over TLS, so its claims (issuer, audience, expiry, nonce)
 are checked without verifying the signature (OpenID Connect Core 3.1.3.7); it is only used to show which account is
@@ -32,7 +35,7 @@ import threading
 import time
 import uuid
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
@@ -51,6 +54,7 @@ REFRESH_MARGIN_SECONDS = 120
 MAX_HISTORY = 20
 # Fields the SIWC preview accepts that RecallSpring sends; everything else is left out on purpose.
 REQUEST_FIELDS = ("model", "instructions", "input", "store", "stream")
+TOOL_REQUEST_FIELDS = ("model", "instructions", "input", "tools", "store", "stream")
 TERMINAL_REFRESH = {
     "invalid_grant",
     "invalid_refresh_token",
@@ -302,13 +306,17 @@ _ERROR_CODES = {
 
 
 def _error_from(status_code: int, body: Any) -> SiwcError:
+    """``detail`` of an unsupported request is the part OpenAI named (``error.param``), never the message text."""
     code = None
+    param = None
     if isinstance(body, dict):
         err = body.get("error")
         if isinstance(err, dict):
             code = err.get("code")
+            param = err.get("param") if isinstance(err.get("param"), str) else None
     if code in _ERROR_CODES:
-        return SiwcError(_ERROR_CODES[code])
+        mapped = _ERROR_CODES[code]
+        return SiwcError(mapped, param[:120] if param and mapped == "unsupported" else None)
     if status_code == 401:
         return SiwcError("auth_rejected")
     if status_code == 403:
@@ -351,8 +359,8 @@ def list_models(user_id: uuid.UUID) -> list[dict[str, str]]:
 # --- replies ------------------------------------------------------------------------------------------------------
 
 
-def build_request(model: str, instructions: str, history: list[dict[str, str]]) -> dict[str, Any]:
-    """The whole request body, from an allowlist. ``history`` is app-owned: role "user" or "assistant", text."""
+def history_items(history: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """App-owned turns (role "user" or "assistant", text) as input items; system turns are never sent."""
     items: list[dict[str, Any]] = []
     for turn in history[-MAX_HISTORY:]:
         role = turn["role"]
@@ -360,8 +368,46 @@ def build_request(model: str, instructions: str, history: list[dict[str, str]]) 
             raise ValueError("only user and assistant turns are sent")
         kind = "input_text" if role == "user" else "output_text"
         items.append({"type": "message", "role": role, "content": [{"type": kind, "text": turn["text"]}]})
-    body = {"model": model, "instructions": instructions, "input": items, "store": False, "stream": True}
+    return items
+
+
+def build_request(model: str, instructions: str, history: list[dict[str, str]]) -> dict[str, Any]:
+    """The whole request body, from an allowlist. ``history`` is app-owned: role "user" or "assistant", text."""
+    body = {
+        "model": model,
+        "instructions": instructions,
+        "input": history_items(history),
+        "store": False,
+        "stream": True,
+    }
     if tuple(body) != REQUEST_FIELDS:  # pragma: no cover - guards future edits
+        raise RuntimeError("SIWC request fields must stay within the allowlist")
+    return body
+
+
+ITEM_TYPES = {"message", "function_call", "function_call_output"}
+
+
+def build_tool_request(
+    model: str, instructions: str, items: list[dict[str, Any]], tools: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """A request with RecallSpring's function tools. ``tools`` must be namespaces of function tools (the preview's
+    rule); ``items`` are history messages plus the function calls and outputs of this turn so far."""
+    for tool in tools:
+        if tool.get("type") != "namespace" or any(t.get("type") != "function" for t in tool.get("tools", [])):
+            raise ValueError("only namespaces of function tools are sent")
+    for item in items:
+        if item.get("type") not in ITEM_TYPES or item.get("role") == "system":
+            raise ValueError("only messages, function calls and their outputs are sent")
+    body = {
+        "model": model,
+        "instructions": instructions,
+        "input": items,
+        "tools": tools,
+        "store": False,
+        "stream": True,
+    }
+    if tuple(body) != TOOL_REQUEST_FIELDS:  # pragma: no cover - guards future edits
         raise RuntimeError("SIWC request fields must stay within the allowlist")
     return body
 
@@ -402,11 +448,66 @@ class Reply:
     response_id: str | None = None
 
 
-def reply(user_id: uuid.UUID, model: str, instructions: str, history: list[dict[str, str]]) -> Reply:
-    """One streamed reply. Only ``response.completed`` is success; anything else raises with a clear code."""
+@dataclass
+class ToolCall:
+    call_id: str
+    name: str  # without the namespace
+    arguments: str  # JSON text as the model wrote it (not trusted)
+
+
+@dataclass
+class Round(Reply):
+    """One response of a turn with tools: its text, the function calls to run, and the output items to send back
+    in the next request's ``input`` (assistant messages and function calls; reasoning items are left out)."""
+
+    calls: list[ToolCall] = field(default_factory=list)
+    items: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _tool_name(item: dict[str, Any], namespace: str | None) -> str:
+    name = str(item.get("name") or "")
+    if namespace:
+        for sep in (".", "__", "/"):
+            if name.startswith(namespace + sep):
+                return name[len(namespace) + len(sep) :]
+    return name
+
+
+def _echo(item: dict[str, Any], namespace: str | None) -> tuple[dict[str, Any] | None, ToolCall | None]:
+    """What of one output item goes back into ``input``. Item ids are left out (nothing is stored at OpenAI)."""
+    kind = item.get("type")
+    if kind == "function_call":
+        call_id, args = item.get("call_id"), item.get("arguments")
+        if not isinstance(call_id, str) or not call_id:
+            return None, None
+        args = args if isinstance(args, str) else json.dumps(args or {})
+        echo: dict[str, Any] = {
+            "type": "function_call",
+            "call_id": call_id,
+            "name": item.get("name"),
+            "arguments": args,
+        }
+        if isinstance(item.get("namespace"), str):
+            echo["namespace"] = item["namespace"]
+        return echo, ToolCall(call_id[:120], _tool_name(item, namespace)[:80], args)
+    if kind == "message" and item.get("role") == "assistant":
+        texts = [
+            c.get("text")
+            for c in item.get("content") or []
+            if isinstance(c, dict) and c.get("type") == "output_text" and isinstance(c.get("text"), str)
+        ]
+        if texts:
+            text = "".join(texts)
+            return {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": text}]}, None
+    return None, None
+
+
+def _stream(user_id: uuid.UUID, body: dict[str, Any], namespace: str | None = None) -> Round:
+    """Send one request and read the stream. Only ``response.completed`` is success; anything else raises with a
+    clear code."""
     token, _ = _access_token(user_id)
-    body = build_request(model, instructions, history)
     parts: list[str] = []
+    done_items: list[dict[str, Any]] = []
     try:
         with _client(get_settings().ai_timeout_seconds) as http:
             with http.stream("POST", f"{_api_base()}/responses", json=body, headers=_headers(token)) as r:
@@ -421,16 +522,11 @@ def reply(user_id: uuid.UUID, model: str, instructions: str, history: list[dict[
                     kind = event.get("type")
                     if kind == "response.output_text.delta" and isinstance(event.get("delta"), str):
                         parts.append(event["delta"])
+                    elif kind == "response.output_item.done" and isinstance(event.get("item"), dict):
+                        done_items.append(event["item"])
                     elif kind == "response.completed":
                         response = event.get("response") if isinstance(event.get("response"), dict) else {}
-                        usage = response.get("usage") if isinstance(response.get("usage"), dict) else None
-                        rid = response.get("id")
-                        return Reply(
-                            "".join(parts),
-                            str(response.get("model") or model)[:120],
-                            usage,
-                            rid[:200] if isinstance(rid, str) else None,
-                        )
+                        return _round(response, parts, done_items, body["model"], namespace)
                     elif kind == "response.failed":
                         response = event.get("response") if isinstance(event.get("response"), dict) else {}
                         raise _error_from(200, response)
@@ -441,6 +537,42 @@ def reply(user_id: uuid.UUID, model: str, instructions: str, history: list[dict[
     except httpx.HTTPError as exc:
         raise SiwcError("interrupted") from exc
     raise SiwcError("interrupted")
+
+
+def _round(
+    response: dict[str, Any], parts: list[str], done_items: list[dict[str, Any]], model: str, namespace: str | None
+) -> Round:
+    usage = response.get("usage") if isinstance(response.get("usage"), dict) else None
+    rid = response.get("id")
+    output = response.get("output")
+    source = [i for i in output if isinstance(i, dict)] if isinstance(output, list) and output else done_items
+    out = Round(
+        "".join(parts),
+        str(response.get("model") or model)[:120],
+        usage,
+        rid[:200] if isinstance(rid, str) else None,
+    )
+    for item in source:
+        echo, call = _echo(item, namespace)
+        if echo is not None:
+            out.items.append(echo)
+        if call is not None:
+            out.calls.append(call)
+    return out
+
+
+def respond(
+    user_id: uuid.UUID, model: str, instructions: str, items: list[dict[str, Any]], tools: list[dict[str, Any]]
+) -> Round:
+    """One response of a turn with RecallSpring's tools (see ``build_tool_request``)."""
+    namespace = tools[0].get("name") if tools else None
+    return _stream(user_id, build_tool_request(model, instructions, items, tools), namespace)
+
+
+def reply(user_id: uuid.UUID, model: str, instructions: str, history: list[dict[str, str]]) -> Reply:
+    """One streamed reply without tools."""
+    out = _stream(user_id, build_request(model, instructions, history))
+    return Reply(out.text, out.model, out.usage, out.response_id)
 
 
 # --- logs ---------------------------------------------------------------------------------------------------------

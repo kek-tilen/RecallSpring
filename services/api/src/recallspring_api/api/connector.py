@@ -371,7 +371,7 @@ def create_questions(
     """Questions written by Claude in the Claude app. Rubrics stay hidden from the learner until they answer."""
     if replay := replay_if_seen(db, ctx, payload):
         return replay
-    provenance = {"origin": "claude_connector", "model": payload.model_name, "model_reported_by": "assistant"}
+    provenance = assistants.provenance(ctx.client, ctx.model, payload.model_name)
     require_studied(db, ctx.user.id, [cid for item in payload.questions for cid in item.concept_ids])
     created = []
     for item in payload.questions:
@@ -527,8 +527,8 @@ def record_one_assessment(
         data=data,
         evaluator_kind="ai",
         provider=assistants.provider_for(ctx.client),
-        model=payload.model_name,
-        model_reported_by="assistant",
+        model=ctx.model or payload.model_name,
+        model_reported_by="provider" if ctx.model else "assistant",
         simulated=False,
         flags=flags,
     )
@@ -546,7 +546,7 @@ def record_one_assessment(
             "status": row.status,
             "grade": row.grade,
             "provider": assistants.provider_for(ctx.client),
-            "model": payload.model_name,
+            "model": ctx.model or payload.model_name,
             "flags": flags,
         },
         request_id=ctx.request_id,
@@ -891,7 +891,7 @@ def create_quiz(
 ) -> JSONResponse:
     if replay := replay_if_seen(db, ctx, payload):
         return replay
-    provenance = {"origin": "claude_connector", "model": payload.model_name, "model_reported_by": "assistant"}
+    provenance = assistants.provenance(ctx.client, ctx.model, payload.model_name)
     quiz = quiz_svc.create_quiz(db, ctx.user, payload, provenance)
     body = {
         "quiz_id": str(quiz.id),

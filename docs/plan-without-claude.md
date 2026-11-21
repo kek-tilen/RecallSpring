@@ -1,7 +1,8 @@
 # Plan: RecallSpring without Claude (Codex first, then a ChatGPT tutor in the app)
 
-Status, 2026-11-21: **Phase 0 and Phase 1 built** (owner in chat); the owner's Codex smoke test is open. Setup: `docs/codex-setup.md`.
-Phases 2 and 3 start after the owner's go-ahead.
+Status, 2026-11-21: **Phase 0, Phase 1 and Phase 2 built** (owner in chat). Open: the
+owner's Codex smoke test (setup: `docs/codex-setup.md`) and a live check that the SIWC preview accepts function tools
+in a namespace (Phase 2 was tested against a fake OpenAI only). Phase 3 starts after the owner's go-ahead.
 
 ## Owner decisions (2026-11-21)
 
@@ -72,6 +73,12 @@ Phases 2 and 3 start after the owner's go-ahead.
    - no delete tool is reachable.
 
 ## Phase 2 — ChatGPT tutor inside RecallSpring (SIWC)
+
+Built 2026-11-21 as described in docs/04 → "ChatGPT tutors through RecallSpring's tools" (`services/chat_tools.py`,
+`api/chatgpt.py`, migration 0017). Differences from the plan below: a study conversation does not open a
+`study_sessions` row (the conversation is the session; `record_session_summary` is not a Chat tool), and a long
+conversation shows RecallSpring's existing "only the newest messages are sent" notice instead of a tutor-proposed
+summary.
 
 1. **Revalidate** the SIWC docs: function tools, preview limits, terms (local open-source apps; no background use
    without separate consent).

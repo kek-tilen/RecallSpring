@@ -27,6 +27,9 @@ class Ctx:
     session: AuthSession | None  # None for connector-token requests
     request_id: str
     client: str | None = field(default=None, kw_only=True)  # connector requests: "claude" or "codex"
+    # ChatGPT in Chat using RecallSpring's tools (client "chatgpt"): the model OpenAI reported for the response that
+    # made the call. Stored with ``model_reported_by = "provider"`` instead of the model name the assistant gives.
+    model: str | None = field(default=None, kw_only=True)
 
 
 @dataclass
@@ -76,6 +79,7 @@ def to_write_ctx(request: Request, ctx: Ctx, idempotency_key: str | None) -> Wri
         session=ctx.session,
         request_id=ctx.request_id,
         client=ctx.client,
+        model=ctx.model,
         idempotency_key=key,
         method=request.method,
         path=request.url.path,

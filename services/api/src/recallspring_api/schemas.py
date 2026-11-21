@@ -169,6 +169,11 @@ class ChatGptMessageIn(BaseModel):
     visuals: bool = True
     # Only for a new conversation: the files whose matching excerpts may be sent (services/chat_material.py).
     source_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+    # "Use RecallSpring": ChatGPT may read and add study records through RecallSpring's tools
+    # (services/chat_tools.py) while answering this message.
+    recallspring: bool = False
+    # Only for a new conversation: study mode for this course (ChatGPT starts from its study context and plan).
+    course_id: uuid.UUID | None = None
 
 
 class ChatGptConversationPatch(BaseModel):

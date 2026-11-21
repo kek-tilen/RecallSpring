@@ -1,7 +1,8 @@
 """Which assistant did something: connector clients, the provider stored on their grades, and display names.
 
 A grade from Codex counts exactly like one from Claude (owner decision 2026-11-21); only the label differs. The model
-name comes from the assistant itself and is stored with ``model_reported_by = "assistant"``: unverified.
+name comes from the assistant itself and is stored with ``model_reported_by = "assistant"``: unverified. ChatGPT in
+RecallSpring's Chat (client ``chatgpt``, no token) is the exception: OpenAI reports the model, ``"provider"``.
 """
 
 from __future__ import annotations
@@ -9,8 +10,8 @@ from __future__ import annotations
 from typing import Any
 
 # Connector token clients (connector_tokens.client, migration 0016) -> the provider stored on their assessments.
-CLIENTS: dict[str, str] = {"claude": "claude_app", "codex": "codex_app"}
-CLIENT_NAMES: dict[str, str] = {"claude": "Claude", "codex": "Codex"}
+CLIENTS: dict[str, str] = {"claude": "claude_app", "codex": "codex_app", "chatgpt": "chatgpt"}
+CLIENT_NAMES: dict[str, str] = {"claude": "Claude", "codex": "Codex", "chatgpt": "ChatGPT"}
 DEFAULT_LABEL: dict[str, str] = {"claude": "Claude Desktop", "codex": "Codex"}
 
 _PROVIDER_NAMES: dict[str, str] = {
@@ -24,6 +25,13 @@ _PROVIDER_NAMES: dict[str, str] = {
 
 def provider_for(client: str | None) -> str:
     return CLIENTS.get(client or "claude", "claude_app")
+
+
+def provenance(client: str | None, reported_model: str | None, assistant_model: str | None) -> dict[str, Any]:
+    """Who wrote a question or simulation: ``reported_model`` is set only for ChatGPT in Chat (from OpenAI)."""
+    if reported_model:
+        return {"origin": "chatgpt_chat", "model": reported_model, "model_reported_by": "provider"}
+    return {"origin": "claude_connector", "model": assistant_model, "model_reported_by": "assistant"}
 
 
 def name_of(client: str | None) -> str:
