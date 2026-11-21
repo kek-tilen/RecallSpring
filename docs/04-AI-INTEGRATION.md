@@ -90,7 +90,19 @@ A server-side policy layer runs before every call: owner session, consent (backg
 
 ### Adapter: OpenAI Sign in with ChatGPT (`siwc`)
 
-Kept as a feature for other self-hosters and for the owner. Implemented after Mode A. Contract as researched on 2026-11-19 (revalidate before coding):
+Kept as a feature for other self-hosters and for the owner. Contract revalidated against OpenAI's docs on 2026-11-21 (terms effective 2026-11-04); it matched the 2026-11-19 research below.
+
+**Status 2026-11-21: proof of concept built and tested against a fake OpenAI only** (`ai/siwc.py`, `ai/siwc_store.py`, `api/chatgpt.py`, `tests/test_chatgpt_signin.py`). The live sign-in has to be done by the owner (Settings → ChatGPT, at `http://127.0.0.1:4318`); until it passes, Gate 0 step 3 stays open. What the proof of concept covers:
+
+- `Sign in with ChatGPT` in Settings starts the flow (`POST /ai/chatgpt/connect`, owner session + CSRF). It is refused with `409 chatgpt_not_local` unless the page was opened on `127.0.0.1`, `localhost` or `::1`, because the redirect URI must be `http://127.0.0.1:<the port RecallSpring runs on>/api/v1/ai/chatgpt/callback`. `RS_CHATGPT_SIGNIN_ENABLED=false` turns the feature off.
+- The callback (`GET /ai/chatgpt/callback`) is tied to the sign-in the learner started by a one-time `state` (10 minutes). It checks `iss`, `aud`, `nonce` and `exp` in the ID token. Then it redirects to `/settings?chatgpt=<connected|no_plan_usage|declined|expired|error>`, only to a local origin. The `code`/`state` query is redacted from the uvicorn access log.
+- Credentials are stored in `secrets_dir` (default `local-data/secrets`, ignored by Git, not in the database and therefore not in backups; see docs/08). Each user has one record holding the issued client ID, account, scopes and tokens. The record is encrypted with Windows DPAPI for the signed-in Windows user, or kept as an owner-only 0600 file elsewhere. A per-user lock serializes refreshes. A terminal refresh error (`invalid_grant`, …) deletes the tokens and keeps the client ID, so the next sign-in is a returning one.
+- Settings shows the account, whether plan usage was granted (`chatgpt.tokens.use.direct`), the models from `GET /v1/models` (`visibility == "list"` only) and a **connection test chat** (`POST /ai/chatgpt/test`). The test is not saved, has no source context and is not used for tutoring or grading. It sends the full test history each time, through the allowlist builder: `model`, `instructions`, `input`, `store: false`, `stream: true`. Only `response.completed` counts as a reply.
+- Every error maps to a clear status with no fallback: `chatgpt_usage_limit` (429, "never switches to paid API usage"), `chatgpt_not_eligible`, `chatgpt_unavailable`, `chatgpt_unsupported`, `chatgpt_signed_out`, `chatgpt_incomplete`, … Sign-in, test and sign-out are audited (`ai.chatgpt_sign_in`, `ai.chatgpt_test` with model and outcome only, `ai.chatgpt_disconnected`).
+- Sign out revokes the refresh token at the discovery document's `revocation_endpoint` (best effort; only an endpoint on the same host as the auth server is used) and deletes the tokens from this computer.
+- Not built yet: SIWC is **not** wired into `provider_for` or any tutoring/grading task. There are no background calls, no tool calls, no remote/VPS credential transfer and no ChatGPT connector (see `docs/chatgpt-connector-plan.md`).
+
+Contract (from the 2026-11-19 research, confirmed 2026-11-21):
 
 - Dynamic client registration (`client_id=dynamic_agent_client` + `agent_name_hint` on first sign-in; the issued `oaiapp_…` client ID is reused afterwards), PKCE S256, fresh `state`/`nonce`, stable per-host `ext_agent_host_id`, scopes `openid profile email offline_access resource.invoke chatgpt.tokens.use.direct`, `resource=https://api.openai.com/v1`.
 - Redirect URI **only** `http://127.0.0.1:<port>/…` (never `localhost`): sign-in completes on the computer running the browser. Remote instances receive credentials through the official self-hosted VM procedure (secure transfer; the VM owns refreshes).
@@ -126,7 +138,7 @@ Deterministic, for tests and offline development only. Every mock output is labe
 
 1. ✅ Re-validate official terms and docs (Anthropic consumer vs API use, Claude custom connectors, MCP Apps, SIWC) — 2026-11-19, see research log.
 2. **Mode A smoke test (local):** Claude Desktop lists RecallSpring tools; reads plan and source sections; an answer submitted through the form is stored verbatim before grading; an assessment with a fabricated evidence ref is downgraded; no destructive tool is reachable.
-3. **Mode B (later, per adapter):** SIWC OAuth + model discovery + streamed `response.completed` + second turn with app-owned history + quota/revoke/refresh paths; Anthropic API key smoke test only if the owner adds a key and a USD limit.
+3. **Mode B (later, per adapter):** SIWC OAuth + model discovery + streamed `response.completed` + second turn with app-owned history + quota/revoke/refresh paths; Anthropic API key smoke test only if the owner adds a key and a USD limit. *SIWC 2026-11-21: all of these pass against a fake OpenAI in `tests/test_chatgpt_signin.py`; the live run is the owner's (Settings → ChatGPT → Sign in, list models, two test turns, Sign out).*
 4. Record PASS/BLOCKED per mode in `docs/10-DECISIONS-AND-RISKS.md`; a mode is enabled only after it passes.
 
 ## Model testing
@@ -136,4 +148,4 @@ Run prompts against a curated, human-reviewed source-based test set (including a
 ## Sources (revalidate on implementation day)
 
 - Anthropic: https://code.claude.com/docs/en/legal-and-compliance (authentication and credential use), https://support.claude.com/en/articles/11175166 (custom connectors via remote MCP), https://modelcontextprotocol.io/docs/extensions/apps (MCP Apps), https://privacy.claude.com/en/articles/7996866 (API data retention)
-- OpenAI SIWC: https://developers.openai.com/siwc/token-sharing-open-source and its `sign-in`, `self-hosted-vms`, `models-and-inference`, `preview-limitations`, `errors-and-recovery`, `token-reference`, `profiles-and-sessions` pages; https://developers.openai.com/siwc/ui-ux-guidelines; https://openai.com/policies/sign-in-with-chatgpt-terms/ (returned HTTP 403 to automated fetch on 2026-11-19 — read manually before enabling SIWC)
+- OpenAI SIWC: https://developers.openai.com/siwc/token-sharing-open-source and its `sign-in`, `self-hosted-vms`, `models-and-inference`, `preview-limitations`, `errors-and-recovery`, `token-reference`, `profiles-and-sessions` pages; https://developers.openai.com/siwc/ui-ux-guidelines; https://openai.com/policies/sign-in-with-chatgpt-terms/ (returned HTTP 403 to automated fetch on 2026-11-19; the version effective 2026-11-04 was read on 2026-11-21: tokens stay local and under the user's control, requests come from the user's own runtime, no background use without consent, no fallback to paid usage)

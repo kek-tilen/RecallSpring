@@ -47,6 +47,10 @@
 | Web app = overview of everything stored (plan, courses, exams, concepts, reviews, simulations, material, notes, history, settings) in the Sage Study palette; studying stays in Claude. Served same-origin by the API from `apps/web/dist` with a strict CSP | Approved 2026-11-19 |
 | Learning first: teach new material (explain, own-words summary, short checks) before practice or simulations; server refuses practice on unstudied concepts; diagnostics only on request and never affect reviews | Approved 2026-11-19 (ADR-006) |
 | Exam readiness review per kolokvij/exam (not studied, studied but not practised, weak = last grade 0-2, getting there, solid; grouped by material; the weakest with the gaps from their last feedback) and a weekly review (planned vs. recorded time, reviews, grade trend, exams ahead); both deterministic with no model calls, read by Claude through the connector | Approved 2026-11-20 |
+| Library: automatic grouping (university › semester › course › kind) **and** the learner's own nested folders inside a course (optional, up to 5 levels); folder and ZIP uploads keep their structure | Approved 2026-11-21 (owner in chat; ADR-008) |
+| Archive: one Archived page for semesters/groups, courses, folders and files, each restorable; archived material hidden from library, search and Claude but kept and citable | Approved 2026-11-21 (owner in chat; ADR-008) |
+| Moving in from ChatGPT: chats from the official data export (chosen by the learner, saved word for word as material), project files, and custom instructions/memories as study preferences the learner confirms; staged uploads deleted after 7 days | Approved 2026-11-21 (owner chose all three; ADR-008) |
+| OpenAI: "Sign in with ChatGPT" in the local app first (proof of concept: sign-in, models, test chat, sign-out; not used for tutoring yet), a ChatGPT connector later (needs public HTTPS and OAuth; plan only) | Approved 2026-11-21 (owner in chat; ADR-008, `docs/chatgpt-connector-plan.md`) |
 
 ## Working assumptions (do not mistake for owner approval)
 
@@ -94,6 +98,9 @@
 | R14 | High | Prompt injection in sources steers connector tools | Read/append-only tool surface, untrusted-content wrapping, server-side validation, audit |
 | R16 | Medium | The optional LibreOffice renderer opens untrusted Office files (large code base, history of CVEs) | Off unless installed, `RS_OFFICE_RENDERER=off`; only the learner's own files; throwaway profile, macros disabled, untrusted links blocked, timeout kills the process tree; in production run it without network access and keep it patched |
 | R15 | Medium | Answer stored non-verbatim when Claude transcribes it | MCP App answer form as default; `captured_via` flag; learner can check stored text |
+| R17 | Medium | A ChatGPT export is large and untrusted (format changes, huge JSON, ZIP bombs, embedded HTML) | Size, entry and chat caps; JSON only, HTML never opened; per-file upload checks for attachments; staged, chosen by the learner, deleted after 7 days; unreadable conversations skipped and counted, unknown message content left out (never guessed) |
+| R18 | Medium | Imported chats, memories or preferences steer Claude (prompt injection, or old ChatGPT answers taken as evidence) | Chats are material wrapped as untrusted document content; preferences are the learner's confirmed words, labelled as preferences under tutor rules; `continue-from-chatgpt` asks the learner before marking anything known; ChatGPT's old answers are never grades |
+| R19 | Medium | SIWC preview changes or ends; tokens leak from the local machine | Isolated adapter, allowlisted request fields, every error surfaced without fallback; DPAPI/0600 files outside Git, DB and backups; revoke on sign-out; not used for tutoring until the owner's live test passes |
 
 ## Gate 0 research log (2026-11-19)
 
@@ -108,7 +115,7 @@
 
 **Gate status:**
 - Mode A: automated end-to-end run **PASS** on 2026-11-19. The real API and the real MCP server over stdio completed the full loop: plan → question → form submission (exact text saved) → assessment → next review; a second grade was rejected. The run used an in-process MCP client, not Claude Desktop. **Pending: the owner's test in Claude Desktop**, which must show that the answer form renders.
-- SIWC: research done, proof pending (after Mode A).
+- SIWC: proof of concept built 2026-11-21 and **PASS against a fake OpenAI** (sign-in with dynamic registration and PKCE, protected storage, model list, allowlisted streamed request with history, usage-limit/ineligible/unavailable errors with no fallback, refresh rotation, terminal refresh → signed out, revoke). **Pending: the owner's live sign-in** on `http://127.0.0.1:4318` (Settings → ChatGPT). Not used for tutoring or grading until then.
 - Anthropic API: not planned until the owner adds a key.
 
 ## Decision process for changes

@@ -90,4 +90,10 @@ Slovenian.
 
 ## Shortcuts
 
-The connector also offers two prompts in Claude's **+** menu: **Start studying** (runs the course start-up above) and **Exam overview**.
+The connector also offers prompts in Claude's **+** menu: **Start studying** (runs the course start-up above), **Exam overview**, **Weekly review**, **Plan semester**, **Add an interest** and **Continue from ChatGPT**.
+
+## Coming from ChatGPT
+
+1. In ChatGPT: Settings → Data controls → Export data, and download the ZIP from the e-mail.
+2. In RecallSpring: Library → **Move in**. Paste your custom instructions and memories into *Study preferences* (Claude reads them at the start of every session), upload the export, and pick the chats to keep, in the course and folder they belong to. Files from your ChatGPT projects can come along.
+3. In the course's Claude project: choose **Continue from ChatGPT**. Claude reads the imported chats, tells you what they covered, asks what you already know, and plans from there. It never counts ChatGPT's old answers as your grades.

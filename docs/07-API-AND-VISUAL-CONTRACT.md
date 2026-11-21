@@ -55,6 +55,28 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | GET | `/sync/changes?cursor=` | Incremental account-scoped updates |
 | POST | `/exports` | Export job, user initiated |
 | POST | `/deletion-requests` | Preview impact, then separate confirm |
+| GET/POST | `/folders` | The learner's library folders with path, file count and archived state (`?course_id=`) / create one `{course_id, parent_id, name}` (Idempotency-Key; `422 folder_too_deep` beyond 5 levels, `422 too_many_folders` beyond 300 per course; `409 folder_exists` for the same name in the same place) |
+| PATCH | `/folders/{id}` | Rename or move `{name?, parent_id?}` within its course (no cycles); audited |
+| POST | `/folders/{id}/archive` | `{archived: bool}` archive or restore a folder; its files are hidden with it, not changed |
+| DELETE | `/folders/{id}` | Remove an **empty** folder (soft delete, audited); `409 folder_not_empty` |
+| GET | `/library/archived` | Everything archived: groups (semesters…), courses, folders, files, each with what restoring needs |
+| GET | `/sources?course_id=&archived=` | Material with `folder` and `folder_path`; archived (or inside an archived folder) only with `archived=true` |
+| POST | `/sources/move` | `{source_ids ≤ 200, folder_id \| null}` file material into a folder of the same course or back to its top level |
+| POST | `/sources/archive` | `{source_ids ≤ 200, archived}` archive or restore material; audited |
+| POST | `/sources` | (addition) optional `folder_id` and `folder_path` ("Week 3/Lab", created below `folder_id`, part of the idempotency fingerprint) |
+| POST | `/sources/zip` | A ZIP of the learner's own files, unpacked into folders (≤ 2000 entries, nothing executed, unsupported files listed as skipped with a reason, duplicates in the same folder skipped); audited `source.zip_imported` |
+| POST | `/imports/chatgpt` | Stage a ChatGPT data export ZIP (≤ 1 GiB, `conversations.json` ≤ 300 MB, ≤ 20 000 chats); `422 not_a_chatgpt_export`; nothing is saved as material yet |
+| GET | `/imports/chatgpt`, `/imports/chatgpt/{id}` | Staged uploads; one upload's chats (title, project, dates, turns, attached files) and the instructions/memories found |
+| GET | `/imports/chatgpt/{id}/chats/{key}` | Word-for-word preview of one chat (Markdown, ≤ 200 000 characters) |
+| POST | `/imports/chatgpt/{id}/save` | `{course_id, folder_id?, folder?, keys ≤ 200, include_files}` save chosen chats (category `chat`, origin `import`) and their files; already saved ones are skipped; audited `import.chatgpt_saved` |
+| DELETE | `/imports/chatgpt/{id}` | Delete the staged upload now (it expires after 7 days anyway); audited |
+| GET/PUT | `/settings/preferences` | The learner's own study preferences `{text ≤ 4000}` (e.g. ChatGPT custom instructions and memories); audited; read by Claude in `get_study_context` |
+| GET | `/ai/chatgpt` | Sign in with ChatGPT status (account, scopes, plan usage, `unavailable_reason`: `disabled`/`not_local`); never tokens |
+| POST | `/ai/chatgpt/connect` | Start sign-in (CSRF): returns the OpenAI authorize URL; `409 chatgpt_not_local` / `chatgpt_disabled` |
+| GET | `/ai/chatgpt/callback` | OAuth redirect target (one-time `state`, no session cookie needed); 303 to `/settings?chatgpt=<outcome>` |
+| GET | `/ai/chatgpt/models` | Models listed for the account (`visibility == "list"`) |
+| POST | `/ai/chatgpt/test` | Connection test `{model, message ≤ 4000, history ≤ 20}`, waits for `response.completed`; not saved; errors `chatgpt_*` (429 usage limit, never a paid fallback) |
+| POST | `/ai/chatgpt/disconnect` | Revoke at OpenAI (best effort) and delete the tokens here; audited |
 | GET | `/health/live` | Liveness, no secrets |
 | GET | `/health/ready` | DB and storage checks, restricted if exposed |
 
@@ -82,8 +104,8 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `create_course` | append | New course (`POST /connector/courses`); `kind: "interest"` for personal learning without exams, description = goal |
 | `set_interest_goal` | audited update | The learner's goal for an interest (`POST /connector/courses/{id}/goal`) |
 | `set_focus` | audited update | Only on the learner's clear request: one course or interest first until a day; null ends it (`POST /connector/focus`) |
-| `import_file` | append | Local file read by the connector process (allowed folders and types only) and uploaded with the same checks as the web upload; waits for extraction |
-| `add_text_source` | append | Pasted text as a source |
+| `import_file` | append | Local file read by the connector process (allowed folders and types only) and uploaded with the same checks as the web upload; waits for extraction; optional `folder` path ("Lectures / Week 3"), created when missing |
+| `add_text_source` | append | Pasted text as a source; optional `folder` path |
 | `get_source_status` | read | Extraction state and section IDs/labels (no text) |
 | `create_concepts` | append | Up to 30 concepts; existing terms reused; linked sections must belong to the course, otherwise `inferred` |
 | `get_study_context` | read | Active target, scope, exam profile, passed targets, recent simulations; `needs_setup` + questions to ask |
@@ -103,6 +125,10 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `save_learning_summary` | append, app-only | `POST /connector/learning`: exact summary as a note, concepts become `studied` |
 | `mark_concepts_known` | audited update | `POST /connector/concepts/known`: learner self-report with reason |
 | `create_quiz` / `create_questions` guard | — | `409 concepts_not_studied` for practice on unstudied concepts; `mode="diagnostic"` pre-tests never schedule reviews |
+| `get_study_context` | (addition) | `learner_preferences {text, how_to_use}` or null: the learner's own words on how they like to study, as preferences, never as rules above RecallSpring's |
+| prompt `continue-from-chatgpt` | prompt | Picks up from chats saved from ChatGPT (category `chat`): read them, say what was covered, confirm with the learner, then mark known only what the learner confirms |
+
+`search_sources` skips archived material and material in archived folders; `get_course_outline` still lists it with `hidden: true` (its sections stay readable by ID, so earlier citations keep working) and lists the course's visible folders as paths, so Claude can use the learner's own names.
 
 ## API example: attempt creation
 

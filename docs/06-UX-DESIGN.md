@@ -61,6 +61,19 @@ Components:
 
 Dropzone with progress, duplicates indicator, type/size constraints, extraction state `Processing`, `Ready`, `Needs attention`, `Failed`. Each parsed page/heading available for citation. Unsupported scanned PDFs clearly flagged; do not invent extracted text.
 
+Implemented (2026-11-21, ADR-008):
+
+- **Two ways to browse.** *By course* groups material automatically: university › semester › course, then kind (Material, Notes, Exercises, Past papers, Photos, Chats). *Folders* shows the learner's own folders inside a course, nested up to five levels. Folders are optional: nothing has to be filed, and material without a folder sits at the course's top level. A breadcrumb, a filter by kind and search work in both views.
+- **Folders:** new, rename, move, archive and remove (only when empty; soft delete, audited). Files are moved with a checkbox selection and "Move to…". Upload goes into the folder you are in. A dropped or picked **folder** keeps its sub-folders, so does a **.zip** (up to 500 files at a time). Deeper levels are joined into one name ("Week 3 - Lab - Raw"), and anything skipped is listed with the reason.
+- **Archived** (`/library/archived`, linked from Library, Courses and the course page): one page for everything archived, grouped as Semesters and other groups, Courses, Folders and Files. Each has a **Restore** button and shows when it was archived. Archived material is hidden from the library and from search (Claude's course outline marks it hidden), but kept and still citable.
+- **Move in** (`/library/import`, the Library's "Move in" link) brings over what the learner did in ChatGPT, in three parts:
+  1. *Your instructions and memory:* paste custom instructions and saved memories into **Study preferences**. Claude reads them at the start of a session. When an export contains them, they are offered as a suggestion; nothing is saved until the learner presses Save.
+  2. *Chats:* upload the data export ZIP. The picker lists the conversations, with search, a project filter and a word-for-word preview. The learner chooses which to save, and into which course and folder (default "Chats from ChatGPT"). Each saved chat becomes searchable, citable material (kind *Chats*).
+  3. *Project files:* attachments found in the export are saved alongside the chats (optional), or dropped as files/folders/ZIPs.
+
+  The upload is kept 7 days for picking, then deleted ("Remove upload" deletes it sooner).
+- **Settings → ChatGPT (preview):** `Sign in with ChatGPT` per OpenAI's UI guidelines. It shows the privacy notes (only what you send, on this computer, never in backups, no paid fallback), the account and plan usage, a model choice, the connection test chat, and Sign out with a confirmation. It states clearly when it is unavailable (not on 127.0.0.1, or turned off). Claude stays the tutor.
+
 ### Insights
 
 Course coverage, due forecasts, recurring misconceptions, evidence per topic, exam-date planning. Avoid mastery percentages unless they are clearly labeled approximations with evidence. `Learning history` should show exactly when an answer was saved, evaluated, scheduled and corrected.
@@ -110,7 +123,7 @@ Provide full mouse/touch alternatives. In-context help should be short, not a tu
 
 ## Security and privacy UI
 
-- Distinguish RecallSpring login from AI connections: `Claude connector` (connector token, last used, revoke, setup steps for Claude Desktop), `Continue with ChatGPT` (SIWC, per OpenAI UI guidelines), `Claude API key` (masked, never re-displayed).
+- Distinguish RecallSpring login from AI connections: `Claude connector` (connector token, last used, revoke, setup steps for Claude Desktop), `Sign in with ChatGPT` (SIWC, per OpenAI UI guidelines; preview card in Settings, see Library above), `Claude API key` (masked, never re-displayed).
 - Show AI permission state, connected account (limited identity), per-task model choice (tutor default Sonnet), monthly USD limit for API keys and daily request limit (1–100 %) for plan-based providers, with current usage.
 - Explicit `Allow background AI requests` opt-in OFF by default; explain quotas and ability to revoke; do not hide consent in T&Cs.
 - Destructive action dialog includes exact scope and recoverability period. Exports and backups explained in settings.
