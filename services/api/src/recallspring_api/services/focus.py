@@ -13,9 +13,13 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import clock
+from ..errors import ApiError, not_found
 from ..models import Course, FocusSession, User
+from .events import audit
 
 DAYS = 7
+RESTORE_DAYS = 30
 
 
 def _minutes(seconds: int) -> int:
@@ -37,6 +41,7 @@ def session_view(s: FocusSession, course_title: str | None) -> dict[str, Any]:
         "planned_minutes": s.planned_minutes,
         "minutes": _minutes(s.focused_seconds),
         "completed": s.completed,
+        "deleted_at": s.deleted_at.isoformat() if s.deleted_at else None,
     }
 
 
@@ -46,7 +51,7 @@ def _rows(
     stmt = (
         select(FocusSession, Course.title)
         .outerjoin(Course, Course.id == FocusSession.course_id)
-        .where(FocusSession.user_id == user.id, FocusSession.ended_at >= since)
+        .where(FocusSession.user_id == user.id, FocusSession.ended_at >= since, FocusSession.deleted_at.is_(None))
         .order_by(FocusSession.ended_at.desc())
     )
     if course_id is not None:
@@ -73,9 +78,16 @@ def summary(db: Session, user: User, now: datetime) -> dict[str, Any]:
     recent = db.execute(
         select(FocusSession, Course.title)
         .outerjoin(Course, Course.id == FocusSession.course_id)
-        .where(FocusSession.user_id == user.id)
+        .where(FocusSession.user_id == user.id, FocusSession.deleted_at.is_(None))
         .order_by(FocusSession.ended_at.desc())
         .limit(8)
+    ).all()
+    removed = db.execute(
+        select(FocusSession, Course.title)
+        .outerjoin(Course, Course.id == FocusSession.course_id)
+        .where(FocusSession.user_id == user.id, FocusSession.deleted_at >= now - timedelta(days=RESTORE_DAYS))
+        .order_by(FocusSession.deleted_at.desc())
+        .limit(20)
     ).all()
     seconds_today, sessions_today = by_day[today]
     courses = [
@@ -93,7 +105,34 @@ def summary(db: Session, user: User, now: datetime) -> dict[str, Any]:
         "week_minutes": _minutes(sum(sec for sec, _ in by_day.values())),
         "by_course": sorted(courses, key=lambda e: -e["minutes"]),
         "recent": [session_view(s, title) for s, title in recent],
+        "removed": [session_view(s, title) for s, title in removed],
+        "restore_days": RESTORE_DAYS,
     }
+
+
+def set_removed(db: Session, user: User, session_id: uuid.UUID, removed: bool, request_id: str | None) -> None:
+    """Remove a wrongly timed block (after the learner confirmed it) or restore it within RESTORE_DAYS. Audited;
+    the learning event that recorded the block stays, as all learning events do."""
+    s = db.scalar(
+        select(FocusSession).where(FocusSession.id == session_id, FocusSession.user_id == user.id).with_for_update()
+    )
+    if s is None:
+        raise not_found("Focus block")
+    if (s.deleted_at is not None) == removed:
+        return
+    now = clock.now()
+    if not removed and s.deleted_at is not None and s.deleted_at < now - timedelta(days=RESTORE_DAYS):
+        raise ApiError(409, "restore_period_over", f"Removed focus blocks can be restored for {RESTORE_DAYS} days.")
+    s.deleted_at = now if removed else None
+    audit(
+        db,
+        actor_id=user.id,
+        action="focus.deleted" if removed else "focus.restored",
+        target_type="focus_session",
+        target_id=s.id,
+        details={"minutes": _minutes(s.focused_seconds), "course_id": str(s.course_id) if s.course_id else None},
+        request_id=request_id,
+    )
 
 
 def course_focus(db: Session, user: User, course_id: uuid.UUID, now: datetime) -> dict[str, Any]:

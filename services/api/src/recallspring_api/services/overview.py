@@ -366,6 +366,8 @@ _EVENT_TEXT = {
     "auth.logout": "Signed out",
     "focus.completed": "Focus block finished",
     "focus.stopped": "Focus block stopped early",
+    "focus.deleted": "Focus block removed",
+    "focus.restored": "Focus block restored",
 }
 
 
@@ -401,6 +403,8 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         return str(payload.get("message") or payload.get("code"))
     if event_type in ("focus.completed", "focus.stopped"):
         return f"{payload.get('minutes')} of {payload.get('planned_minutes')} min"
+    if event_type in ("focus.deleted", "focus.restored"):
+        return f"{payload.get('minutes')} min"
     return None
 
 
@@ -490,7 +494,7 @@ def history(db: Session, user: User, limit: int) -> list[dict[str, Any]]:
             "kind": "audit",
             "type": a.action,
             "text": _EVENT_TEXT.get(a.action, a.action),
-            "detail": _detail(a.action, a.details) if a.action.startswith("backup.") else None,
+            "detail": _detail(a.action, a.details) if a.action.startswith(("backup.", "focus.")) else None,
             "entity_type": a.target_type,
             "entity_id": str(a.target_id) if a.target_id else None,
             "label": labels.get(a.target_id) if a.target_id else None,

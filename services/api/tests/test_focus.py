@@ -97,3 +97,50 @@ def test_claude_sees_focus_time_as_effort_only(owner_api: Api, conn: ConnectorAp
     focus = conn.get(f"/courses/{stats}/context").json()["focus_time"]
     assert focus["today_minutes"] == 45 and focus["last_7_days_minutes"] == 90 and focus["sessions_last_7_days"] == 2
     assert "never what they learned" in focus["how_to_use"]
+
+
+def test_a_wrong_block_can_be_removed_and_restored(owner_api: Api, conn: ConnectorApi, frozen: FrozenClock) -> None:
+    stats = course(owner_api)
+    good = owner_api.post("/focus-sessions", block(course_id=stats)).json()
+    wrong = owner_api.post("/focus-sessions", block(120, course_id=stats)).json()
+
+    def delete(sid: str) -> Any:
+        return owner_api.client.delete(f"/api/v1/focus-sessions/{sid}", headers=owner_api.headers())
+
+    # Without the CSRF token (e.g. from another site) nothing is removed.
+    assert owner_api.client.delete(f"/api/v1/focus-sessions/{wrong['id']}").status_code == 403
+
+    s = delete(wrong["id"]).json()
+    assert s["today"]["minutes"] == 45 and [r["id"] for r in s["recent"]] == [good["id"]]
+    assert [r["id"] for r in s["removed"]] == [wrong["id"]] and s["removed"][0]["deleted_at"] is not None
+    assert s["restore_days"] == 30
+    assert conn.get(f"/courses/{stats}/context").json()["focus_time"]["today_minutes"] == 45
+    assert delete(wrong["id"]).status_code == 200  # already removed: no change, no second audit row
+
+    # The same block sent again (an offline retry) does not come back as a new one.
+    again = owner_api.post(
+        "/focus-sessions", {**block(120, course_id=stats), "client_session_id": wrong["client_session_id"]}
+    )
+    assert again.status_code == 200 and again.json()["deleted_at"] is not None
+    assert owner_api.get("/focus/summary").json()["today"]["minutes"] == 45
+
+    frozen.advance(days=29)
+    restored = owner_api.post(f"/focus-sessions/{wrong['id']}/restore")
+    assert restored.status_code == 200 and restored.json()["removed"] == []
+
+    history = [h for h in owner_api.get("/history").json() if h["type"] in ("focus.deleted", "focus.restored")]
+    assert [(h["text"], h["detail"], h["label"]) for h in history] == [
+        ("Focus block restored", "120 min", "Statistika"),
+        ("Focus block removed", "120 min", "Statistika"),
+    ]
+
+    delete(wrong["id"])
+    frozen.advance(days=31)
+    late = owner_api.post(f"/focus-sessions/{wrong['id']}/restore")
+    assert late.status_code == 409 and late.json()["code"] == "restore_period_over"
+    assert owner_api.get("/focus/summary").json()["removed"] == []
+
+
+def test_only_your_own_blocks_can_be_removed(owner_api: Api, frozen: FrozenClock) -> None:
+    r = owner_api.client.delete(f"/api/v1/focus-sessions/{uuid.uuid4()}", headers=owner_api.headers())
+    assert r.status_code == 404

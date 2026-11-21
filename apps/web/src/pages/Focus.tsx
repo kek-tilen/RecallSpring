@@ -1,12 +1,14 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ChangeEvent } from "react";
+import { request } from "../api";
 import { Link } from "react-router";
 import { BACKGROUNDS, ClockFace, FocusStage, RoundDots, TimerText, useBackgroundImage, usePomodoro } from "../components/Pomodoro";
-import { Async, Card, PageHead } from "../components/ui";
+import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
 import { IMAGE_CHANGED, chime, imageProblem, loadImage, removeImage, saveImage } from "../focusMedia";
 import { timeOnly, dayHeading } from "../format";
 import { DEFAULT_SETTINGS, FACES, LIMITS, PHASE_LABEL, type PomodoroSettings } from "../pomodoro";
-import { useCourses, useFocusSummary } from "../queries";
-import type { FocusSummary } from "../types";
+import { keys, useCourses, useFocusSummary } from "../queries";
+import type { FocusBlock, FocusSummary } from "../types";
 
 export function minutesText(m: number): string {
   if (m < 60) return `${m} min`;
@@ -165,23 +167,121 @@ export function FocusTime({ s, compact = false }: { s: FocusSummary; compact?: b
   );
 }
 
+function blockLine(b: FocusBlock): string {
+  return `${minutesText(b.minutes)} · ${b.course_title ?? "No course"} · ${dayHeading(b.ended_at)}, ${timeOnly(b.ended_at)}`;
+}
+
+/** The latest blocks. A wrongly timed one can be removed after confirming, and restored for 30 days. */
 function Recent({ s }: { s: FocusSummary }) {
-  if (s.recent.length === 0) return <p className="muted small">Finished focus blocks appear here.</p>;
+  const qc = useQueryClient();
+  const [asked, setAsked] = useState<FocusBlock | null>(null);
+  const done = (next: FocusSummary) => {
+    qc.setQueryData(keys.focusSummary, next);
+    void qc.invalidateQueries({ queryKey: keys.history });
+    void qc.invalidateQueries({ queryKey: keys.dashboard });
+  };
+  const remove = useMutation({
+    mutationFn: (id: string) => request<FocusSummary>(`/focus-sessions/${id}`, { method: "DELETE" }),
+    onSuccess: (next) => {
+      done(next);
+      setAsked(null);
+    },
+  });
+  const restore = useMutation({
+    mutationFn: (id: string) => request<FocusSummary>(`/focus-sessions/${id}/restore`, { method: "POST" }),
+    onSuccess: done,
+  });
+
   return (
-    <ul className="list">
-      {s.recent.map((b) => (
-        <li key={b.id} className="row" style={{ justifyContent: "space-between" }}>
-          <span>
-            <strong>{minutesText(b.minutes)}</strong>
-            {!b.completed && <span className="chip warn" style={{ marginLeft: 8 }}>Stopped early</span>}
-            <span className="small muted"> · {b.course_title ?? "No course"}</span>
-          </span>
-          <span className="small muted">
-            {dayHeading(b.ended_at)}, {timeOnly(b.ended_at)}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className="stack" style={{ gap: 14 }}>
+      {s.recent.length === 0 ? (
+        <p className="muted small" style={{ margin: 0 }}>
+          Finished focus blocks appear here.
+        </p>
+      ) : (
+        <ul className="list">
+          {s.recent.map((b) => (
+            <li key={b.id} className="focus-block">
+              <span>
+                <strong>{minutesText(b.minutes)}</strong>
+                {!b.completed && <span className="chip warn" style={{ marginLeft: 8 }}>Stopped early</span>}
+                <span className="small muted"> · {b.course_title ?? "No course"}</span>
+                <span className="tiny muted" style={{ display: "block" }}>
+                  {dayHeading(b.ended_at)}, {timeOnly(b.ended_at)}
+                </span>
+              </span>
+              <button
+                type="button"
+                className="btn small ghost"
+                aria-label={`Remove focus block: ${blockLine(b)}`}
+                onClick={() => {
+                  remove.reset();
+                  setAsked(b);
+                }}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {s.removed.length > 0 && (
+        <div className="stack" style={{ gap: 6 }}>
+          <h3 className="small" style={{ margin: 0 }}>
+            Recently removed
+          </h3>
+          <ul className="list">
+            {s.removed.map((b) => (
+              <li key={b.id} className="focus-block">
+                <span className="small muted">
+                  <s>{minutesText(b.minutes)}</s> · {b.course_title ?? "No course"}
+                  <span className="tiny" style={{ display: "block" }}>
+                    {dayHeading(b.ended_at)}, {timeOnly(b.ended_at)} · removed {dayHeading(b.deleted_at!).toLowerCase()}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={restore.isPending}
+                  aria-label={`Restore focus block: ${blockLine(b)}`}
+                  onClick={() => restore.mutate(b.id)}
+                >
+                  Restore
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="tiny muted" style={{ margin: 0 }}>
+            Removed blocks do not count as focus time. You can restore them for {s.restore_days} days.
+          </p>
+          {restore.error && <ErrorNote error={restore.error} />}
+        </div>
+      )}
+
+      <Confirm
+        open={asked !== null}
+        title="Remove this focus block?"
+        confirmLabel="Remove"
+        danger
+        busy={remove.isPending}
+        onConfirm={() => asked && remove.mutate(asked.id)}
+        onClose={() => setAsked(null)}
+      >
+        {asked && (
+          <div className="stack" style={{ gap: 8 }}>
+            <p style={{ margin: 0 }}>
+              <strong>{blockLine(asked)}</strong>
+            </p>
+            <p style={{ margin: 0 }}>
+              It will no longer count as focus time for {asked.course_title ?? "no course"}. You can restore it under
+              Recently removed for {s.restore_days} days. History keeps a note that it was removed.
+            </p>
+            {remove.error && <ErrorNote error={remove.error} />}
+          </div>
+        )}
+      </Confirm>
+    </div>
   );
 }
 

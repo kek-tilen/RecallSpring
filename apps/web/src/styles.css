@@ -2883,6 +2883,13 @@ a.cite:hover {
   background: var(--ramp-2);
 }
 
+.focus-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 /* the small timer on other pages */
 .focus-pill {
   display: flex;

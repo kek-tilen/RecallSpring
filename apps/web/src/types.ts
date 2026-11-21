@@ -692,6 +692,7 @@ export interface FocusBlock {
   planned_minutes: number;
   minutes: number;
   completed: boolean;
+  deleted_at: string | null;
 }
 
 export interface FocusSummary {
@@ -700,4 +701,6 @@ export interface FocusSummary {
   week_minutes: number;
   by_course: { course_id: string | null; course_title: string | null; minutes: number; sessions: number }[];
   recent: FocusBlock[];
+  removed: FocusBlock[]; // removed in the last `restore_days` days, newest first
+  restore_days: number;
 }

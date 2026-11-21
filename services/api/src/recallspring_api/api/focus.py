@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import timedelta
 from typing import Any
 
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock
 from ..db import get_db
-from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
+from ..deps import Ctx, WriteCtx, commit_with_response, csrf_ctx, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
 from ..models import Course, FocusSession
 from ..schemas import FocusSessionIn
@@ -98,4 +99,25 @@ def save_focus_session(
 @router.get("/focus/summary")
 def focus_summary(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Focus time today, over the last seven days (by day and by course) and the latest blocks."""
+    return focus.summary(db, ctx.user, clock.now())
+
+
+@router.delete("/focus-sessions/{session_id}")
+def remove_focus_session(
+    session_id: uuid.UUID, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Remove a wrongly timed block after the learner confirmed it: it no longer counts as focus time and can be
+    restored for 30 days (soft delete, audited). Returns the updated summary."""
+    focus.set_removed(db, ctx.user, session_id, True, ctx.request_id)
+    db.commit()
+    return focus.summary(db, ctx.user, clock.now())
+
+
+@router.post("/focus-sessions/{session_id}/restore")
+def restore_focus_session(
+    session_id: uuid.UUID, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Count a removed block again (within 30 days; audited). Returns the updated summary."""
+    focus.set_removed(db, ctx.user, session_id, False, ctx.request_id)
+    db.commit()
     return focus.summary(db, ctx.user, clock.now())
