@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     max_image_upload_bytes: int = 20 * 1024 * 1024  # photos (Claude gets a smaller copy)
     max_library_bytes: int = 2 * 1024**3  # all originals of one learner (identical files count once)
     min_free_disk_bytes: int = 2 * 1024**3  # uploads pause before the disk, shared with other apps, runs low
+    # Moving in (docs/08 -> Moving from ChatGPT): a ChatGPT data export or a ZIP of material is staged privately
+    # under storage_dir/imports until the learner picks what to keep; unsaved uploads are removed after the
+    # retention period. Each file inside still has the per-kind limits above.
+    max_import_bytes: int = 1024**3
+    # conversations.json is read whole: memory use is several times its size.
+    max_import_json_bytes: int = 300 * 1024**2
+    import_retention_days: int = Field(default=7, ge=1, le=60)
     max_pdf_pages: int = 600
     extraction_timeout_seconds: int = 120
     # "subprocess" isolates parser crashes and enforces the timeout; "inprocess" is only for fast tests.

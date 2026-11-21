@@ -204,12 +204,16 @@ BACKUP_CHECK_SECONDS = 600
 
 
 def run_worker(poll_seconds: float = 2.0, should_stop: Callable[[], bool] = lambda: False) -> None:
-    """Process jobs; every 10 minutes also make a backup when one is due (backup.py; never raises)."""
+    """Process jobs; every 10 minutes also make a backup when one is due (backup.py) and remove staged imports
+    past their retention (chatgpt_import.py); neither raises."""
+    from ..services import chatgpt_import
+
     log.info("worker started")
     next_backup_check = 0.0
     while not should_stop():
         if time.monotonic() >= next_backup_check:
             backup.run_if_due()
+            chatgpt_import.expire_all()
             next_backup_check = time.monotonic() + BACKUP_CHECK_SECONDS
         if not run_once():
             time.sleep(poll_seconds)

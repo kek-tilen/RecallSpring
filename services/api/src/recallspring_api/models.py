@@ -89,6 +89,9 @@ class User(Base):
     # Share of each day kept for personal interests. 0 = university first: interests only get the time left after
     # today's course work, and only while every exam is on track.
     interest_percent: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0", default=0)
+    # The learner's own words on how they like to study (e.g. brought over from ChatGPT's custom instructions);
+    # Claude reads them as preferences, never as rules that override RecallSpring's.
+    study_preferences: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
 
@@ -502,8 +505,8 @@ class Source(Base):
             "'odt','odp','ods','csv','subtitles','notebook','code','latex')",
             name="kind",
         ),
-        CheckConstraint("origin IN ('upload','paste')", name="origin"),
-        CheckConstraint("category IN ('material','notes','exercises','past_paper','other')", name="category"),
+        CheckConstraint("origin IN ('upload','paste','import')", name="origin"),
+        CheckConstraint("category IN ('material','notes','exercises','past_paper','chat','other')", name="category"),
         CheckConstraint(
             "parse_state IN ('pending','processing','ready','needs_attention','failed')", name="parse_state"
         ),

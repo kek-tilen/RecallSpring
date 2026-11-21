@@ -25,10 +25,11 @@ from ..schemas import (
     ConnectorTokenOut,
     FocusIn,
     PlanOut,
+    PreferencesIn,
     StudySettingsIn,
 )
 from ..security import sha256_hex
-from ..services import interests
+from ..services import chatgpt_import, interests
 from ..services.events import audit
 from ..services.planner import today_plan
 
@@ -104,6 +105,25 @@ def update_focus(payload: FocusIn, ctx: WriteCtx = Depends(write_ctx), db: Sessi
     assert user is not None
     interests.set_focus(db, user, payload.course_id, payload.until, ctx.request_id, origin="web")
     return commit_with_response(db, ctx, payload, 200, _study_view(db, user))
+
+
+@router.get("/settings/preferences")
+def study_preferences(ctx: Ctx = Depends(current_ctx)) -> dict[str, Any]:
+    """The learner's own words on how they like to study; Claude reads them at the start of a session."""
+    return chatgpt_import.preferences_view(ctx.user)
+
+
+@router.put("/settings/preferences")
+def update_study_preferences(
+    payload: PreferencesIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    user = db.get(User, ctx.user.id, with_for_update=True)
+    assert user is not None
+    view = chatgpt_import.set_preferences(db, user, payload.text, ctx.request_id)
+    db.flush()
+    return commit_with_response(db, ctx, payload, 200, view)
 
 
 @router.put("/settings/study")

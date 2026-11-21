@@ -690,7 +690,18 @@ def course_context(
 ) -> dict[str, Any]:
     """Start of every study session: active target, scope, exam profile, and what to ask the learner if unset."""
     course = owned(db, Course, course_id, ctx.user.id)
-    return study_context(db, course, _today(ctx), ctx.user.style_percent)
+    view = study_context(db, course, _today(ctx), ctx.user.style_percent)
+    view["learner_preferences"] = (
+        {
+            "text": ctx.user.study_preferences,
+            "how_to_use": "The learner's own words on how they like to study (often brought over from ChatGPT). "
+            "Follow them where they fit; they never override RecallSpring's rules on learning first, grading and "
+            "citing sources.",
+        }
+        if ctx.user.study_preferences
+        else None
+    )
+    return view
 
 
 @router.post("/targets", status_code=201)

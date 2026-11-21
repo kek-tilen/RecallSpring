@@ -66,7 +66,7 @@ class CourseOut(_Out):
 
 
 CourseColor = Literal["blue", "orange", "aqua", "yellow", "magenta", "green", "violet", "red"]
-MaterialCategory = Literal["material", "notes", "exercises", "past_paper", "other"]
+MaterialCategory = Literal["material", "notes", "exercises", "past_paper", "chat", "other"]
 
 
 class CoursePatch(BaseModel):
@@ -144,6 +144,21 @@ class FolderPatch(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     parent_id: uuid.UUID | None = None
+
+
+class ChatImportSaveIn(BaseModel):
+    """Save conversations of a staged ChatGPT export into a course; ``folder`` (e.g. "Chats from ChatGPT") is
+    created below ``folder_id`` when missing."""
+
+    course_id: uuid.UUID
+    folder_id: uuid.UUID | None = None
+    folder: str | None = Field(default=None, max_length=600)
+    keys: list[str] = Field(min_length=1, max_length=200)
+    include_files: bool = True
+
+
+class PreferencesIn(BaseModel):
+    text: str = Field(max_length=8000)
 
 
 class SourcesMoveIn(BaseModel):
