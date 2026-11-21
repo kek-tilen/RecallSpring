@@ -478,6 +478,41 @@ function TitleBar({ conv, busy }: { conv: Conversation; busy: boolean }) {
   );
 }
 
+const ICON = { width: 18, height: 18, viewBox: "0 0 18 18", "aria-hidden": true, focusable: false } as const;
+
+function PlusIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M9 3.5v11M3.5 9h11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M9 14.5v-11M4.5 8 9 3.5 13.5 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
+
+function ChartIcon() {
+  return (
+    <svg {...ICON} width={16} height={16}>
+      <path d="M3 14.5V9.5M7 14.5V4M11 14.5V7.5M15 14.5V11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
+
+function FileIcon() {
+  return (
+    <svg {...ICON} width={14} height={14}>
+      <path d="M5 2.5h5l3.5 3.5v9.5H5z M10 2.5V6h3.5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
+
+/** The message box: grows with the text (up to ~40 % of the window), tools in one row underneath. */
 function Composer({
   canSend,
   models,
@@ -504,6 +539,13 @@ function Composer({
   onMaterial: () => void;
 }) {
   const [text, setText] = useState("");
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, Math.round(window.innerHeight * 0.4))}px`;
+  }, [text]);
   async function submit() {
     const value = text.trim();
     if (!value || !model || busy) return;
@@ -521,56 +563,92 @@ function Composer({
     }
   }
   const names = material.map((f) => f.filename);
+  const ready = canSend && !!text.trim() && !!model && !busy;
   return (
-    <form
-      className="chat-composer"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-    >
-      {names.length > 0 && (
-        <div className="chat-material-line tiny">
-          <span className="muted">ChatGPT may use:</span>
-          {names.slice(0, 3).map((n) => (
-            <span key={n} className="chip">
-              {n}
-            </span>
-          ))}
-          {names.length > 3 && <span className="muted">+{names.length - 3} more</span>}
-        </div>
-      )}
-      <label className="field">
-        <span className="sr-only">Message to ChatGPT</span>
-        <textarea rows={2} value={text} maxLength={4000} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} placeholder={placeholder} disabled={!canSend} />
-      </label>
-      <div className="chat-tools">
-        <button type="button" className="btn small ghost" onClick={onMaterial} aria-haspopup="dialog" title={names.join("\n") || "Choose files ChatGPT may use"}>
-          Material{names.length ? ` (${names.length})` : ""}
-        </button>
-        <label className="row small" style={{ gap: 6 }} title="Lets ChatGPT add diagrams, charts or a slider, drawn by RecallSpring from checked data. Nothing it writes is run.">
-          <input type="checkbox" checked={visuals} onChange={(e) => onVisuals(e.target.checked)} />
-          <span>Visuals</span>
-        </label>
-        {models.length > 0 ? (
-          <select value={model} onChange={(e) => onModel(e.target.value)} aria-label="Model" className="chat-model">
-            {models.map((m) => (
-              <option key={m.slug} value={m.slug}>
-                {m.display_name}
-              </option>
+    <div className="composer-wrap">
+      <form
+        className={`chat-composer${canSend ? "" : " is-off"}`}
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) box.current?.focus();
+        }}
+      >
+        {names.length > 0 && (
+          <div className="composer-files" aria-label="Material ChatGPT may use">
+            {names.slice(0, 3).map((n) => (
+              <span key={n} className="composer-file" title={n}>
+                <FileIcon />
+                <span className="composer-file-name">{n}</span>
+              </span>
             ))}
-          </select>
-        ) : (
-          <span className="tiny muted">{canSend ? "Loading models…" : ""}</span>
+            {names.length > 3 && (
+              <button type="button" className="composer-file more" onClick={onMaterial}>
+                +{names.length - 3} more
+              </button>
+            )}
+          </div>
         )}
-        <span className="chat-tools-end">
-          <span className="tiny muted hide-narrow">Enter sends · Shift+Enter new line</span>
-          <button type="submit" className="btn primary" disabled={!canSend || !text.trim() || !model || busy}>
-            {busy ? "Waiting…" : "Send"}
+        <label className="composer-input">
+          <span className="sr-only">Message to ChatGPT</span>
+          <textarea
+            ref={box}
+            rows={1}
+            value={text}
+            maxLength={4000}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={onKey}
+            placeholder={placeholder}
+            disabled={!canSend}
+            aria-describedby="composer-hint"
+          />
+        </label>
+        <div className="composer-bar">
+          <button
+            type="button"
+            className="composer-icon"
+            onClick={onMaterial}
+            aria-haspopup="dialog"
+            aria-label={names.length ? `Material: ${plural(names.length, "file")} chosen` : "Choose material"}
+            title={names.join("\n") || "Choose files ChatGPT may use"}
+          >
+            <PlusIcon />
+            {names.length > 0 && <span className="composer-count">{names.length}</span>}
           </button>
-        </span>
-      </div>
-    </form>
+          <button
+            type="button"
+            className="composer-pill"
+            aria-pressed={visuals}
+            onClick={() => onVisuals(!visuals)}
+            title="Lets ChatGPT add diagrams, charts or a slider, drawn by RecallSpring from checked data. Nothing it writes is run."
+          >
+            <ChartIcon />
+            Visuals
+          </button>
+          <span className="composer-end">
+            {models.length > 0 ? (
+              <select value={model} onChange={(e) => onModel(e.target.value)} aria-label="Model" className="composer-model">
+                {models.map((m) => (
+                  <option key={m.slug} value={m.slug}>
+                    {m.display_name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="tiny muted">{canSend ? "Loading models…" : ""}</span>
+            )}
+            <button type="submit" className={`composer-send${busy ? " is-busy" : ""}`} disabled={!ready} aria-label={busy ? "Waiting for the reply" : "Send message"}>
+              {busy ? <span className="composer-spinner" aria-hidden="true" /> : <SendIcon />}
+            </button>
+          </span>
+        </div>
+      </form>
+      <p id="composer-hint" className="composer-hint">
+        Enter sends · Shift+Enter new line
+      </p>
+    </div>
   );
 }
 
