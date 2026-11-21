@@ -269,6 +269,15 @@ def save_failure(db: Session, question: AiMessage, code: str, duration_ms: int) 
     question.completed_at = clock.now()
 
 
+def rename(db: Session, user: User, conversation_id: uuid.UUID, title: str) -> AiConversation:
+    conv = get(db, user, conversation_id, for_update=True)
+    clean = " ".join(title.split())
+    if not clean:
+        raise ApiError(422, "title_required", "Give the conversation a name.")
+    conv.title = clean[:200]
+    return conv
+
+
 def set_deleted(db: Session, user: User, conversation_id: uuid.UUID, deleted: bool, request_id: str | None) -> None:
     conv = get(db, user, conversation_id, for_update=True)
     if (conv.deleted_at is not None) == deleted:

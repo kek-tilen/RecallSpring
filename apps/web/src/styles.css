@@ -1727,3 +1727,255 @@ tr.selected td {
   border: 1px solid var(--border);
   background: var(--surface);
 }
+
+/* Chat with ChatGPT (pages/Chat.tsx) */
+.chat-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.chat-side {
+  position: sticky;
+  top: 16px;
+}
+
+.chat-side-toggle {
+  display: none;
+  align-self: flex-start;
+}
+
+.chat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+}
+
+.chat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: none;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.chat-item:hover {
+  background: var(--surface);
+}
+
+.chat-item.active {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+.chat-item-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 60vh;
+}
+
+.chat-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+
+.chat-title {
+  margin: 0;
+  font-size: 1.1rem;
+  overflow-wrap: anywhere;
+}
+
+.chat-thread {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1;
+  max-height: calc(100vh - 360px);
+  min-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.chat-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  min-height: 240px;
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chat-msg.you {
+  align-items: flex-end;
+}
+
+.chat-msg.you .chat-bubble {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px 14px 4px 14px;
+  padding: 8px 12px;
+  max-width: min(80%, 60ch);
+  overflow-wrap: anywhere;
+}
+
+.chat-error {
+  color: var(--danger);
+}
+
+.chat-meta .kv {
+  margin-top: 6px;
+}
+
+.chat-meta .linklike {
+  font-weight: 400;
+  text-align: left;
+}
+
+.chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.chat-signin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.mono {
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+/* Markdown in replies (components/Markdown.tsx) */
+.md {
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md > :last-child {
+  margin-bottom: 0;
+}
+
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md pre,
+.md .table-wrap {
+  margin: 0 0 10px;
+}
+
+.md h3,
+.md h4,
+.md h5 {
+  margin: 14px 0 6px;
+  font-size: 1rem;
+}
+
+.md h3 {
+  font-size: 1.08rem;
+}
+
+.md ul,
+.md ol {
+  padding-left: 1.4em;
+}
+
+.md code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.md-code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 10px 12px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.md-code code {
+  background: none;
+  padding: 0;
+}
+
+.md blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 860px) {
+  .chat-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-side {
+    display: none;
+    position: static;
+  }
+
+  .chat-side.open {
+    display: block;
+  }
+
+  .chat-side-toggle {
+    display: inline-flex;
+  }
+
+  .chat-thread {
+    max-height: none;
+  }
+
+  .hide-narrow {
+    display: none;
+  }
+}

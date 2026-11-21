@@ -2,6 +2,7 @@ import { Navigate, Outlet, createBrowserRouter, useLocation } from "react-router
 import { Layout } from "./components/Layout";
 import { Loading } from "./components/ui";
 import { setTimezone } from "./format";
+import { ChatPage } from "./pages/Chat";
 import { ConceptPage } from "./pages/Concept";
 import { CoursePage } from "./pages/Course";
 import { CoursesPage } from "./pages/Courses";
@@ -72,6 +73,8 @@ export const router = createBrowserRouter([
           { path: "library/:sourceId", element: <SourcePage /> },
           { path: "notes", element: <NotesPage /> },
           { path: "notes/:noteId", element: <NotePage /> },
+          { path: "chat", element: <ChatPage /> },
+          { path: "chat/:conversationId", element: <ChatPage /> },
           { path: "history", element: <HistoryPage /> },
           { path: "guide", element: <GuidePage /> },
           { path: "settings", element: <SettingsPage /> },

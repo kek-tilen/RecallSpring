@@ -11,6 +11,7 @@ const NAV = [
   { to: "/simulations", label: "Simulations" },
   { to: "/library", label: "Library" },
   { to: "/notes", label: "Notes" },
+  { to: "/chat", label: "Chat" },
   { to: "/history", label: "History" },
   { to: "/guide", label: "Guide" },
   { to: "/settings", label: "Settings" },

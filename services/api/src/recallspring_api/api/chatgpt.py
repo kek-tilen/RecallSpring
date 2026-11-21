@@ -20,7 +20,7 @@ from ..config import get_settings
 from ..db import get_db
 from ..deps import Ctx, WriteCtx, csrf_ctx, current_ctx, write_ctx
 from ..errors import ApiError
-from ..schemas import ChatGptMessageIn
+from ..schemas import ChatGptConversationPatch, ChatGptMessageIn
 from ..services import ai_conversations as conv_svc
 from ..services.events import audit
 
@@ -188,6 +188,18 @@ def send_message(
         details={"model": result.model, "outcome": "completed", "turns": len(turns), "usage": reply.usage},
         request_id=ctx.request_id,
     )
+    db.commit()
+    return conv_svc.conversation_view(db, conv)
+
+
+@router.patch("/ai/chatgpt/conversations/{conversation_id}")
+def rename_conversation(
+    conversation_id: uuid.UUID,
+    payload: ChatGptConversationPatch,
+    ctx: Ctx = Depends(csrf_ctx),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    conv = conv_svc.rename(db, ctx.user, conversation_id, payload.title)
     db.commit()
     return conv_svc.conversation_view(db, conv)
 

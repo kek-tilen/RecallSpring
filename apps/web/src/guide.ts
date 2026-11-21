@@ -253,6 +253,7 @@ export const STEPS: GuideStep[] = [
 ];
 
 export const GOOD_TO_KNOW: string[] = [
+  "Chat talks to ChatGPT on your own plan after you sign in (Settings → ChatGPT). Conversations are saved with the model, time and tokens of each reply; Claude stays your tutor.",
   "Claude only keeps what is saved in RecallSpring. If you are unsure, ask: “Is this saved in RecallSpring?”",
   "Quizzes Claude writes only in the chat do not count. Ask for the RecallSpring form or a simulation.",
   "Grades from Claude are estimates. Challenge one whenever you disagree.",

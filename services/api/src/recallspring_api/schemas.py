@@ -166,6 +166,10 @@ class ChatGptMessageIn(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
 
 
+class ChatGptConversationPatch(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
 class PreferencesIn(BaseModel):
     text: str = Field(max_length=8000)
 

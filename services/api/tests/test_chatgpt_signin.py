@@ -378,6 +378,9 @@ def test_deleting_a_conversation_is_soft_and_restorable(owner_api: Api, openai: 
     assert len(_audits("ai.chatgpt_conversation_deleted")) == 1
     assert len(_audits("ai.chatgpt_conversation_restored")) == 1
     assert owner_api.get(f"/ai/chatgpt/conversations/{uuid.uuid4()}").status_code == 404
+    renamed = owner_api.patch(f"/ai/chatgpt/conversations/{conv['id']}", {"title": "  Quality\n assurance "})
+    assert renamed.status_code == 200 and renamed.json()["title"] == "Quality assurance"
+    assert owner_api.patch(f"/ai/chatgpt/conversations/{conv['id']}", {"title": ""}).status_code == 422
 
 
 def test_declined_sign_in_and_remote_servers(
