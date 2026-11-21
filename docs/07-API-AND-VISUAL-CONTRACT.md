@@ -75,7 +75,11 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/ai/chatgpt/connect` | Start sign-in (CSRF): returns the OpenAI authorize URL; `409 chatgpt_not_local` / `chatgpt_disabled` |
 | GET | `/ai/chatgpt/callback` | OAuth redirect target (one-time `state`, no session cookie needed); 303 to `/settings?chatgpt=<outcome>` |
 | GET | `/ai/chatgpt/models` | Models listed for the account (`visibility == "list"`) |
-| POST | `/ai/chatgpt/test` | Connection test `{model, message ≤ 4000, history ≤ 20}`, waits for `response.completed`; not saved; errors `chatgpt_*` (429 usage limit, never a paid fallback) |
+| GET | `/ai/chatgpt/conversations` | Saved conversations (newest first), recently deleted ones (30 days) and usage over the last 24 hours and 30 days; readable while signed out |
+| GET | `/ai/chatgpt/conversations/{id}` | One conversation: messages with, per reply, model chosen, model and version that answered, response ID, time, duration, account and token usage; failed messages with their error code; totals |
+| POST | `/ai/chatgpt/messages` | `{conversation_id?, model, message ≤ 4000}` (Idempotency-Key: a retry never asks twice): saves the message, then waits for `response.completed` and saves the reply; errors `chatgpt_*` (429 usage limit, never a paid fallback) carry `details.conversation_id`; `409 conversation_deleted` |
+| DELETE | `/ai/chatgpt/conversations/{id}` | Soft delete after the learner's confirmation; audited |
+| POST | `/ai/chatgpt/conversations/{id}/restore` | Restore within 30 days; audited |
 | POST | `/ai/chatgpt/disconnect` | Revoke at OpenAI (best effort) and delete the tokens here; audited |
 | GET | `/health/live` | Liveness, no secrets |
 | GET | `/health/ready` | DB and storage checks, restricted if exposed |

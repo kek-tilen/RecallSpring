@@ -64,7 +64,7 @@ sign-in. The product rule "never force users to manage folders" still applies.
 
 - **First, a proof of concept in the local app.** It follows the official open-source token-sharing contract
   (docs/04):
-  - sign-in, model list, a connection test chat and sign-out, all user-initiated;
+  - sign-in, model list, saved conversations (each reply with model and version, time, duration and tokens; kept after signing out) and sign-out, all user-initiated;
   - only on loopback, with the redirect at `127.0.0.1`;
   - tokens are kept locally under the user's control (DPAPI / 0600), outside Git, the database and backups;
   - `store: false`, `stream: true`, allowlisted fields only;

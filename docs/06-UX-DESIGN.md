@@ -72,7 +72,7 @@ Implemented (2026-11-21, ADR-008):
   3. *Project files:* attachments found in the export are saved alongside the chats (optional), or dropped as files/folders/ZIPs.
 
   The upload is kept 7 days for picking, then deleted ("Remove upload" deletes it sooner).
-- **Settings → ChatGPT (preview):** `Sign in with ChatGPT` per OpenAI's UI guidelines. It shows the privacy notes (only what you send, on this computer, never in backups, no paid fallback), the account and plan usage, a model choice, the connection test chat, and Sign out with a confirmation. It states clearly when it is unavailable (not on 127.0.0.1, or turned off). Claude stays the tutor.
+- **Settings → ChatGPT (preview):** `Sign in with ChatGPT` per OpenAI's UI guidelines. It shows the privacy notes (only what you send, on this computer, never in backups, no paid fallback), the account and plan usage, a model choice, saved conversations, and Sign out with a confirmation. Conversations can be picked from a list. Every reply shows the model and version that answered, the exact time, how long it took and its tokens (input with cached, output with reasoning). Under *More* are the model chosen, the account and the response ID. A message that got no reply says why and is not sent again. Below are per-conversation totals, usage over the last 24 hours and 30 days, Delete (with confirmation) and Recently deleted with Restore. Conversations stay readable while signed out. It states clearly when it is unavailable (not on 127.0.0.1, or turned off). Claude stays the tutor.
 
 ### Insights
 

@@ -50,7 +50,8 @@
 | Library: automatic grouping (university › semester › course › kind) **and** the learner's own nested folders inside a course (optional, up to 5 levels); folder and ZIP uploads keep their structure | Approved 2026-11-21 (owner in chat; ADR-008) |
 | Archive: one Archived page for semesters/groups, courses, folders and files, each restorable; archived material hidden from library, search and Claude but kept and citable | Approved 2026-11-21 (owner in chat; ADR-008) |
 | Moving in from ChatGPT: chats from the official data export (chosen by the learner, saved word for word as material), project files, and custom instructions/memories as study preferences the learner confirms; staged uploads deleted after 7 days | Approved 2026-11-21 (owner chose all three; ADR-008) |
-| OpenAI: "Sign in with ChatGPT" in the local app first (proof of concept: sign-in, models, test chat, sign-out; not used for tutoring yet), a ChatGPT connector later (needs public HTTPS and OAuth; plan only) | Approved 2026-11-21 (owner in chat; ADR-008, `docs/chatgpt-connector-plan.md`) |
+| OpenAI: "Sign in with ChatGPT" in the local app first (proof of concept: sign-in, models, saved conversations, sign-out; not used for tutoring yet), a ChatGPT connector later (needs public HTTPS and OAuth; plan only) | Approved 2026-11-21 (owner in chat; ADR-008, `docs/chatgpt-connector-plan.md`) |
+| ChatGPT conversations are saved in RecallSpring, and each reply records the model and version that answered, time, duration, account and token usage. They stay after signing out of ChatGPT or RecallSpring (the ChatGPT sign-in also stays across RecallSpring sign-outs); deleting is confirmed, soft and restorable for 30 days | Approved 2026-11-21 (owner in chat) |
 
 ## Working assumptions (do not mistake for owner approval)
 
@@ -115,7 +116,7 @@
 
 **Gate status:**
 - Mode A: automated end-to-end run **PASS** on 2026-11-19. The real API and the real MCP server over stdio completed the full loop: plan → question → form submission (exact text saved) → assessment → next review; a second grade was rejected. The run used an in-process MCP client, not Claude Desktop. **Pending: the owner's test in Claude Desktop**, which must show that the answer form renders.
-- SIWC: proof of concept built 2026-11-21 and **PASS against a fake OpenAI** (sign-in with dynamic registration and PKCE, protected storage, model list, allowlisted streamed request with history, usage-limit/ineligible/unavailable errors with no fallback, refresh rotation, terminal refresh → signed out, revoke). **Pending: the owner's live sign-in** on `http://127.0.0.1:4318` (Settings → ChatGPT). Not used for tutoring or grading until then.
+- SIWC: proof of concept built 2026-11-21 and **PASS against a fake OpenAI** (sign-in with dynamic registration and PKCE, protected storage, model list, allowlisted streamed request with history, usage-limit/ineligible/unavailable errors with no fallback, refresh rotation, terminal refresh → signed out, revoke). **Owner's live run 2026-11-21: PASS** for sign-in, model list and a three-turn conversation (history kept, models switched mid-conversation). Pending: sign out and sign in again. Not used for tutoring or grading.
 - Anthropic API: not planned until the owner adds a key.
 
 ## Decision process for changes
