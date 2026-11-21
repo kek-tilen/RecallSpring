@@ -1,4 +1,4 @@
-"""Authentication for the Claude connector (Mode A).
+"""Authentication for the assistant connector (Mode A: Claude Desktop or Codex).
 
 Connector tokens are bearer tokens accepted **only** by routes under ``/api/v1/connector`` (read + append).
 They never work on owner routes, which require the session cookie and CSRF token, so a connector cannot reach
@@ -93,7 +93,7 @@ def connector_ctx(authorization: str | None = Header(default=None), db: Session 
     if user is None:
         raise ApiError(401, "connector_token_invalid", "This connector token is invalid.")
     _count_request(user, token.id)
-    return Ctx(user=user, session=None, request_id=request_id_var.get())
+    return Ctx(user=user, session=None, request_id=request_id_var.get(), client=token.client)
 
 
 def connector_write_ctx(

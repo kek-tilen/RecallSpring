@@ -219,6 +219,7 @@ export interface AttemptHistory {
   grade: number | null;
   assessment_status: string | null;
   graded_by: string | null;
+  grader?: Grader | null;
   feedback: string | null;
 }
 
@@ -253,6 +254,7 @@ export interface AttemptRow {
   grade: number | null;
   assessment_status: string | null;
   graded_by: string | null;
+  grader?: Grader | null;
 }
 
 export interface QuizOption {
@@ -275,6 +277,7 @@ export interface QuizItemView {
   assessment_status?: string | null;
   feedback?: string | null;
   graded_by?: string | null;
+  grader?: Grader | null;
   correct_option?: string | null;
   expected_points?: string[];
   source_refs?: string[];
@@ -606,9 +609,18 @@ export interface SearchHit {
   snippet: string;
 }
 
+/** Who graded: "Claude", "Codex", "RecallSpring (answer key)" or "You", and the model the assistant reported. */
+export interface Grader {
+  name: string;
+  model: string | null;
+}
+
+export type AssistantClient = "claude" | "codex";
+
 export interface ConnectorToken {
   id: string;
   label: string;
+  client: AssistantClient;
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;

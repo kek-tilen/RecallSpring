@@ -89,7 +89,9 @@ export function gradeLabel(grade: number | null | undefined): string {
   return grade === null || grade === undefined ? "Not graded" : `${grade}/4 · ${GRADE_LABEL[grade] ?? ""}`;
 }
 
-export function gradedBy(kind: string | null | undefined): string {
+/** "Codex · gpt-5.5-codex" when the server says who graded; otherwise from the evaluator kind (older views). */
+export function gradedBy(kind: string | null | undefined, grader?: { name: string; model: string | null } | null): string {
+  if (grader) return grader.model ? `${grader.name} · ${grader.model}` : grader.name;
   switch (kind) {
     case "ai":
       return "Claude";
@@ -104,7 +106,7 @@ export function gradedBy(kind: string | null | undefined): string {
 
 export const CAPTURED_VIA: Record<string, string> = {
   answer_form: "Your form",
-  assistant_transcription: "Copied from chat by Claude",
+  assistant_transcription: "Copied from chat by your assistant",
   app_ui: "Web app",
 };
 

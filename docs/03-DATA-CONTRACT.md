@@ -17,7 +17,7 @@
 | `ai_connections` | `id`, owner, provider (`anthropic_api`, `siwc`, `openai_compatible`, `mock`), connection state, **reference to protected server-side secret only**, limits (USD monthly / daily request %), background-AI consent; no raw keys or tokens in DB or logs |
 | `ai_routing` | owner, task (`tutor/question_generation/evaluation/concept_extraction`), provider, model, optional course/session override |
 | `ai_usage_ledger` | owner, provider, model, task, request id, input/output/cache tokens, estimated cost (USD, pricing-table version), status, timestamp |
-| `connector_tokens` | owner, label, token hash, scopes (`connector`), created/last_used/revoked timestamps |
+| `connector_tokens` | owner, label, token hash, scopes (`connector`), `client` (`claude` or `codex`: which assistant uses it; migration 0016), created/last_used/revoked timestamps. Grades through a token store `provider` `claude_app` or `codex_app` and the model the assistant reported (`model_reported_by = assistant`) |
 | `courses` | `id`, owner, title, description, `long_term_retention` bool, status |
 | `syllabus_items` | `id`, course, title, parent, position, expected coverage, optional exam weighting |
 | `study_targets` (implements `exams`) | `id`, course, kind (`kolokvij/izpit/other`), name, due date, status (`upcoming/passed/failed/cancelled`), result, goal, learner's scope description (verbatim), specifics, revision |

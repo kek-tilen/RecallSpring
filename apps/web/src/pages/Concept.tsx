@@ -67,7 +67,7 @@ export function ConceptPage() {
                             <div className="answer pre">{a.kind === "answer" ? a.answer : ATTEMPT_KIND[a.kind] ?? a.kind}</div>
                             {a.feedback && (
                               <div className="feedback">
-                                <div className="tiny muted">Feedback from {gradedBy(a.graded_by)}</div>
+                                <div className="tiny muted">Feedback from {gradedBy(a.graded_by, a.grader)}</div>
                                 <div className="pre small">{a.feedback}</div>
                               </div>
                             )}

@@ -80,6 +80,8 @@ describe("small helpers", () => {
     expect(gradeLabel(null)).toBe("Not graded");
     expect(gradeLabel(3)).toBe("3/4 · Solid");
     expect(gradedBy("ai")).toBe("Claude");
+    expect(gradedBy("ai", { name: "Codex", model: "gpt-5.5-codex" })).toBe("Codex · gpt-5.5-codex");
+    expect(gradedBy("ai", { name: "Claude", model: null })).toBe("Claude");
     expect(gradedBy("deterministic")).toBe("RecallSpring (answer key)");
   });
 });

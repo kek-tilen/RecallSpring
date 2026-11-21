@@ -1,5 +1,6 @@
 import { Navigate, Outlet, createBrowserRouter, useLocation } from "react-router";
 import { Layout } from "./components/Layout";
+import { AnswerPage, SummaryPage } from "./pages/Answer";
 import { Loading } from "./components/ui";
 import { setTimezone } from "./format";
 import { ChatPage } from "./pages/Chat";
@@ -77,6 +78,8 @@ export const router = createBrowserRouter([
           { path: "chat", element: <ChatPage /> },
           { path: "chat/:conversationId", element: <ChatPage /> },
           { path: "focus", element: <FocusPage /> },
+          { path: "answer/:questionId", element: <AnswerPage /> },
+          { path: "summary", element: <SummaryPage /> },
           { path: "history", element: <HistoryPage /> },
           { path: "guide", element: <GuidePage /> },
           { path: "settings", element: <SettingsPage /> },

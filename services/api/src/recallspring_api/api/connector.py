@@ -76,8 +76,8 @@ from ..schemas import (
     TargetProfileIn,
     TargetUpdateIn,
 )
+from ..services import assistants, focus, overview, readiness, week
 from ..services import attempts as attempt_svc
-from ..services import focus, overview, readiness, week
 from ..services import folders as folder_svc
 from ..services import interests as interest_svc
 from ..services import quizzes as quiz_svc
@@ -407,7 +407,27 @@ def create_questions(
 def get_question(
     question_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    return question_view(db, owned(db, Question, question_id, ctx.user.id), ctx.user.id)
+    """The question, and its latest answer if any: the learner may have answered in the RecallSpring web app (from
+    the link an assistant gives when it cannot show the answer form)."""
+    question = owned(db, Question, question_id, ctx.user.id)
+    latest = db.scalar(
+        select(Attempt)
+        .where(Attempt.question_id == question.id, Attempt.user_id == ctx.user.id)
+        .order_by(Attempt.submitted_at.desc())
+        .limit(1)
+    )
+    view = question_view(db, question, ctx.user.id)
+    view["latest_attempt"] = (
+        {
+            "attempt_id": str(latest.id),
+            "status": latest.status,
+            "captured_via": latest.captured_via,
+            "submitted_at": latest.submitted_at.isoformat(),
+        }
+        if latest
+        else None
+    )
+    return view
 
 
 @router.post("/attempts", status_code=201)
@@ -506,7 +526,7 @@ def record_one_assessment(
         attempt=attempt,
         data=data,
         evaluator_kind="ai",
-        provider="claude_app",
+        provider=assistants.provider_for(ctx.client),
         model=payload.model_name,
         model_reported_by="assistant",
         simulated=False,
@@ -525,7 +545,7 @@ def record_one_assessment(
             "attempt_id": str(attempt.id),
             "status": row.status,
             "grade": row.grade,
-            "provider": "claude_app",
+            "provider": assistants.provider_for(ctx.client),
             "model": payload.model_name,
             "flags": flags,
         },

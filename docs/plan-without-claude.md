@@ -1,6 +1,7 @@
 # Plan: RecallSpring without Claude (Codex first, then a ChatGPT tutor in the app)
 
-Status: **plan only**, 2026-11-21. Nothing here is built yet; each phase starts after the owner's go-ahead.
+Status, 2026-11-21: **Phase 0 and Phase 1 built** (owner in chat); the owner's Codex smoke test is open. Setup: `docs/codex-setup.md`.
+Phases 2 and 3 start after the owner's go-ahead.
 
 ## Owner decisions (2026-11-21)
 

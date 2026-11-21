@@ -3,7 +3,7 @@
 recallspring create-owner --username <name>      (password is prompted, never passed as an argument)
 recallspring seed-demo --username <name>         (adds a clearly labelled demo course)
 recallspring worker [--once]                     (processes source extraction jobs; no model calls)
-recallspring connector-token --username <name>   (writes a Claude connector token to a private file)
+recallspring connector-token --username <name> [--client codex]   (writes a connector token to a private file)
 recallspring backup [--if-due]                   (database + uploaded files, checked by a test restore)
 recallspring backup-status                       (last backup, kept snapshots, location)
 recallspring backup-restore --database <new> [--snapshot <name>|latest] [--storage <empty folder>]
@@ -113,13 +113,14 @@ def seed_demo(username: str) -> int:
     return 0
 
 
-def default_token_file() -> Path:
+def default_token_file(client: str = "claude") -> Path:
+    """Claude Desktop and Codex each get their own file, so revoking one never disconnects the other."""
     base = os.environ.get("LOCALAPPDATA")
     root = Path(base) / "RecallSpring" if base else Path.home() / ".config" / "recallspring"
-    return root / "connector-token"
+    return root / ("connector-token" if client == "claude" else f"{client}-connector-token")
 
 
-def connector_token(username: str, label: str, path: Path) -> int:
+def connector_token(username: str, label: str | None, path: Path, client: str = "claude") -> int:
     """Create a connector token and write it to a private file; the token is never printed."""
     from .api.settings import issue_token
 
@@ -128,7 +129,8 @@ def connector_token(username: str, label: str, path: Path) -> int:
         if user is None:
             print(f"User {username!r} not found. Run create-owner first.", file=sys.stderr)
             return 1
-        _, token = issue_token(db, user.id, label)
+        row, token = issue_token(db, user.id, label, client)
+        written_label = row.label
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -136,7 +138,7 @@ def connector_token(username: str, label: str, path: Path) -> int:
             fh.write(token)
         os.replace(tmp, path)
         db.commit()
-    print(f"Connector token '{label}' written to {path}")
+    print(f"Connector token '{written_label}' written to {path}")
     print("Revoke it any time in RecallSpring settings (or create a new one with this command).")
     return 0
 
@@ -210,8 +212,9 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--username", required=True)
     token = sub.add_parser("connector-token")
     token.add_argument("--username", required=True)
-    token.add_argument("--label", default="Claude Desktop")
-    token.add_argument("--file", type=Path, default=default_token_file(), help="where the token is written")
+    token.add_argument("--client", choices=["claude", "codex"], default="claude", help="which assistant uses it")
+    token.add_argument("--label", help='default "Claude Desktop" or "Codex"')
+    token.add_argument("--file", type=Path, help="where the token is written (default: one file per assistant)")
     worker = sub.add_parser("worker")
     worker.add_argument("--once", action="store_true", help="process queued jobs, then exit")
     bk = sub.add_parser("backup", help="back up the database and uploaded files now")
@@ -234,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "create-owner":
         return create_owner(args.username)
     if args.command == "connector-token":
-        return connector_token(args.username, args.label, args.file)
+        return connector_token(args.username, args.label, args.file or default_token_file(args.client), args.client)
     if args.command == "worker":
         import logging
 

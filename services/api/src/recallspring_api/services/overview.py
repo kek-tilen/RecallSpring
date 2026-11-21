@@ -36,7 +36,7 @@ from ..models import (
     StudyTarget,
     User,
 )
-from . import mastery
+from . import assistants, mastery
 from .attempts import assessments_for
 from .folders import tree as folder_tree
 from .learning import effective_status
@@ -272,6 +272,7 @@ def concept_detail(db: Session, user: User, concept: Concept) -> dict[str, Any]:
                 "grade": eff.grade if eff else None,
                 "assessment_status": eff.status if eff else None,
                 "graded_by": eff.evaluator_kind if eff else None,
+                "grader": assistants.grader(eff.evaluator_kind, eff.provider, eff.model) if eff else None,
                 "feedback": eff.feedback if eff else None,
                 "assessment_id": str(eff.id) if eff else None,
             }
@@ -322,6 +323,7 @@ def attempts_list(db: Session, user: User, course_id: uuid.UUID | None, limit: i
                 "grade": eff.grade if eff else None,
                 "assessment_status": eff.status if eff else None,
                 "graded_by": eff.evaluator_kind if eff else None,
+                "grader": assistants.grader(eff.evaluator_kind, eff.provider, eff.model) if eff else None,
             }
         )
     return out
@@ -373,7 +375,11 @@ _EVENT_TEXT = {
 
 def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
     if event_type == "assessment.recorded":
-        who = "RecallSpring" if payload.get("provider") is None and payload.get("model") is None else "Claude"
+        provider, model = payload.get("provider"), payload.get("model")
+        if provider is None and model is None:
+            who = "RecallSpring"
+        else:  # connector grades before 2026-11 had no provider in the event: they came from Claude
+            who = assistants.provider_name(provider or "claude_app") + (f" ({model})" if model else "")
         grade = payload.get("grade")
         return f"{grade}/4 ({payload.get('status')}) by {who}" if grade is not None else f"ungraded by {who}"
     if event_type == "source.parsed":

@@ -8,7 +8,7 @@ import { keys, useBackup, useConnector, useSession, useStudySettings } from "../
 import { PreferencesEditor } from "./Import";
 import { ChatGptPanel } from "../components/ChatGpt";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
-import type { BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
+import type { AssistantClient, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -106,10 +106,13 @@ function StudyForm({ initial }: { initial: StudySettings }) {
   );
 }
 
+const ASSISTANT: Record<AssistantClient, string> = { claude: "Claude Desktop", codex: "Codex" };
+
 function TokenRow({ t, onRevoke }: { t: ConnectorToken; onRevoke: (t: ConnectorToken) => void }) {
   return (
     <tr>
       <td>{t.label}</td>
+      <td className="small">{ASSISTANT[t.client] ?? t.client}</td>
       <td className="small">{dateTime(t.created_at)}</td>
       <td className="small">{t.last_used_at ? dateTime(t.last_used_at) : "Never"}</td>
       <td>
@@ -129,7 +132,7 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
   const qc = useQueryClient();
   const [percent, setPercent] = useState(c.limit_percent);
   const [revoking, setRevoking] = useState<ConnectorToken | null>(null);
-  const [shown, setShown] = useState<string | null>(null);
+  const [shown, setShown] = useState<{ token: string; client: AssistantClient } | null>(null);
   const [copied, setCopied] = useState(false);
   useEffect(() => setPercent(c.limit_percent), [c.limit_percent]);
   const refresh = () => void qc.invalidateQueries({ queryKey: keys.connector });
@@ -139,9 +142,9 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
     onSuccess: refresh,
   });
   const create = useMutation({
-    mutationFn: () => request<ConnectorToken & { token: string | null }>("/settings/connector/tokens", { json: { label: "Claude Desktop" } }),
+    mutationFn: (client: AssistantClient) => request<ConnectorToken & { token: string | null }>("/settings/connector/tokens", { json: { client } }),
     onSuccess: (t) => {
-      setShown(t.token);
+      setShown(t.token ? { token: t.token, client: t.client } : null);
       setCopied(false);
       refresh();
     },
@@ -158,8 +161,8 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
   return (
     <div className="stack" style={{ gap: 18 }}>
       <p className="small">
-        Claude Desktop uses RecallSpring through the connector on your own Claude plan. RecallSpring never sees your Claude sign-in.
-        Requests today: <strong>{c.used_today}</strong> of <strong>{c.daily_limit}</strong>.
+        Claude Desktop or Codex uses RecallSpring through the connector, on your own Claude or ChatGPT plan. RecallSpring never sees
+        those sign-ins. Each assistant has its own token, and its grades are labelled with its name. Requests today: <strong>{c.used_today}</strong> of <strong>{c.daily_limit}</strong>.
       </p>
       <form
         className="stack"
@@ -170,7 +173,7 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
       >
         <label className="field">
           Daily request limit: {percent}% ({projected} requests)
-          <span className="hint">Caps how many connector calls Claude can make per day, to protect your plan's usage.</span>
+          <span className="hint">Caps how many connector calls your assistants can make per day together, to protect your plan's usage.</span>
           <input type="range" min={1} max={100} value={percent} onChange={(e) => setPercent(Number(e.target.value))} />
         </label>
         {limit.error && <ErrorNote error={limit.error} />}
@@ -183,21 +186,26 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
       <hr className="soft" />
       <div className="row" style={{ justifyContent: "space-between" }}>
         <h3>Connector tokens</h3>
-        <button type="button" className="btn small" onClick={() => create.mutate()} disabled={create.isPending}>
-          Create token
-        </button>
+        <div className="row">
+          <button type="button" className="btn small" onClick={() => create.mutate("claude")} disabled={create.isPending}>
+            New token for Claude Desktop
+          </button>
+          <button type="button" className="btn small" onClick={() => create.mutate("codex")} disabled={create.isPending}>
+            New token for Codex
+          </button>
+        </div>
       </div>
       {create.error && <ErrorNote error={create.error} />}
       {shown && (
         <div className="notice warn stack" role="status">
           <strong>Copy this token now. It is shown only once.</strong>
-          <div className="token-box">{shown}</div>
+          <div className="token-box">{shown.token}</div>
           <div className="row">
             <button
               type="button"
               className="btn small"
               onClick={() => {
-                void navigator.clipboard.writeText(shown).then(() => setCopied(true));
+                void navigator.clipboard.writeText(shown.token).then(() => setCopied(true));
               }}
             >
               {copied ? "Copied" : "Copy"}
@@ -207,7 +215,10 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
             </button>
           </div>
           <span className="tiny">
-            The installer script writes it to the connector's token file for you; see docs/connector-setup.md. Never paste it into a chat.
+            {shown.client === "codex"
+              ? "Usually you do not need this: scripts/install-codex-connector.ps1 creates its own Codex token; see docs/codex-setup.md."
+              : "The installer script writes it to the connector's token file for you; see docs/connector-setup.md."}{" "}
+            Never paste it into a chat.
           </span>
         </div>
       )}
@@ -216,6 +227,7 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
           <thead>
             <tr>
               <th>Label</th>
+              <th>Assistant</th>
               <th>Created</th>
               <th>Last used</th>
               <th>Status</th>
@@ -237,7 +249,7 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
         onConfirm={() => revoking && revoke.mutate(revoking)}
         onClose={() => setRevoking(null)}
       >
-        Claude Desktop using “{revoking?.label}” loses access to RecallSpring immediately. Your study records stay as they are. This
+        {revoking ? ASSISTANT[revoking.client] : "The assistant"} using “{revoking?.label}” loses access to RecallSpring immediately. Your study records stay as they are. This
         cannot be undone; create a new token to reconnect.
         {revoke.error && <ErrorNote error={revoke.error} />}
       </Confirm>
@@ -382,7 +394,7 @@ export function SettingsPage() {
   const session = useSession();
   return (
     <div className="page">
-      <PageHead title="Settings" sub="Study time, the Claude connector, ChatGPT, backups and how RecallSpring looks. Every change is recorded in History." />
+      <PageHead title="Settings" sub="Study time, the assistant connector (Claude Desktop, Codex), ChatGPT, backups and how RecallSpring looks. Every change is recorded in History." />
       <div className="grid cols-2" style={{ alignItems: "start" }}>
         <div className="stack" style={{ gap: 16 }}>
           <Card title="Study time">
@@ -406,7 +418,7 @@ export function SettingsPage() {
           </Card>
         </div>
         <div className="stack" style={{ gap: 16 }}>
-          <Card title="Claude connector">
+          <Card title="Assistant connector">
             <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
           </Card>
           <Card title="ChatGPT (preview)">

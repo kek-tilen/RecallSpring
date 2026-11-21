@@ -25,6 +25,7 @@ from ..models import (
     User,
 )
 from ..schemas import QuizAnswer, QuizIn
+from . import assistants
 from .attempts import add_assessment, assessments_for, create_attempt
 from .events import learning_event
 from .learning import mark, require_studied
@@ -342,6 +343,7 @@ def results_view(db: Session, quiz: Quiz, *, for_learner: bool = False) -> dict[
             "assessment_status": eff.status if eff else None,
             "feedback": eff.feedback if eff else None,
             "graded_by": (eff.evaluator_kind if eff else None),
+            "grader": assistants.grader(eff.evaluator_kind, eff.provider, eff.model) if eff else None,
         }
         if question.question_type == "mcq":
             entry["correct_option"] = question.rubric.get("correct_option")

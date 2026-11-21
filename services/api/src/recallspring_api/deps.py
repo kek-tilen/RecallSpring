@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import Depends, Header, Request
@@ -26,6 +26,7 @@ class Ctx:
     user: User
     session: AuthSession | None  # None for connector-token requests
     request_id: str
+    client: str | None = field(default=None, kw_only=True)  # connector requests: "claude" or "codex"
 
 
 @dataclass
@@ -74,6 +75,7 @@ def to_write_ctx(request: Request, ctx: Ctx, idempotency_key: str | None) -> Wri
         user=ctx.user,
         session=ctx.session,
         request_id=ctx.request_id,
+        client=ctx.client,
         idempotency_key=key,
         method=request.method,
         path=request.url.path,

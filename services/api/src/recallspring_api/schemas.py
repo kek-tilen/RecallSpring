@@ -569,12 +569,14 @@ class PlanOut(BaseModel):
 
 
 class ConnectorTokenIn(BaseModel):
-    label: str = Field(default="Claude Desktop", min_length=1, max_length=100)
+    client: Literal["claude", "codex"] = "claude"
+    label: str | None = Field(default=None, min_length=1, max_length=100)  # default: "Claude Desktop" / "Codex"
 
 
 class ConnectorTokenOut(BaseModel):
     id: uuid.UUID
     label: str
+    client: str
     created_at: datetime
     last_used_at: datetime | None
     revoked_at: datetime | None

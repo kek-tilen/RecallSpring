@@ -87,6 +87,15 @@ Implemented (2026-11-21, ADR-008):
   - When signed out, conversations stay readable and a `Sign in with ChatGPT` button is shown.
 - **Settings → ChatGPT (preview):** the connection only. It holds `Sign in with ChatGPT` per OpenAI's UI guidelines, the privacy notes, the account, plan usage, Open Chat, Sign in again and Sign out (confirmed). It states clearly when sign-in is unavailable (not on 127.0.0.1, or turned off).
 
+### Answering from another assistant (Codex)
+
+Built 2026-11-21 (plan-without-claude.md, Phase 0). When an assistant cannot show RecallSpring's forms in its chat, it gives the learner a link:
+
+- **`/answer/:questionId`:** the question (never the rubric), a text field, `I used my notes or the material`, `Save answer` and `I don't know`. A note says when the question was answered before (a new answer is another attempt). After saving: the time and "Go back to your assistant and tell it you are done".
+- **`/summary`:** the chunk's title, what was covered and the topics (only topics of that course; an incomplete link says so), a text field (may stay empty) and `Save summary`. Saved exactly as the learner's note; the topics count as studied.
+- Both keep a draft in the browser until it is saved and reuse one request key, so a retry never saves twice.
+- **Settings → Assistant connector:** `New token for Claude Desktop` / `New token for Codex`; the token table shows which assistant each token is for. Feedback on concepts and simulations reads "Feedback from Codex · model".
+
 ### Focus (Pomodoro timer)
 
 Built (owner decision 2026-11-21). `/focus` in the main menu.

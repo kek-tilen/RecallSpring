@@ -17,6 +17,7 @@ from .api import (
     focus,
     health,
     imports,
+    learning,
     library,
     notes,
     organise,
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
         imports,
         chatgpt,
         focus,
+        learning,
         connector,
     )
     for module in modules:

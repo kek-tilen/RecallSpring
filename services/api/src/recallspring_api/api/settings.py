@@ -29,7 +29,7 @@ from ..schemas import (
     StudySettingsIn,
 )
 from ..security import sha256_hex
-from ..services import chatgpt_import, interests
+from ..services import assistants, chatgpt_import, interests
 from ..services.events import audit
 from ..services.planner import today_plan
 
@@ -176,12 +176,27 @@ def update_connector_settings(
     return commit_with_response(db, ctx, payload, 200, _settings_view(db, user))
 
 
-def issue_token(db: Session, user_id: uuid.UUID, label: str) -> tuple[ConnectorToken, str]:
+def issue_token(
+    db: Session, user_id: uuid.UUID, label: str | None, client: str = "claude"
+) -> tuple[ConnectorToken, str]:
     token = new_token()
-    row = ConnectorToken(user_id=user_id, label=label, token_hash=sha256_hex(token), created_at=clock.now())
+    row = ConnectorToken(
+        user_id=user_id,
+        label=label or assistants.DEFAULT_LABEL[client],
+        client=client,
+        token_hash=sha256_hex(token),
+        created_at=clock.now(),
+    )
     db.add(row)
     db.flush()
-    audit(db, actor_id=user_id, action="connector.token_created", target_type="connector_token", target_id=row.id)
+    audit(
+        db,
+        actor_id=user_id,
+        action="connector.token_created",
+        target_type="connector_token",
+        target_id=row.id,
+        details={"client": client},
+    )
     return row, token
 
 
@@ -192,7 +207,7 @@ def create_token(
     """The token is shown once and stored only as a hash; a replay of this request returns ``token: null``."""
     if replay := replay_if_seen(db, ctx, payload):
         return replay
-    row, token = issue_token(db, ctx.user.id, payload.label)
+    row, token = issue_token(db, ctx.user.id, payload.label, payload.client)
     base = ConnectorTokenOut.model_validate(row, from_attributes=True).model_dump(mode="json")
     return commit_with_response(db, ctx, payload, 201, {**base, "token": token}, stored_body={**base, "token": None})
 

@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 import pytest
 from mcp import Client
+from mcp.client import advertise
 
 from recallspring_mcp import server
 from recallspring_mcp.client import ConnectorError, RecallSpringClient
@@ -47,6 +48,10 @@ def api() -> Any:
     )
     yield fake
     server.set_client(None)
+
+
+# A client that shows MCP Apps forms (Claude Desktop); Client(mcp) alone is one that cannot (e.g. Codex).
+APPS = [advertise("io.modelcontextprotocol/ui", {"mimeTypes": ["text/html;profile=mcp-app"]})]
 
 
 def text_of(result: Any) -> str:
@@ -105,7 +110,7 @@ async def test_chat_fallback_is_marked_as_transcription(api: FakeApi) -> None:
 
 async def test_open_answer_form_returns_question_without_rubric(api: FakeApi) -> None:
     api.route("GET", "/questions/q1", 200, {"id": "q1", "prompt": "Compare A and B.", "bloom_level": 4, "rubric": None})
-    async with Client(mcp) as client:
+    async with Client(mcp, extensions=APPS) as client:
         result = await client.call_tool("open_answer_form", {"question_id": "q1", "session_id": "s1"})
     assert result.structured_content == {
         "question_id": "q1",
@@ -522,3 +527,52 @@ async def test_interest_tools_call_their_routes(api: FakeApi) -> None:
     ]
     text = prompt.messages[0].content.text
     assert "ML" in text and 'kind="interest"' in text and "university first" in text and "set_focus" in text
+
+
+# ---------------------------------------------------------------- apps without MCP Apps forms (Codex)
+
+
+async def test_without_forms_the_learner_gets_a_recallspring_link(api: FakeApi) -> None:
+    api.route("GET", "/questions/q1", 200, {"id": "q1", "prompt": "Compare A and B.", "bloom_level": 4, "rubric": None})
+    async with Client(mcp) as client:
+        result = await client.call_tool("open_answer_form", {"question_id": "q1", "session_id": "s1"})
+    text = text_of(result)
+    assert "http://127.0.0.1:4318/answer/q1?session=s1" in text and "get_answer" in text
+    assert result.structured_content["link"] == "http://127.0.0.1:4318/answer/q1?session=s1"
+    assert "expected" not in text.lower()
+
+
+async def test_without_forms_a_simulation_link_does_not_start_the_clock(api: FakeApi) -> None:
+    api.route("GET", "/quizzes/z1", 200, {"id": "z1", "title": "Kolokvij 1", "items": [{}, {}]})
+    async with Client(mcp) as client:
+        result = await client.call_tool("open_quiz", {"quiz_id": "z1"})
+    assert [(r.method, r.url.path) for r in api.requests] == [("GET", "/api/v1/connector/quizzes/z1")]
+    assert "http://127.0.0.1:4318/simulations/z1" in text_of(result) and "get_quiz_results" in text_of(result)
+
+
+async def test_without_forms_the_summary_link_carries_the_chunk(api: FakeApi, monkeypatch: Any) -> None:
+    monkeypatch.setenv("RS_WEB_URL", "http://localhost:4319/")
+    api.route("GET", "/courses/k1/outline", 200, {"concepts": [{"id": "c1", "term": "Glycolysis"}]})
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "open_summary_form", {"course_id": "k1", "concept_ids": ["c1"], "title": "Lecture 3", "covered": "p. 2"}
+        )
+    assert result.structured_content["link"] == (
+        "http://localhost:4319/summary?course=k1&concepts=c1&title=Lecture+3&covered=p.+2"
+    )
+
+
+async def test_get_answer_reads_the_latest_answer_or_says_none_yet(api: FakeApi) -> None:
+    api.route("GET", "/questions/q1", 200, {"id": "q1", "latest_attempt": None})
+    async with Client(mcp) as client:
+        assert "No answer" in text_of(await client.call_tool("get_answer", {"question_id": "q1"}))
+    api.route("GET", "/questions/q1", 200, {"id": "q1", "latest_attempt": {"attempt_id": "a9"}})
+    api.route(
+        "GET",
+        "/attempts/a9",
+        200,
+        {"attempt_id": "a9", "captured_via": "app_ui", "answer_text": "Typed in RecallSpring", "sources": []},
+    )
+    async with Client(mcp) as client:
+        out = text_of(await client.call_tool("get_answer", {"question_id": "q1"}))
+    assert "<learner_material" in out and "Typed in RecallSpring" in out

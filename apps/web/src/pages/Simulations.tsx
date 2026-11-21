@@ -118,7 +118,7 @@ function Item({ item, submitted }: { item: QuizItemView; submitted: boolean }) {
       )}
       {item.feedback && (
         <div className="feedback">
-          <div className="tiny muted">Feedback from {gradedBy(item.graded_by)}</div>
+          <div className="tiny muted">Feedback from {gradedBy(item.graded_by, item.grader)}</div>
           <div className="pre small">{item.feedback}</div>
         </div>
       )}

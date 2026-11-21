@@ -1,5 +1,7 @@
 # Study with Claude — connector setup (Claude Desktop, local)
 
+For Codex instead of (or as well as) Claude Desktop, do steps 1-3 below, then follow docs/codex-setup.md.
+
 RecallSpring's Mode A: you study in the official **Claude Desktop** app on your own Claude plan, and Claude uses the RecallSpring connector (a local MCP server) to read your plan, sources and notes and to record questions, answers and grades. RecallSpring never sees your Claude login, and the connector has no tools that delete anything or change settings.
 
 ## 1. Run RecallSpring locally

@@ -17,7 +17,7 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | GET | `/ai/models` | Models actually available per provider (discovered, not hardcoded) |
 | GET/PUT | `/ai/routing` | Per-task model routing and course/session overrides |
 | GET/PUT | `/settings/connector` | Connector daily limit (1–100 % of default), usage today, tokens |
-| POST | `/settings/connector/tokens` | Create a connector token (shown once; stored as a hash) |
+| POST | `/settings/connector/tokens` | Create a connector token (shown once; stored as a hash) for `client` `claude` (default label "Claude Desktop") or `codex` ("Codex"); tokens list their `client` |
 | POST | `/settings/connector/tokens/{id}/revoke` | Revoke a connector token |
 | GET | `/connector/*` | Connector surface: **bearer connector token only**, read + append, see tool contract below |
 | GET/POST | `/courses` | List/create courses |
@@ -86,13 +86,18 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/focus-sessions` | One finished or stopped Pomodoro focus block `{client_session_id, course_id?, started_at, ended_at, planned_minutes 1–240, focused_seconds 60–14 400, completed}` (owner session + CSRF). Same `client_session_id` again returns the saved block (200, `Idempotent-Replay`). `422` for `ended_before_start`, `focus_time_out_of_range` (in the future or over 7 days old), `focus_longer_than_block`; `404` for a course that is not the learner's. Records `focus.completed` / `focus.stopped` |
 | GET | `/focus/summary` | Focus time today, the last 7 days by day (learner's time zone) and by course, the latest 8 blocks, `removed` (blocks removed in the last `restore_days` = 30 days) |
 | DELETE | `/focus-sessions/{id}` | Remove a wrongly timed block after the learner confirmed it (owner session + CSRF): soft delete, no longer counted anywhere (summary, Claude's `focus_time`); audited `focus.deleted`; returns the summary. Removing again changes nothing |
+| POST | `/learning` | The learner's summary of a learning chunk written on the web `/summary` page (owner session + CSRF; same body and effect as the connector's `/learning`: saved exactly as a note, concepts marked studied) |
 | POST | `/focus-sessions/{id}/restore` | Count a removed block again within 30 days (`409 restore_period_over` after); audited `focus.restored`; returns the summary |
 | GET | `/health/live` | Liveness, no secrets |
 | GET | `/health/ready` | DB and storage checks, restricted if exposed |
 
 For streaming, use SSE or chunked fetch response with typed events (`turn.started`, `text.delta`, `visual.validated`, `turn.completed`, `turn.failed`). A request failure must never erase saved user input. Streaming responses can be recovered by GET session. Keep server-side authorization checks independent of UI.
 
-## Claude connector (MCP) tool contract
+## Assistant connector (MCP) tool contract (Claude Desktop, Codex)
+
+Views with a grade carry `graded_by` (evaluator kind) and `grader` `{name, model}`: "Claude", "Codex", "RecallSpring (answer key)" or "You", plus the model the assistant reported. History reads "3/4 (final) by Codex (model)".
+
+**Apps without MCP Apps forms** (e.g. Codex): `open_answer_form`, `open_quiz` and `open_summary_form` check whether the client announced the MCP Apps extension (`io.modelcontextprotocol/ui` with the `text/html;profile=mcp-app` type). If not, they return a link to the learner's RecallSpring web app (`RS_WEB_URL`, default the API address): `/answer/{question_id}?session=…`, `/simulations/{quiz_id}` (the clock starts when the learner opens it) or `/summary?course=…&concepts=…&title=…&covered=…`. The learner answers there (`captured_via = app_ui`); `get_answer` reads the latest saved answer of a question (connector `GET /questions/{id}` returns `latest_attempt`).
 
 Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhere else (owner routes need the session cookie and CSRF token). Every request counts towards the owner's daily connector limit. All writes are append-only; there are **no** delete, restore, export, budget, consent or routing tools.
 
@@ -104,6 +109,7 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `get_notes` | read | Learner notes for a topic (read-only; the tutor may comment in chat but never rewrites notes) |
 | `get_due_reviews` | read | Due concepts with due reason and last evidence |
 | `get_attempt` | read | Exact stored answer, question with rubric (an attempt exists), cited sections |
+| `get_answer` | read | The latest saved answer to a question, as `get_attempt` (after a RecallSpring link), or that none is saved yet |
 | `start_study_session` | append | Connector study session (`origin = connector`) |
 | `create_questions` | append | Up to 10 questions (Bloom level, prompt, hidden rubric); `source_refs` must be sections of the course |
 | `open_answer_form` | UI | MCP App `ui://recallspring/answer-form` showing the question (no rubric) |

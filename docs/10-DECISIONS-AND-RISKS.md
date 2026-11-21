@@ -61,6 +61,7 @@
 | `Start focus` on each item of Today's plan: starts a Pomodoro focus block for that course at once (ends a break early) and shows the timer over the window | Approved 2026-11-21 (owner in chat) |
 | A wrongly timed focus block can be removed after confirming (soft delete, restorable for 30 days, audited); its learning event stays | Approved 2026-11-21 (owner asked for it) |
 | RecallSpring without Claude: other people, each on their own computer; Codex first (local MCP), then a ChatGPT tutor in the app (SIWC with tools); grades from ChatGPT/Codex count the same as Claude's, labelled with assistant and model | Approved 2026-11-21 (owner in chat); plan only, `docs/plan-without-claude.md` |
+| Phase 0 + Phase 1 (Codex) of `docs/plan-without-claude.md`: a connector token per assistant, grades labelled with the assistant, RecallSpring answer and summary pages when an app cannot show forms, the Codex installer and study folders | Approved 2026-11-21 (owner in chat); the owner's Codex smoke test is still open |
 
 ## Working assumptions (do not mistake for owner approval)
 
@@ -74,6 +75,8 @@
 - Device sync = the browser's offline draft outbox plus sync to the RecallSpring server; no automatic filesystem mirroring.
 - Backend FastAPI/Python, React/TypeScript, PostgreSQL and Docker Compose based on resource and developer productivity; can change only with documented rationale (ADR-001).
 - Default spaced intervals and mastery bands are an explainable heuristic, not a scientific certification (ADR-003).
+- Codex tool approval defaults to `writes` (Codex asks before every RecallSpring tool not marked read-only): it is the only mode Codex's docs define (2026-11-21); `auto`, `prompt` and `approve` are passed through unchanged when chosen. Study folders ask Codex for `sandbox_mode = "read-only"`, which Codex applies only after the learner trusts the folder; RecallSpring never marks folders as trusted.
+- An app gets the inline form only when it announces MCP Apps support when it connects; otherwise the link fallback is used, even if the app could render forms in practice.
 - Default daily plan 20 minutes, editable. Default timezone Europe/Ljubljana, editable.
 - Source deletion soft-delete window 30 days proposed; subject to owner's final preference and legal/privacy policy.
 - "Topic" in API/notes means a `syllabus_item`; "teacher correction" means the owner's own manual grade correction.
@@ -128,6 +131,8 @@
 - Codex and MCP Apps / images: community reports conflict on whether MCP Apps UI renders in the Codex app, and an open issue reports image blocks dropped when structured content is present. Test per client.
 - ChatGPT custom MCP servers: added at chatgpt.com/plugins (Add custom MCP server), reachable only through a public HTTPS endpoint or OpenAI's Secure MCP Tunnel; auth is OAuth 2.1 with PKCE or none per tool, and the authorization server must be reachable from the internet even with a tunnel. Plan eligibility differs between sources.
 - Sources: developers.openai.com/codex/mcp (now learn.chatgpt.com/docs/extend/mcp), developers.openai.com/apps-sdk/deploy, developers.openai.com/apps-sdk/deploy/connect-chatgpt, developers.openai.com/api/docs/guides/secure-mcp-tunnels, github.com/openai/codex issues 21019 and 10334.
+
+**Codex approval modes (read 2026-11-21):** the MCP page defines only `writes` ("prompts for tools that aren't marked read-only"); what `auto`, `prompt` and `approve` do, and the default when the key is absent, are not stated. `sandbox_mode` and `approval_policy` are described for commands; whether the sandbox covers MCP tool calls is not stated. Project `.codex/` layers load only for trusted projects (`projects.<path>.trust_level`). Source: learn.chatgpt.com/docs/extend/mcp, /docs/config-file/config-reference, /codex/agent-approvals-security.
 
 **Gate status:**
 - Mode A: automated end-to-end run **PASS** on 2026-11-19. The real API and the real MCP server over stdio completed the full loop: plan → question → form submission (exact text saved) → assessment → next review; a second grade was rejected. The run used an in-process MCP client, not Claude Desktop. **Pending: the owner's test in Claude Desktop**, which must show that the answer form renders.
