@@ -482,7 +482,9 @@ a:hover {
   gap: 8px;
 }
 
-.theme-card {
+.theme-card,
+.face-card,
+.bg-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -497,11 +499,15 @@ a:hover {
   cursor: pointer;
 }
 
-.theme-card:hover {
+.theme-card:hover,
+.face-card:hover,
+.bg-card:hover {
   border-color: var(--border-strong);
 }
 
-.theme-card[aria-checked="true"] {
+.theme-card[aria-checked="true"],
+.face-card[aria-checked="true"],
+.bg-card[aria-checked="true"] {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px var(--primary);
 }
@@ -2554,5 +2560,492 @@ a.cite:hover {
   }
   .viz-chart .viz-axis-label {
     font-size: 17px;
+  }
+}
+
+/* ------------------------------------------------------------------ focus timer (Pomodoro) */
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* A face is sized in em: the page, the picker and focus mode each set the base font size. */
+.face {
+  --face-ink: var(--ink);
+  --face-track: var(--border);
+  --face-fill: var(--primary);
+  --face-card: var(--surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  color: var(--face-ink);
+  font-size: clamp(14px, 1.9vw, 20px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.face.preview {
+  font-size: 9px;
+}
+
+.face-time {
+  font-size: 1.3em;
+  font-weight: 500;
+}
+
+.face-default .face-time {
+  font-size: 4.4em;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.face-flip {
+  flex-direction: row;
+  gap: 0.3em;
+}
+
+.flip-card {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.82em;
+  height: 1.16em;
+  border-radius: 0.12em;
+  background: var(--face-card);
+  font-size: 3.2em;
+  font-weight: 700;
+  animation: flip-in 0.28s ease-out;
+  transform-origin: 50% 50%;
+}
+
+.flip-card::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--face-track);
+}
+
+.flip-colon {
+  font-size: 2.6em;
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+@keyframes flip-in {
+  from {
+    transform: perspective(4em) rotateX(70deg);
+    opacity: 0.35;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.face-progress {
+  display: block;
+  width: min(17em, 100%);
+  height: 0.7em;
+  border-radius: 999px;
+  background: var(--face-track);
+  overflow: hidden;
+}
+
+.face-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--face-fill);
+}
+
+.face-bar {
+  width: 100%;
+}
+
+.dot-grid {
+  display: grid;
+  gap: 0.5em;
+}
+
+.dot-grid > span {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  background: var(--face-track);
+}
+
+.dot-grid > span.on {
+  background: var(--face-fill);
+}
+
+.face-svg {
+  display: block;
+  width: 9em;
+  height: 9em;
+}
+
+.face-track-fill {
+  fill: var(--face-track);
+}
+
+.face-fill {
+  fill: var(--face-fill);
+}
+
+.face-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 11em;
+  height: 11em;
+}
+
+.face-ring .face-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.face-ring .face-time {
+  font-size: 2.3em;
+}
+
+.face-track-stroke,
+.face-fill-stroke {
+  fill: none;
+  stroke-width: 7;
+}
+
+.face-track-stroke {
+  stroke: var(--face-track);
+}
+
+.face-fill-stroke {
+  stroke: var(--face-fill);
+  stroke-linecap: round;
+}
+
+.timer-face {
+  display: grid;
+  place-items: center;
+  min-height: 15em;
+  padding: 8px 0;
+  font-size: clamp(14px, 1.9vw, 20px);
+}
+
+.phase-steps {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.phase-steps span {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.phase-steps span.on {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.round-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.round-dots span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  opacity: 0.45;
+}
+
+.round-dots span.now {
+  opacity: 1;
+}
+
+.round-dots span.done {
+  background: var(--primary);
+  opacity: 1;
+}
+
+.timer-main {
+  min-width: 112px;
+}
+
+.face-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.face-card {
+  align-items: center;
+}
+
+.face-sample {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 120px;
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.face-sample .face {
+  --face-card: var(--surface-elevated);
+}
+
+.bg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.bg-sample {
+  display: block;
+  width: 100%;
+  height: 52px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.bg-sample img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.focus-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.focus-days li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 86px;
+}
+
+.focus-days .bar {
+  width: 100%;
+  max-width: 28px;
+  border-radius: 4px 4px 0 0;
+  background: var(--ramp-2);
+}
+
+/* the small timer on other pages */
+.focus-pill {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 8px 8px;
+  padding: 3px 3px 3px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.focus-pill.floating {
+  position: fixed;
+  top: 14px;
+  left: 60px;
+  z-index: 20;
+  margin: 0;
+  box-shadow: var(--shadow);
+}
+
+.focus-pill-link {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.focus-pill-time {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.focus-pill .btn {
+  padding: 6px;
+  border-radius: 999px;
+  line-height: 0;
+}
+
+.shell.rail-hidden:has(.focus-pill.floating) .main {
+  padding-top: 64px;
+}
+
+/* focus mode: the timer alone over the learner's chosen background */
+:root.focus-mode-open {
+  overflow: hidden;
+}
+
+.focus-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  color: var(--ink);
+}
+
+.focus-mode[data-tone="dark"] {
+  color: #f4f6f5;
+}
+
+.focus-mode[data-tone="light"] {
+  color: #2b2620;
+}
+
+.focus-mode-bg,
+.focus-mode-scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.focus-mode-bg {
+  object-fit: cover;
+}
+
+.focus-mode-scrim {
+  background: #000;
+}
+
+.focus-mode-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.focus-mode[data-tone="dark"] .focus-mode-body {
+  text-shadow: 0 1px 3px rgb(0 0 0 / 45%);
+}
+
+.focus-mode .face {
+  font-size: clamp(16px, 3.4vw, 34px);
+}
+
+.focus-mode[data-tone="dark"] .face {
+  --face-ink: #f4f6f5;
+  --face-track: rgb(255 255 255 / 22%);
+  --face-fill: #f4f6f5;
+  --face-card: rgb(255 255 255 / 12%);
+}
+
+.focus-mode[data-tone="light"] .face {
+  --face-ink: #2b2620;
+  --face-track: rgb(43 38 32 / 16%);
+  --face-fill: #2b2620;
+  --face-card: rgb(255 255 255 / 55%);
+}
+
+.focus-mode-phase {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.focus-mode-hint {
+  margin: 0;
+  opacity: 0.8;
+}
+
+.focus-mode-controls {
+  justify-content: center;
+}
+
+.focus-mode[data-tone="dark"] .btn {
+  background: rgb(255 255 255 / 12%);
+  border-color: rgb(255 255 255 / 35%);
+  color: #f4f6f5;
+  text-shadow: none;
+}
+
+.focus-mode[data-tone="dark"] .btn.primary {
+  background: #f4f6f5;
+  border-color: #f4f6f5;
+  color: #111916;
+}
+
+.focus-mode[data-tone="light"] .btn {
+  background: rgb(255 255 255 / 60%);
+  border-color: rgb(43 38 32 / 35%);
+  color: #2b2620;
+}
+
+.focus-mode[data-tone="light"] .btn.primary {
+  background: #2b2620;
+  border-color: #2b2620;
+  color: #f6efe0;
+}
+
+.focus-mode[data-tone="dark"] :focus-visible {
+  outline-color: #f4f6f5;
+}
+
+.focus-mode .round-dots span {
+  border-color: currentColor;
+}
+
+.focus-mode .round-dots span.done {
+  background: currentColor;
+}
+
+@media (max-width: 860px) {
+  .shell .focus-pill.floating {
+    display: none;
+  }
+
+  .shell.rail-hidden:has(.focus-pill.floating) .main {
+    padding-top: 20px;
+  }
+
+  .focus-pill {
+    margin: 0 8px;
   }
 }

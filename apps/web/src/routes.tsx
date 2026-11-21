@@ -7,6 +7,7 @@ import { ConceptPage } from "./pages/Concept";
 import { CoursePage } from "./pages/Course";
 import { CoursesPage } from "./pages/Courses";
 import { ExamsPage } from "./pages/Exams";
+import { FocusPage } from "./pages/Focus";
 import { GuidePage } from "./pages/Guide";
 import { HistoryPage } from "./pages/History";
 import { HomePage } from "./pages/Home";
@@ -75,6 +76,7 @@ export const router = createBrowserRouter([
           { path: "notes/:noteId", element: <NotePage /> },
           { path: "chat", element: <ChatPage /> },
           { path: "chat/:conversationId", element: <ChatPage /> },
+          { path: "focus", element: <FocusPage /> },
           { path: "history", element: <HistoryPage /> },
           { path: "guide", element: <GuidePage /> },
           { path: "settings", element: <SettingsPage /> },

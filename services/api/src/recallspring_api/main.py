@@ -14,6 +14,7 @@ from .api import (
     chatgpt,
     connector,
     courses,
+    focus,
     health,
     imports,
     library,
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
         library,
         imports,
         chatgpt,
+        focus,
         connector,
     )
     for module in modules:

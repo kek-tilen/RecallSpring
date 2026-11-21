@@ -4,7 +4,8 @@ import { Upload } from "../components/Upload";
 import { Async, Card, Empty, PageHead, StudyChip } from "../components/ui";
 import { WeekCard } from "./Week";
 import { dateLabel, longToday, plural } from "../format";
-import { useDashboard } from "../queries";
+import { useDashboard, useFocusSummary } from "../queries";
+import { FocusTime } from "./Focus";
 import type { AttentionItem, PlanItem, TargetCapacity } from "../types";
 
 const CATEGORY_TONE: Record<PlanItem["category"], string> = {
@@ -180,6 +181,7 @@ export function HomePage() {
                     )}
                   </Card>
                   <WeekCard />
+                  <FocusCard />
                   <Card title="What RecallSpring holds">
                     <div className="stats">
                       {(
@@ -209,5 +211,15 @@ export function HomePage() {
         }}
       </Async>
     </div>
+  );
+}
+
+function FocusCard() {
+  const summary = useFocusSummary();
+  if (!summary.data || (summary.data.week_minutes === 0 && summary.data.recent.length === 0)) return null;
+  return (
+    <Card title="Focus time" action={<Link to="/focus" className="small">Open Focus</Link>}>
+      <FocusTime s={summary.data} compact />
+    </Card>
   );
 }

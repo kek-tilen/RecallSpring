@@ -806,3 +806,16 @@ class LearningSummaryIn(BaseModel):
 class KnownConceptsIn(BaseModel):
     concept_ids: list[uuid.UUID] = Field(min_length=1, max_length=60)
     reason: str = Field(min_length=1, max_length=500, description="What the learner said, e.g. covered in lectures")
+
+
+# ---------------------------------------------------------------- Pomodoro focus time
+
+
+class FocusSessionIn(BaseModel):
+    client_session_id: uuid.UUID
+    course_id: uuid.UUID | None = None
+    started_at: datetime
+    ended_at: datetime
+    planned_minutes: int = Field(ge=1, le=240)
+    focused_seconds: int = Field(ge=60, le=14_400, description="Time in focus, pauses excluded")
+    completed: bool = Field(description="False when the learner stopped the block early")

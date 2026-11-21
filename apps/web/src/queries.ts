@@ -26,6 +26,7 @@ import type {
   ChatImport,
   ChatImportSummary,
   StudyPreferences,
+  FocusSummary,
 } from "./types";
 
 export const keys = {
@@ -53,6 +54,7 @@ export const keys = {
   chatImports: ["imports", "chatgpt"] as const,
   chatImport: (id: string) => ["imports", "chatgpt", id] as const,
   preferences: ["settings", "preferences"] as const,
+  focusSummary: ["focus", "summary"] as const,
 };
 
 export const useChatImports = () =>
@@ -61,6 +63,9 @@ export const useChatImport = (id: string) =>
   useQuery({ queryKey: keys.chatImport(id), queryFn: () => get<ChatImport>(`/imports/chatgpt/${id}`) });
 export const usePreferences = () =>
   useQuery({ queryKey: keys.preferences, queryFn: () => get<StudyPreferences>("/settings/preferences") });
+
+export const useFocusSummary = () =>
+  useQuery({ queryKey: keys.focusSummary, queryFn: () => get<FocusSummary>("/focus/summary") });
 
 export const useSession = () =>
   useQuery({ queryKey: keys.session, queryFn: () => get<SessionInfo>("/auth/session"), retry: false, staleTime: 60_000 });

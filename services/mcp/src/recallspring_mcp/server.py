@@ -669,7 +669,8 @@ async def get_study_context(course_id: str) -> str:
     """Call this first in every study session for a course or interest. For a course: what the learner prepares
     for (active kolokvij or exam, its scope in the learner's own words, specifics, exam profile from past papers),
     what is already passed (maintenance only) and recent simulations. For an interest: the learner's goal and
-    progress (no exams). When needs_setup is true, the questions to ask first."""
+    progress (no exams). focus_time is the Pomodoro time the learner timed for it (effort only, not mastery).
+    When needs_setup is true, the questions to ask first."""
     return as_json(await get_client().get(f"/courses/{course_id}/context"))
 
 

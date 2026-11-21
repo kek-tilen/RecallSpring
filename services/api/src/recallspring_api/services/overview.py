@@ -23,6 +23,7 @@ from ..models import (
     ConceptSource,
     Course,
     CourseGroup,
+    FocusSession,
     LearningEvent,
     Note,
     Question,
@@ -363,6 +364,8 @@ _EVENT_TEXT = {
     "assessment.grade_override": "Grade overridden",
     "auth.login": "Signed in",
     "auth.logout": "Signed out",
+    "focus.completed": "Focus block finished",
+    "focus.stopped": "Focus block stopped early",
 }
 
 
@@ -396,6 +399,8 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         return f"{payload.get('rows')} rows, {payload.get('files')} files, {check}"
     if event_type == "backup.failed":
         return str(payload.get("message") or payload.get("code"))
+    if event_type in ("focus.completed", "focus.stopped"):
+        return f"{payload.get('minutes')} of {payload.get('planned_minutes')} min"
     return None
 
 
@@ -435,6 +440,13 @@ def _labels(db: Session, items: list[tuple[str, uuid.UUID | None]]) -> dict[uuid
             .join(Question, Question.id == Attempt.question_id)
             .where(Assessment.id.in_(ids))
         ).all()
+    if ids := by_type.get("focus_session"):
+        for eid, title in db.execute(
+            select(FocusSession.id, Course.title)
+            .outerjoin(Course, Course.id == FocusSession.course_id)
+            .where(FocusSession.id.in_(ids))
+        ).all():
+            labels[eid] = title or "No course"
     for eid, prompt in question_rows:
         labels[eid] = prompt if len(prompt) <= 90 else prompt[:89].rstrip() + "…"
     return labels

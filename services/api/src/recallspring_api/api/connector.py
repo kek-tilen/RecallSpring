@@ -77,9 +77,9 @@ from ..schemas import (
     TargetUpdateIn,
 )
 from ..services import attempts as attempt_svc
+from ..services import focus, overview, readiness, week
 from ..services import folders as folder_svc
 from ..services import interests as interest_svc
-from ..services import overview, readiness, week
 from ..services import quizzes as quiz_svc
 from ..services import sources as source_svc
 from ..services import targets as target_svc
@@ -701,6 +701,7 @@ def course_context(
         if ctx.user.study_preferences
         else None
     )
+    view["focus_time"] = focus.course_focus(db, ctx.user, course.id, clock.now())
     return view
 
 

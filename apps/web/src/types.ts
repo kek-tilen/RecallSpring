@@ -679,3 +679,25 @@ export interface StudyPreferences {
   text: string;
   max_chars: number;
 }
+
+// ---------------------------------------------------------------- Pomodoro focus time
+
+export interface FocusBlock {
+  id: string;
+  client_session_id: string;
+  course_id: string | null;
+  course_title: string | null;
+  started_at: string;
+  ended_at: string;
+  planned_minutes: number;
+  minutes: number;
+  completed: boolean;
+}
+
+export interface FocusSummary {
+  today: { date: string; minutes: number; sessions: number };
+  days: { date: string; minutes: number; sessions: number }[];
+  week_minutes: number;
+  by_course: { course_id: string | null; course_title: string | null; minutes: number; sessions: number }[];
+  recent: FocusBlock[];
+}

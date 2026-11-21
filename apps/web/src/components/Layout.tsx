@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
 import { request } from "../api";
 import { useDashboard, useSession } from "../queries";
+import { FocusPill, PomodoroProvider } from "./Pomodoro";
 
 const NAV = [
   { to: "/", label: "Home", end: true },
@@ -13,6 +14,7 @@ const NAV = [
   { to: "/library", label: "Library" },
   { to: "/notes", label: "Notes" },
   { to: "/chat", label: "Chat" },
+  { to: "/focus", label: "Focus" },
   { to: "/history", label: "History" },
   { to: "/guide", label: "Guide" },
   { to: "/settings", label: "Settings" },
@@ -85,62 +87,66 @@ export function Layout() {
   });
 
   return (
-    <div className={hidden ? "shell rail-hidden" : "shell"}>
-      {hidden && (
-        <button
-          ref={showButton}
-          type="button"
-          className="btn small ghost rail-show"
-          aria-expanded={false}
-          aria-controls="rail"
-          aria-label="Show menu"
-          title="Show menu (Ctrl+\)"
-          onClick={() => toggle(false)}
-        >
-          <MenuIcon />
-        </button>
-      )}
-      <aside className="rail" id="rail">
-        <div className="rail-top">
-          <NavLink to="/" className="brand" aria-label="RecallSpring home">
-            <img src="/favicon.svg" alt="" />
-            RecallSpring
-          </NavLink>
+    <PomodoroProvider>
+      <div className={hidden ? "shell rail-hidden" : "shell"}>
+        {hidden && <FocusPill floating />}
+        {hidden && (
           <button
-            ref={hideButton}
+            ref={showButton}
             type="button"
-            className="btn small ghost rail-hide"
-            aria-expanded={true}
+            className="btn small ghost rail-show"
+            aria-expanded={false}
             aria-controls="rail"
-            aria-label="Hide menu"
-            title="Hide menu (Ctrl+\)"
-            onClick={() => toggle(true)}
+            aria-label="Show menu"
+            title="Show menu (Ctrl+\)"
+            onClick={() => toggle(false)}
           >
             <MenuIcon />
           </button>
-        </div>
-        <nav aria-label="Main">
-          {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end}>
-              {n.label}
-              {n.to === "/review" && due > 0 && (
-                <span className="count" aria-label={`${due} due`}>
-                  {due}
-                </span>
-              )}
+        )}
+        <aside className="rail" id="rail">
+          <div className="rail-top">
+            <NavLink to="/" className="brand" aria-label="RecallSpring home">
+              <img src="/favicon.svg" alt="" />
+              RecallSpring
             </NavLink>
-          ))}
-        </nav>
-        <div className="rail-foot">
-          <span>Signed in as {session.data?.user.username}</span>
-          <button type="button" className="btn small" onClick={() => logout.mutate()} disabled={logout.isPending}>
-            Sign out
-          </button>
-        </div>
-      </aside>
-      <main className="main" id="main">
-        <Outlet />
-      </main>
-    </div>
+            <button
+              ref={hideButton}
+              type="button"
+              className="btn small ghost rail-hide"
+              aria-expanded={true}
+              aria-controls="rail"
+              aria-label="Hide menu"
+              title="Hide menu (Ctrl+\)"
+              onClick={() => toggle(true)}
+            >
+              <MenuIcon />
+            </button>
+          </div>
+          {!hidden && <FocusPill />}
+          <nav aria-label="Main">
+            {NAV.map((n) => (
+              <NavLink key={n.to} to={n.to} end={n.end}>
+                {n.label}
+                {n.to === "/review" && due > 0 && (
+                  <span className="count" aria-label={`${due} due`}>
+                    {due}
+                  </span>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="rail-foot">
+            <span>Signed in as {session.data?.user.username}</span>
+            <button type="button" className="btn small" onClick={() => logout.mutate()} disabled={logout.isPending}>
+              Sign out
+            </button>
+          </div>
+        </aside>
+        <main className="main" id="main">
+          <Outlet />
+        </main>
+      </div>
+    </PomodoroProvider>
   );
 }
