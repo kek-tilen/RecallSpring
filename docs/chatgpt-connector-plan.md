@@ -3,6 +3,8 @@
 Status: **plan only**, 2026-11-21 (ADR-008). This is the second half of the owner's answer. The first half,
 Sign in with ChatGPT in the local app, is built as a proof of concept (docs/04 → Adapter `siwc`).
 
+Since 2026-11-21 the owner's order is Codex first, then a ChatGPT tutor inside RecallSpring (`docs/plan-without-claude.md`); this web connector comes after those.
+
 ## Goal
 
 The learner studies in ChatGPT the way they study in Claude Desktop today:

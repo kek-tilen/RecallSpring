@@ -60,6 +60,7 @@
 | Pomodoro timer: 45 / 10 / 15 min and a long break after 4 blocks by default, all changeable; faces Default, Flip Clock, Progress Bar, Dot Matrix, Pie and Ring; focus mode with colour backgrounds or the learner's own image kept only in the browser; finished focus blocks saved per course as study time (effort, not mastery) and shown to Claude; a chime and an optional desktop notification when a phase ends | Approved 2026-11-21 (owner chose own image + colours, logging per course, chime + notification; the sixth face in the screenshot was left out) |
 | `Start focus` on each item of Today's plan: starts a Pomodoro focus block for that course at once (ends a break early) and shows the timer over the window | Approved 2026-11-21 (owner in chat) |
 | A wrongly timed focus block can be removed after confirming (soft delete, restorable for 30 days, audited); its learning event stays | Approved 2026-11-21 (owner asked for it) |
+| RecallSpring without Claude: other people, each on their own computer; Codex first (local MCP), then a ChatGPT tutor in the app (SIWC with tools); grades from ChatGPT/Codex count the same as Claude's, labelled with assistant and model | Approved 2026-11-21 (owner in chat); plan only, `docs/plan-without-claude.md` |
 
 ## Working assumptions (do not mistake for owner approval)
 
@@ -121,6 +122,12 @@
 - API data retention: inputs/outputs deleted within 30 days by default, with exceptions (longer-retention services such as the Files API, separate agreements, Usage Policy enforcement — up to 2 years for flagged content — and legal requirements). Training-use policy for API data to be confirmed from the commercial terms before Mode B with Claude is enabled.
 
 **OpenAI SIWC (open-source token sharing):** facts summarized in `docs/04` → Adapter `siwc`. Additional notes: open-source path available to all open-source partners with dynamic registration (no client secret); the docs scope it to open-source and locally hosted apps; Plus 5-hour usage limit is shared across all apps; the terms page returned HTTP 403 to automated fetch and must be read manually.
+
+**OpenAI Codex and ChatGPT connectors (read 2026-11-21, to revalidate before building):**
+- Codex reads MCP servers from `~/.codex/config.toml` (`[mcp_servers.<name>]`), shared by the CLI, IDE extension and desktop app; local stdio servers are supported; `env` / `env_vars`, startup timeout 10 s and tool timeout 60 s by default; per-tool approval modes. Codex signs in with ChatGPT (subscription) or an API key.
+- Codex and MCP Apps / images: community reports conflict on whether MCP Apps UI renders in the Codex app, and an open issue reports image blocks dropped when structured content is present. Test per client.
+- ChatGPT custom MCP servers: added at chatgpt.com/plugins (Add custom MCP server), reachable only through a public HTTPS endpoint or OpenAI's Secure MCP Tunnel; auth is OAuth 2.1 with PKCE or none per tool, and the authorization server must be reachable from the internet even with a tunnel. Plan eligibility differs between sources.
+- Sources: developers.openai.com/codex/mcp (now learn.chatgpt.com/docs/extend/mcp), developers.openai.com/apps-sdk/deploy, developers.openai.com/apps-sdk/deploy/connect-chatgpt, developers.openai.com/api/docs/guides/secure-mcp-tunnels, github.com/openai/codex issues 21019 and 10334.
 
 **Gate status:**
 - Mode A: automated end-to-end run **PASS** on 2026-11-19. The real API and the real MCP server over stdio completed the full loop: plan → question → form submission (exact text saved) → assessment → next review; a second grade was rejected. The run used an in-process MCP client, not Claude Desktop. **Pending: the owner's test in Claude Desktop**, which must show that the answer form renders.
