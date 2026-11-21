@@ -72,7 +72,15 @@ Implemented (2026-11-21, ADR-008):
   3. *Project files:* attachments found in the export are saved alongside the chats (optional), or dropped as files/folders/ZIPs.
 
   The upload is kept 7 days for picking, then deleted ("Remove upload" deletes it sooner).
-- **Settings → ChatGPT (preview):** `Sign in with ChatGPT` per OpenAI's UI guidelines. It shows the privacy notes (only what you send, on this computer, never in backups, no paid fallback), the account and plan usage, a model choice, saved conversations, and Sign out with a confirmation. Conversations can be picked from a list. Every reply shows the model and version that answered, the exact time, how long it took and its tokens (input with cached, output with reasoning). Under *More* are the model chosen, the account and the response ID. A message that got no reply says why and is not sent again. Below are per-conversation totals, usage over the last 24 hours and 30 days, Delete (with confirmation) and Recently deleted with Restore. Conversations stay readable while signed out. It states clearly when it is unavailable (not on 127.0.0.1, or turned off). Claude stays the tutor.
+- **Chat** (`/chat`, `/chat/:id`, in the main navigation; owner decision 2026-11-21): ChatGPT conversations on their own page.
+  - Conversations are listed on the left with search and Recently deleted (Restore within 30 days). On phones the list opens with a "Conversations" button.
+  - The thread is in the middle. The composer is at the bottom: Enter sends, Shift+Enter adds a new line, and the model choice there is remembered.
+  - Each conversation can be renamed or deleted (deleting is confirmed).
+  - Replies are shown with formatting by `components/Markdown.tsx`. It supports paragraphs, headings, lists, quotes, tables, code, bold, italic and http(s) links, and builds React elements only. HTML, scripts or styles in a reply stay visible text and are never run.
+  - Under each reply is one quiet line: model and version, time, duration and tokens. Clicking it shows the model chosen, the model that answered, the exact time, input (cached) / output (reasoning) / total tokens, the account and the response ID.
+  - A message that got no reply says why. The header shows usage over the last 24 hours and 30 days.
+  - When signed out, conversations stay readable and a `Sign in with ChatGPT` button is shown.
+- **Settings → ChatGPT (preview):** the connection only. It holds `Sign in with ChatGPT` per OpenAI's UI guidelines, the privacy notes, the account, plan usage, Open Chat, Sign in again and Sign out (confirmed). It states clearly when sign-in is unavailable (not on 127.0.0.1, or turned off).
 
 ### Insights
 

@@ -52,6 +52,7 @@
 | Moving in from ChatGPT: chats from the official data export (chosen by the learner, saved word for word as material), project files, and custom instructions/memories as study preferences the learner confirms; staged uploads deleted after 7 days | Approved 2026-11-21 (owner chose all three; ADR-008) |
 | OpenAI: "Sign in with ChatGPT" in the local app first (proof of concept: sign-in, models, saved conversations, sign-out; not used for tutoring yet), a ChatGPT connector later (needs public HTTPS and OAuth; plan only) | Approved 2026-11-21 (owner in chat; ADR-008, `docs/chatgpt-connector-plan.md`) |
 | ChatGPT conversations are saved in RecallSpring, and each reply records the model and version that answered, time, duration, account and token usage. They stay after signing out of ChatGPT or RecallSpring (the ChatGPT sign-in also stays across RecallSpring sign-outs); deleting is confirmed, soft and restorable for 30 days | Approved 2026-11-21 (owner in chat) |
+| ChatGPT conversations get their own **Chat** page in the main navigation (list, thread, composer, rename/delete, reply details on click); Settings keeps only the connection; replies are shown with formatting from a built-in Markdown subset that never runs model-written HTML/JS/CSS | Approved 2026-11-21 (owner in chat) |
 
 ## Working assumptions (do not mistake for owner approval)
 
