@@ -18,6 +18,8 @@ from ..ingest.storage import ALLOWED_EXTENSIONS, TEXT_KINDS, commit_blob, storag
 from ..models import ConceptSource, Source, SourceSection, User
 from ..schemas import SectionOut, SourceOut
 from .events import learning_event
+from .folders import Tree, tree
+from .folders import get as get_folder
 
 PARSE_MESSAGES = {
     "no_extractable_text": (
@@ -176,7 +178,9 @@ def parse_message(source: Source) -> str | None:
     return None
 
 
-def source_view(db: Session, source: Source) -> dict[str, Any]:
+def source_view(db: Session, source: Source, folders: Tree | None = None) -> dict[str, Any]:
+    """``folders`` (the learner's folder tree) can be passed when many sources are listed at once."""
+    t = folders if folders is not None or source.folder_id is None else tree(db, source.user_id)
     count = db.scalar(
         select(func.count())
         .select_from(SourceSection)
@@ -193,6 +197,11 @@ def source_view(db: Session, source: Source) -> dict[str, Any]:
         sha256=source.sha256,
         origin=source.origin,
         category=source.category,
+        folder_id=source.folder_id,
+        folder=t.path(source.folder_id) if t is not None else None,
+        archived=source.archived_at is not None,
+        hidden=source.archived_at is not None or (t is not None and t.hidden(source.folder_id)),
+        archived_at=source.archived_at,
         duplicate_of_id=source.duplicate_of_id,
         duplicate_of_course_id=duplicate_course,
         parse_state=source.parse_state,  # type: ignore[arg-type]
@@ -235,8 +244,12 @@ def create_source(
     origin: str,
     request_id: str,
     category: str = "material",
+    folder_id: uuid.UUID | None = None,
 ) -> Source:
     """Store the original, create the source row and queue extraction, all in the caller's transaction."""
+    if folder_id is not None and get_folder(db, user.id, folder_id).course_id != course_id:
+        tmp.unlink(missing_ok=True)
+        raise ApiError(409, "different_course", "The folder belongs to another course.")
     existing = db.scalar(
         select(Source)
         .where(Source.user_id == user.id, Source.sha256 == sha256, Source.deleted_at.is_(None))
@@ -262,6 +275,7 @@ def create_source(
         storage_key=key,
         origin=origin,
         category=category,
+        folder_id=folder_id,
         duplicate_of_id=existing.id if existing else None,
         parse_state="pending",
     )
@@ -283,6 +297,7 @@ def create_source(
         payload={
             "kind": kind,
             "category": category,
+            "folder_id": str(folder_id) if folder_id else None,
             "origin": origin,
             "bytes": size,
             "duplicate_of": str(existing.id) if existing else None,
@@ -351,7 +366,9 @@ def sections_for_concepts(db: Session, user_id: uuid.UUID, concept_ids: list[uui
 
 def search_sections(db: Session, user_id: uuid.UUID, query: str, course_id: uuid.UUID | None, limit: int):  # type: ignore[no-untyped-def]
     """Full-text search over current section versions. Language-neutral ('simple') because material can be in
-    any language. Snippets use « » markers instead of HTML."""
+    any language. Snippets use « » markers instead of HTML. Archived material (and archived folders) is left out;
+    its sections stay readable by ID for existing citations."""
+    hidden = [str(f) for f in tree(db, user_id).hidden_ids()]
     stmt = text(
         """
         SELECT s.id AS section_id, s.source_id, src.filename, s.citation_label,
@@ -361,7 +378,8 @@ def search_sections(db: Session, user_id: uuid.UUID, query: str, course_id: uuid
         FROM source_sections s
         JOIN sources src ON src.id = s.source_id AND src.version = s.source_version,
              websearch_to_tsquery('simple'::regconfig, :query) q
-        WHERE s.user_id = :user_id AND src.deleted_at IS NULL
+        WHERE s.user_id = :user_id AND src.deleted_at IS NULL AND src.archived_at IS NULL
+          AND (src.folder_id IS NULL OR NOT (src.folder_id = ANY(CAST(:hidden AS uuid[]))))
           AND (CAST(:course_id AS uuid) IS NULL OR src.course_id = CAST(:course_id AS uuid))
           AND s.tsv @@ q
         ORDER BY rank DESC, src.filename, s.position
@@ -369,5 +387,7 @@ def search_sections(db: Session, user_id: uuid.UUID, query: str, course_id: uuid
         """
     )
     return (
-        db.execute(stmt, {"query": query, "user_id": user_id, "course_id": course_id, "limit": limit}).mappings().all()
+        db.execute(stmt, {"query": query, "user_id": user_id, "course_id": course_id, "limit": limit, "hidden": hidden})
+        .mappings()
+        .all()
     )

@@ -133,6 +133,31 @@ class SourcePatch(BaseModel):
     category: MaterialCategory
 
 
+class FolderIn(BaseModel):
+    course_id: uuid.UUID
+    parent_id: uuid.UUID | None = None
+    name: str = Field(min_length=1, max_length=200)
+
+
+class FolderPatch(BaseModel):
+    """Rename and/or move; send ``parent_id: null`` to move the folder to the course's top level."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    parent_id: uuid.UUID | None = None
+
+
+class SourcesMoveIn(BaseModel):
+    """``folder_id`` null files the material at its course's top level."""
+
+    source_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+    folder_id: uuid.UUID | None = None
+
+
+class SourcesArchiveIn(BaseModel):
+    source_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+    archived: bool
+
+
 class SyllabusItemIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     parent_id: uuid.UUID | None = None
@@ -319,6 +344,13 @@ class SourceTextIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     text: str = Field(min_length=1, max_length=2_000_000)
     format: Literal["markdown", "plain"] = "markdown"
+    folder_id: uuid.UUID | None = None
+
+
+class ConnectorSourceTextIn(SourceTextIn):
+    """Claude names a folder by its path ("Lectures / Week 3"); missing folders are created."""
+
+    folder: str | None = Field(default=None, max_length=600)
 
 
 class SourceOut(BaseModel):
@@ -331,6 +363,11 @@ class SourceOut(BaseModel):
     sha256: str
     origin: str
     category: str = "material"
+    folder_id: uuid.UUID | None = None
+    folder: str | None = None
+    archived: bool = False
+    hidden: bool = False
+    archived_at: datetime | None = None
     duplicate_of_id: uuid.UUID | None
     duplicate_of_course_id: uuid.UUID | None
     parse_state: Literal["pending", "processing", "ready", "needs_attention", "failed"]

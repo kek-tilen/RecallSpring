@@ -445,6 +445,26 @@ class IdempotencyRecord(Base):
 # --------------------------------------------------------------------------- sources
 
 
+class SourceFolder(Base):
+    """The learner's own folder inside a course (nestable). Optional: material without a folder sits at the
+    course's top level. Archiving hides the folder and everything in it from the library; nothing is deleted."""
+
+    __tablename__ = "source_folders"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    course_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("courses.id"), nullable=False, index=True)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("source_folders.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (CheckConstraint("parent_id IS NULL OR parent_id <> id", name="not_own_parent"),)
+
+
 class Source(Base):
     """An uploaded or pasted document. The original bytes are kept unchanged in private storage."""
 
@@ -461,6 +481,8 @@ class Source(Base):
     storage_key: Mapped[str] = mapped_column(String(200), nullable=False)
     origin: Mapped[str] = mapped_column(String(20), nullable=False)
     category: Mapped[str] = mapped_column(String(20), nullable=False, server_default="material", default="material")
+    folder_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("source_folders.id"), index=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     duplicate_of_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sources.id"))
     parse_state: Mapped[str] = mapped_column(String(20), nullable=False)
     parse_error: Mapped[str | None] = mapped_column(String(60))

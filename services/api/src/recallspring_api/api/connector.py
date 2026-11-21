@@ -53,6 +53,7 @@ from ..schemas import (
     ConnectorConceptsIn,
     ConnectorQuestionsIn,
     ConnectorSessionIn,
+    ConnectorSourceTextIn,
     ConnectorSummaryIn,
     CourseIn,
     CourseOut,
@@ -70,13 +71,13 @@ from ..schemas import (
     ReviewQueueOut,
     SearchHitOut,
     SearchOut,
-    SourceTextIn,
     StudySessionOut,
     TargetIn,
     TargetProfileIn,
     TargetUpdateIn,
 )
 from ..services import attempts as attempt_svc
+from ..services import folders as folder_svc
 from ..services import interests as interest_svc
 from ..services import overview, readiness, week
 from ..services import quizzes as quiz_svc
@@ -211,12 +212,24 @@ def outline(course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session
                 },
             }
         )
+    folder_tree = folder_svc.tree(db, ctx.user.id)
     sources = [
         {
             k: v
-            for k, v in source_svc.source_view(db, s).items()
+            for k, v in source_svc.source_view(db, s, folder_tree).items()
             if k
-            in ("id", "filename", "kind", "category", "parse_state", "parse_message", "section_count", "page_count")
+            in (
+                "id",
+                "filename",
+                "kind",
+                "category",
+                "folder",
+                "hidden",
+                "parse_state",
+                "parse_message",
+                "section_count",
+                "page_count",
+            )
         }
         for s in db.scalars(
             select(Source)
@@ -231,6 +244,11 @@ def outline(course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session
         ],
         "concepts": concepts,
         "sources": sources,
+        "folders": [
+            folder_tree.path(f.id)
+            for f in folder_tree.by_id.values()
+            if f.course_id == course_id and not folder_tree.hidden(f.id)
+        ],
     }
 
 
@@ -612,8 +630,11 @@ def create_concepts(
 
 @router.post("/sources/text", status_code=201)
 def add_text_source(
-    payload: SourceTextIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+    payload: ConnectorSourceTextIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
 ) -> JSONResponse:
+    if payload.folder and payload.folder_id is None:
+        folder = folder_svc.resolve_path(db, ctx.user, payload.course_id, payload.folder, ctx.request_id)
+        payload = payload.model_copy(update={"folder_id": folder.id if folder else None})
     return handle_paste(payload, ctx, db)
 
 
@@ -623,11 +644,14 @@ def import_file(
     course_id: uuid.UUID = Form(...),
     file: UploadFile = File(...),
     category: MaterialCategory = Form("material"),
+    folder: str | None = Form(None, max_length=600),
     ctx: WriteCtx = Depends(connector_write_ctx),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """A local file the learner asked the connector to import (same checks as the web upload)."""
-    return handle_upload(request, course_id, file, ctx, db, category)
+    """A local file the learner asked the connector to import (same checks as the web upload), optionally into a
+    folder named by its path ("Lectures / Week 3"; missing folders are created)."""
+    target = folder_svc.resolve_path(db, ctx.user, course_id, folder, ctx.request_id)
+    return handle_upload(request, course_id, file, ctx, db, category, target.id if target else None)
 
 
 @router.get("/sources/{source_id}")

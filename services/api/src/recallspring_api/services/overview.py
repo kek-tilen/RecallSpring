@@ -37,6 +37,7 @@ from ..models import (
 )
 from . import mastery
 from .attempts import assessments_for
+from .folders import tree as folder_tree
 from .learning import effective_status
 from .quizzes import results_view
 from .reviews import effective_assessment
@@ -141,6 +142,7 @@ def course_overview(db: Session, user: User, course: Course) -> dict[str, Any]:
     dupes = duplicate_groups(targets)
     active = active_target(targets, today)
     quizzes = db.scalars(select(Quiz).where(Quiz.course_id == course.id).order_by(Quiz.created_at.desc()))
+    folders = folder_tree(db, user.id)
     return {
         "course": course_view(course),
         "active_target_id": str(active.id) if active else None,
@@ -149,13 +151,17 @@ def course_overview(db: Session, user: User, course: Course) -> dict[str, Any]:
         ],
         "progress": {"study": study, "bands": bands, "concepts": len(concepts)},
         "concepts": rows,
-        "sources": [
-            source_view(db, s)
-            for s in db.scalars(
-                select(Source)
-                .where(Source.course_id == course.id, Source.deleted_at.is_(None))
-                .order_by(Source.uploaded_at)
+        "sources": [  # archived material (or material in an archived folder) is left out
+            view
+            for view in (
+                source_view(db, s, folders)
+                for s in db.scalars(
+                    select(Source)
+                    .where(Source.course_id == course.id, Source.deleted_at.is_(None))
+                    .order_by(Source.uploaded_at)
+                )
             )
+            if not view["hidden"]
         ],
         "notes": db.scalar(
             select(func.count()).select_from(Note).where(Note.course_id == course.id, Note.deleted_at.is_(None))

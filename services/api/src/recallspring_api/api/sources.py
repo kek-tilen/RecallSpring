@@ -34,8 +34,11 @@ from ..schemas import (
     SectionPageOut,
     SourceOut,
     SourcePatch,
+    SourcesArchiveIn,
+    SourcesMoveIn,
     SourceTextIn,
 )
+from ..services import folders as folder_svc
 from ..services import sources as svc
 from ..services.events import learning_event
 from ..services.ownership import owned
@@ -51,18 +54,29 @@ def upload_source(
     course_id: uuid.UUID = Form(...),
     file: UploadFile = File(...),
     category: MaterialCategory = Form("material"),
+    folder_id: uuid.UUID | None = Form(None),
+    folder_path: str | None = Form(None, max_length=600),
     ctx: WriteCtx = Depends(write_ctx),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Multipart upload of a PDF, Office or OpenDocument file, Markdown/text, CSV, subtitles, notebook, code,
+    """``folder_path`` (e.g. "Week 3/Slides", from an uploaded folder) is created below ``folder_id`` if missing.
+
+    Multipart upload of a PDF, Office or OpenDocument file, Markdown/text, CSV, subtitles, notebook, code,
     LaTeX or image file (see SUPPORTED_FILES). Extraction runs in the worker; poll GET /sources/{id}.
 
     In production the reverse proxy must also cap the request body (client_max_body_size)."""
-    return handle_upload(request, course_id, file, ctx, db, category)
+    return handle_upload(request, course_id, file, ctx, db, category, folder_id, folder_path)
 
 
 def handle_upload(
-    request: Request, course_id: uuid.UUID, file: UploadFile, ctx: WriteCtx, db: Session, category: str = "material"
+    request: Request,
+    course_id: uuid.UUID,
+    file: UploadFile,
+    ctx: WriteCtx,
+    db: Session,
+    category: str = "material",
+    folder_id: uuid.UUID | None = None,
+    folder_path: str | None = None,
 ) -> JSONResponse:
     """Shared by the web app and the connector (local file import)."""
     filename = sanitize_filename(file.filename)
@@ -87,10 +101,25 @@ def handle_upload(
     except StorageError as exc:
         tmp.unlink(missing_ok=True)
         raise svc.upload_error(exc.code) from exc
-    fingerprint = {"course_id": str(course_id), "filename": filename, "sha256": sha256, "category": category}
+    fingerprint = {
+        "course_id": str(course_id),
+        "filename": filename,
+        "sha256": sha256,
+        "category": category,
+        "folder_id": str(folder_id) if folder_id else None,
+    }
+    if folder_path and folder_path.strip():
+        fingerprint["folder_path"] = folder_path
     if replay := replay_if_seen(db, ctx, fingerprint):
         tmp.unlink(missing_ok=True)
         return replay
+    if folder_path and folder_path.strip():
+        try:
+            folder = folder_svc.resolve_path(db, ctx.user, course_id, folder_path, ctx.request_id, folder_id, via="web")
+        except ApiError:
+            tmp.unlink(missing_ok=True)
+            raise
+        folder_id = folder.id if folder else folder_id
     source = svc.create_source(
         db,
         user=ctx.user,
@@ -104,6 +133,7 @@ def handle_upload(
         origin="upload",
         request_id=ctx.request_id,
         category=category,
+        folder_id=folder_id,
     )
     return commit_with_response(db, ctx, fingerprint, 201, svc.source_view(db, source))
 
@@ -138,18 +168,49 @@ def handle_paste(payload: SourceTextIn, ctx: WriteCtx, db: Session) -> JSONRespo
         mime=mime,
         origin="paste",
         request_id=ctx.request_id,
+        folder_id=payload.folder_id,
     )
     return commit_with_response(db, ctx, payload, 201, svc.source_view(db, source))
 
 
 @router.get("/sources", response_model=list[SourceOut])
 def list_sources(
-    course_id: uuid.UUID | None = None, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
+    course_id: uuid.UUID | None = None,
+    archived: bool = False,
+    ctx: Ctx = Depends(current_ctx),
+    db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
+    """Material, oldest first. Archived material (or material in an archived folder) only with ``archived=true``."""
     stmt = select(Source).where(Source.user_id == ctx.user.id, Source.deleted_at.is_(None))
     if course_id is not None:
         stmt = stmt.where(Source.course_id == course_id)
-    return [svc.source_view(db, s) for s in db.scalars(stmt.order_by(Source.uploaded_at))]
+    t = folder_svc.tree(db, ctx.user.id)
+    views = [svc.source_view(db, s, t) for s in db.scalars(stmt.order_by(Source.uploaded_at))]
+    return views if archived else [v for v in views if not v["hidden"]]
+
+
+@router.post("/sources/move")
+def move_sources(
+    payload: SourcesMoveIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """File material into one of its course's folders, or back to the course's top level."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    rows = folder_svc.move_sources(db, ctx.user, payload.source_ids, payload.folder_id, ctx.request_id)
+    t = folder_svc.tree(db, ctx.user.id)
+    return commit_with_response(db, ctx, payload, 200, {"sources": [svc.source_view(db, s, t) for s in rows]})
+
+
+@router.post("/sources/archive")
+def archive_sources(
+    payload: SourcesArchiveIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Archive (hide from the library and search, keep everything) or restore material. Audited."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    rows = folder_svc.archive_sources(db, ctx.user, payload.source_ids, payload.archived, ctx.request_id)
+    t = folder_svc.tree(db, ctx.user.id)
+    return commit_with_response(db, ctx, payload, 200, {"sources": [svc.source_view(db, s, t) for s in rows]})
 
 
 @router.get("/sources/search", response_model=SearchOut)

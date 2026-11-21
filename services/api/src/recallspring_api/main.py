@@ -13,6 +13,7 @@ from .api import (
     connector,
     courses,
     health,
+    library,
     notes,
     organise,
     overview,
@@ -54,6 +55,7 @@ def create_app() -> FastAPI:
         settings,
         overview,
         organise,
+        library,
         connector,
     )
     for module in modules:
