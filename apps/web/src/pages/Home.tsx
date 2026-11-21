@@ -53,15 +53,16 @@ function firstCourseHint(a: AssistantWords): ReactNode {
     case "chatgpt":
       return (
         <>
-          ChatGPT in RecallSpring studies courses that are already set up. Creating courses and their concepts from your material
-          needs Claude or Codex for now (see the <Link to="/guide">Guide</Link>); then study each course in <Link to="/chat">Chat</Link>.
+          Add your material under <Link to="/library">Library</Link>, then start a <strong>Planning</strong> conversation in{" "}
+          <Link to="/chat">Chat</Link> and tell ChatGPT your courses, kolokvij dates, scope and material. The <Link to="/guide">Guide</Link>{" "}
+          has prompts to copy.
         </>
       );
     default:
       return (
         <>
-          <Link to="/welcome">Choose your assistant</Link> to see how to start, or add a course under <Link to="/courses">Courses</Link>{" "}
-          and material under <Link to="/library">Library</Link>.
+          <Link to="/welcome">Choose your assistant</Link> to see how to start: it sets up your courses and kolokvij dates with you.
+          Your material goes under <Link to="/library">Library</Link>.
         </>
       );
   }

@@ -1,7 +1,8 @@
 """ChatGPT in Chat using RecallSpring (plan-without-claude.md, Phase 2) against a fake OpenAI: tools go in one
 namespace, calls run on the server as the learner with the connector's checks, every step is recorded on the
 learner's message, grades carry the model OpenAI reported, limits stop runaway turns, and plan-usage errors in the
-middle of a turn keep what was done without any fallback."""
+middle of a turn keep what was done without any fallback. A planning conversation (no course) sets up courses and
+targets but cannot quiz; a study conversation stays inside its course."""
 
 from __future__ import annotations
 
@@ -111,8 +112,9 @@ def test_tools_go_in_one_namespace_and_calls_run_as_the_learner(owner_api: Api, 
     [space] = first["tools"]
     assert space["type"] == "namespace" and space["name"] == "recallspring"
     names = {t["name"] for t in space["tools"]}
-    assert len(names) < 20 and all(t["type"] == "function" for t in space["tools"])
-    assert not names & {"delete_course", "import_file", "set_availability", "organise_courses"}
+    assert len(names) <= chat_tools.MAX_TOOLS and all(t["type"] == "function" for t in space["tools"])
+    assert not names & {"delete_course", "import_file", "set_availability", "create_questions", "record_assessment"}
+    assert "planning conversation" in first["instructions"]
     assert "recallspring tools" in first["instructions"]
     # the call goes back without OpenAI's item id, followed by RecallSpring's output
     echoed = [i for i in second["input"] if i["type"] != "message"]
@@ -158,7 +160,11 @@ def test_grades_carry_the_model_openai_reported_and_evidence_is_checked(owner_ap
         calls(2, ("g1", "record_assessment", grade)),
         reply_events("Solid answer. Review tomorrow.", 3),
     ]
-    r = send(owner_api, f"I saved my answer to question {ids['question_id']}. Please give me feedback.")
+    r = send(
+        owner_api,
+        f"I saved my answer to question {ids['question_id']}. Please give me feedback.",
+        course_id=ids["course_id"],
+    )
     assert r.status_code == 200, r.text
     read = outputs(fake.bodies()[1])["a1"]
     assert (
@@ -203,7 +209,7 @@ def test_learning_first_forms_and_bad_calls_are_reported_back(owner_api: Api, fa
         ),
         reply_events("Answer below.", 2),
     ]
-    r = send(owner_api, "Quiz me")
+    r = send(owner_api, "Quiz me", course_id=ids["course_id"])
     assert r.status_code == 200, r.text
     out = outputs(fake.bodies()[1])
     assert out["q1"]["error"] == "concepts_not_studied"
@@ -283,3 +289,128 @@ def test_study_mode_names_the_course_and_only_the_learners_own(owner_api: Api, f
     plain = owner_api.post("/ai/chatgpt/messages", {"model": "gpt-test", "message": "No tools"})
     assert plain.status_code == 200 and "tools" not in fake.bodies()[-1]
     assert plain.json()["course"] is None and plain.json()["messages"][0]["tool_calls"] == []
+
+
+def _targets() -> list[Any]:
+    from recallspring_api.models import StudyTarget
+
+    with new_session() as db:
+        return list(db.scalars(select(StudyTarget).order_by(StudyTarget.created_at)))
+
+
+def test_a_planning_conversation_sets_up_the_semester_but_cannot_quiz(owner_api: Api, fake: ToolFake) -> None:
+    sign_in(owner_api, fake)
+    ids = owner_api.course_with_question()
+    target = {
+        "course_id": ids["course_id"],
+        "kind": "kolokvij",
+        "name": "1. kolokvij",
+        "due_date": "2026-12-15",
+        "scope_description": "Prvi del, do glikolize",
+        "scope": [{"kind": "concept", "concept_id": ids["concept_id"]}],
+    }
+    concepts = {
+        "course_id": ids["course_id"],
+        "concepts": [{"term": "Krebs cycle", "source_section_ids": ids["section_ids"][:1]}],
+    }
+    quiz = {"course_id": ids["course_id"], "questions": [{"concept_ids": [ids["concept_id"]], "prompt": "Why?"}]}
+    fake.rounds = [
+        calls(
+            1,
+            ("p1", "create_course", {"title": "Genetics"}),
+            ("p2", "create_course", {"title": "Biology 101"}),
+            ("p3", "create_concepts", concepts),
+            ("p4", "set_study_target", target),
+            ("p5", "create_questions", quiz),
+        ),
+        reply_events("Your semester is set up.", 2),
+    ]
+    r = send(owner_api, "Let's set up my semester.")
+    assert r.status_code == 200, r.text
+    [space] = fake.bodies()[0]["tools"]
+    names = {t["name"] for t in space["tools"]}
+    assert {"create_course", "organise_courses", "set_study_target", "record_exam_profile"} <= names
+    assert len(names) <= chat_tools.MAX_TOOLS and "open_answer_form" not in names
+    out = outputs(fake.bodies()[1])
+    assert out["p1"]["ok"] and out["p1"]["result"]["title"] == "Genetics"
+    assert out["p2"]["ok"] is False  # the course exists already
+    assert out["p3"]["ok"] and out["p3"]["result"]["concepts"][0]["source_section_ids"] == ids["section_ids"][:1]
+    assert out["p4"]["ok"] and out["p4"]["result"]["scope_description"] == "Prvi del, do glikolize"
+    assert out["p5"]["error"] == "not_in_this_conversation" and "Study" in out["p5"]["message"]
+    steps = {s["call_id"]: s for s in r.json()["messages"][0]["tool_calls"]}
+    assert steps["p1"]["summary"] == "Created the course Genetics" and steps["p1"]["writes"] is True
+    assert steps["p4"]["summary"] == "Saved 1. kolokvij on 2026-12-15"
+    genetics = next(c for c in owner_api.get("/courses").json() if c["title"] == "Genetics")
+
+    [saved] = _targets()
+    profile = {
+        "target_id": str(saved.id),
+        "item_types": [{"type": "short answer", "share": 1}],
+        "example_items": ["Explain glycolysis."],
+        "model_name": "a model ChatGPT names itself",
+    }
+    fake.rounds = [
+        calls(
+            3,
+            ("u1", "update_study_target", {"target_id": str(saved.id), "due_date": "2026-12-18"}),
+            ("u2", "record_exam_profile", profile),
+            ("u3", "organise_courses", {"course_ids": [genetics["id"]], "semester": "5. semester", "faculty": "FKKT"}),
+        ),
+        reply_events("Moved and analysed.", 4),
+    ]
+    r = send(owner_api, "The kolokvij moved to 18 December; here is last year's paper.", conversation_id=r.json()["id"])
+    assert r.status_code == 200, r.text
+    out = outputs(fake.bodies()[-1])
+    assert out["u1"]["ok"] and out["u1"]["result"]["due_date"] == "2026-12-18"
+    assert out["u2"]["ok"] and out["u3"]["ok"], (out["u2"], out["u3"])
+    from recallspring_api.models import TargetProfile
+
+    with new_session() as db:
+        stored = db.scalars(select(TargetProfile)).one()
+    assert stored.model == MODEL  # what OpenAI reported, not what ChatGPT wrote
+    assert [s["summary"] for s in r.json()["messages"][-2]["tool_calls"]] == [
+        "Updated the study target",
+        "Saved the exam profile",
+        "Filed 1 course under 5. semester",
+    ]
+
+
+def test_a_study_conversation_sets_up_only_its_own_course(owner_api: Api, fake: ToolFake) -> None:
+    sign_in(owner_api, fake)
+    ids = owner_api.course_with_question()
+    other = owner_api.post("/courses", {"title": "Chemistry"}).json()
+    base = {"kind": "izpit", "name": "Exam", "due_date": "2027-01-20", "scope_description": "Everything"}
+    fake.rounds = [
+        calls(
+            1,
+            ("s1", "set_study_target", {**base, "course_id": ids["course_id"]}),
+            ("s2", "set_study_target", {**base, "course_id": other["id"]}),
+            ("s3", "list_courses", {}),
+            ("s4", "create_course", {"title": "Physics"}),
+        ),
+        reply_events("Saved your exam.", 2),
+    ]
+    r = send(owner_api, "My exam is on 20 January, everything.", course_id=ids["course_id"])
+    assert r.status_code == 200, r.text
+    [space] = fake.bodies()[0]["tools"]
+    names = {t["name"] for t in space["tools"]}
+    assert len(names) <= chat_tools.MAX_TOOLS
+    assert {"create_questions", "open_answer_form", "set_study_target", "create_concepts"} <= names
+    assert not names & {"create_course", "organise_courses", "list_courses"}
+    assert "needs_setup" in fake.bodies()[0]["instructions"] and "set_study_target" in fake.bodies()[0]["instructions"]
+    out = outputs(fake.bodies()[1])
+    assert out["s1"]["ok"]
+    assert out["s2"]["error"] == "other_course"
+    assert out["s3"]["error"] == out["s4"]["error"] == "not_in_this_conversation"
+    assert [t.course_id for t in _targets()] == [uuid.UUID(ids["course_id"])]
+
+    [saved] = _targets()
+    elsewhere = owner_api.post("/targets", {**base, "course_id": other["id"], "name": "Chem exam"})
+    assert elsewhere.status_code == 201, elsewhere.text
+    fake.rounds = [
+        calls(3, ("m1", "update_study_target", {"target_id": elsewhere.json()["id"], "status": "passed"})),
+        reply_events("Only this course.", 4),
+    ]
+    r = send(owner_api, "I passed chemistry.", conversation_id=r.json()["id"])
+    assert outputs(fake.bodies()[-1])["m1"]["error"] == "other_course"
+    assert next(t for t in _targets() if t.id == saved.id).status == "upcoming"

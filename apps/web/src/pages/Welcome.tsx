@@ -127,8 +127,8 @@ const ABOUT: Record<AssistantKey, { needs: string; summary: string }> = {
   chatgpt: {
     needs: "A ChatGPT Plus or Pro plan. Works while RecallSpring runs on this computer (preview).",
     summary:
-      "You study in RecallSpring's Chat page. ChatGPT reads your courses and material through RecallSpring and asks questions in forms right in the chat. " +
-      "Setting up a course (its concepts from your material, exam dates and scope) needs Claude or Codex for now.",
+      "You study in RecallSpring's Chat page. A planning conversation sets up your courses and exam dates; a conversation about one course " +
+      "teaches from your material and asks questions in forms right in the chat.",
   },
 };
 
@@ -141,7 +141,11 @@ export function AssistantNextSteps({ assistant, username }: { assistant: Assista
           Open <Link to="/settings#chatgpt">Settings → ChatGPT</Link> and choose <strong>Sign in with ChatGPT</strong> (allow plan usage).
         </li>
         <li>
-          Open <Link to="/chat">Chat</Link>, start a new conversation, pick a course under <strong>Study</strong> and write “Start studying”.
+          Add your material under <Link to="/library">Library</Link>. Then open <Link to="/chat">Chat</Link>: a new conversation with{" "}
+          <strong>Planning (all courses)</strong> under Study sets up your courses and kolokvij dates (“Let&apos;s set up my semester”).
+        </li>
+        <li>
+          To learn, start a new conversation, pick the course under <strong>Study</strong> and write “Start studying”.
         </li>
       </ol>
     );
@@ -260,7 +264,8 @@ export function WelcomePage() {
               <AssistantNextSteps assistant={choice} username={user.username} />
             ) : (
               <p className="small" style={{ margin: 0 }}>
-                Add your courses and material under <Link to="/courses">Courses</Link> and <Link to="/library">Library</Link>. Choose an assistant any time in{" "}
+                Add your material under <Link to="/library">Library</Link> and your exam dates under <Link to="/exams">Exams</Link>. Courses are set up
+                with an assistant; choose one any time in{" "}
                 <Link to="/settings#profile">Settings</Link>.
               </p>
             )}

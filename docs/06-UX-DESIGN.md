@@ -96,8 +96,8 @@ Implemented (2026-11-21, ADR-008):
   to /welcome). Saving a new time zone reloads every view, because "today" depends on it.
 - **Assistant wording:** pages name the chosen assistant where it helps (Home's start and continue hints, Review,
   waiting-for-grade notices, the Guide); otherwise "your assistant". The Guide's setup card follows the choice (Claude
-  Projects, Codex study folders, or Chat), shows Claude's + menu shortcuts only to Claude users, and tells ChatGPT
-  users which planning steps need Claude or Codex for now. Factual connector text (Claude Desktop, Codex tokens) stays.
+  Projects, Codex study folders, or Chat's planning and course conversations) and shows Claude's + menu shortcuts
+  only to Claude users. Chat's Study picker offers **Planning (all courses)** (default) or one course. Factual connector text (Claude Desktop, Codex tokens) stays.
 - **Settings → ChatGPT (preview):** the connection only. It holds `Sign in with ChatGPT` per OpenAI's UI guidelines, the privacy notes, the account, plan usage, Open Chat, Sign in again and Sign out (confirmed). It states clearly when sign-in is unavailable (not on 127.0.0.1, or turned off).
 
 ### Answering from another assistant (Codex)

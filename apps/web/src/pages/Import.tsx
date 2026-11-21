@@ -344,7 +344,7 @@ function ChatPicker({ view, onBack }: { view: ChatImport; onBack: () => void }) 
         <div className="stack" style={{ gap: 16 }}>
           <Card title="Save to a course">
             {active.length === 0 ? (
-              <p className="small muted">Create a course first (under Courses), then come back.</p>
+              <p className="small muted">Create a course first (ask your assistant in a planning chat), then come back.</p>
             ) : (
               <form
                 className="stack"

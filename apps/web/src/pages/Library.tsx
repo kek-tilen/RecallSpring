@@ -291,7 +291,7 @@ export function LibraryPage() {
         {(all) => {
           const list = activeCourses(all, groups.data ?? []);
           if (list.length === 0) {
-            return <Empty title="No courses yet">Create a course under Courses (or ask your assistant), then add material here.</Empty>;
+            return <Empty title="No courses yet">Ask your assistant to create your courses in a planning chat (see the Guide), then add material here.</Empty>;
           }
           const sections = new Map<string, Course[]>();
           for (const c of list) {

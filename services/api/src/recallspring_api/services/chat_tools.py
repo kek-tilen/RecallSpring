@@ -11,6 +11,13 @@ limited to real sections of the course, learning first. Nothing can be deleted o
   "provider"``), not a model name ChatGPT writes.
 - Every call is recorded on the learner's message (``ai_messages.tool_calls``): name, the arguments (shortened),
   outcome and time. The outputs sent to ChatGPT are not stored.
+
+Two sets, so ChatGPT never sees more than 20 tools at once (OpenAI's advice for accurate tool use):
+- a **study** conversation (a course picked under Study) gets the study tools plus setting up that course
+  (concepts from its material, its kolokviji and exams, an old paper's profile), limited to that course;
+- a **planning** conversation (no course) gets the read tools plus building the semester: courses, filing them
+  under university / faculty / semester, concepts, study targets and exam profiles. It cannot ask or grade.
+Material itself is added by the learner in Library; ChatGPT cannot import files.
 """
 
 from __future__ import annotations
@@ -30,8 +37,20 @@ from sqlalchemy.orm import Session
 from ..ai import siwc
 from ..deps import Ctx, WriteCtx
 from ..errors import ApiError
-from ..models import AiConversation, Concept, Course, Question
-from ..schemas import AssessmentBatchIn, ConnectorAssessmentIn, ConnectorQuestionsIn, KnownConceptsIn, QuizIn
+from ..models import AiConversation, Concept, Course, Question, StudyTarget
+from ..schemas import (
+    AssessmentBatchIn,
+    ConnectorAssessmentIn,
+    ConnectorConceptsIn,
+    ConnectorQuestionsIn,
+    CourseIn,
+    KnownConceptsIn,
+    OrganiseCoursesIn,
+    QuizIn,
+    TargetIn,
+    TargetProfileIn,
+    TargetUpdateIn,
+)
 from .ownership import owned
 
 log = logging.getLogger(__name__)
@@ -43,6 +62,7 @@ MAX_ROUNDS = 6  # responses per learner message
 MAX_CALLS = 12  # tool calls per learner message
 MAX_OUTPUT_CHARS = 16_000  # per tool output sent to ChatGPT
 MAX_STORED_ARGS = 1_500
+MAX_TOOLS = 20  # per conversation, as OpenAI advises for accurate tool use
 
 INSTRUCTIONS = """You can use the learner's RecallSpring through the recallspring tools: their courses, material, \
 notes, study plan, questions, answers and grades. RecallSpring keeps the records and decides priorities and review \
@@ -66,7 +86,24 @@ record_assessments for the open answers.
 - AI grades are study feedback, not validated scores; never present them as official marks.
 - Messages starting with [RecallSpring] were sent by RecallSpring for the learner after they used a form; keep \
 replying in the language the learner uses.
-- The tools only read or add records; they cannot delete anything or change settings."""
+- The tools read or add records, and can move or refine a study target; they cannot delete anything or change \
+settings. Material is added by the learner in RecallSpring's Library; you cannot import files."""
+
+STUDY_SETUP = """Setting up this course, only when needed, after asking: if get_study_context says needs_setup, \
+ask what the learner prepares for (1st kolokvij, 2nd kolokvij or the exam; the date; from which material to which; \
+whether they have an old paper). Map their answer to the material with get_course_outline, show them the mapping, \
+then set_study_target with their own words as scope_description. If they uploaded an old paper, read it and \
+record_exam_profile. If the course has material but no concepts yet, read the sections and create_concepts linked to \
+the section IDs that support them. When the learner reports a new date or a result, update_study_target."""
+
+PLANNING = """This is a planning conversation for all of the learner's courses; nothing is taught or quizzed here. \
+Help them set up their semester: list_courses first (never create a course twice), create_course for missing ones, \
+organise_courses to file them under university, faculty and semester, and for every kolokvij and exam \
+set_study_target with the date, the type, the scope in the learner's own words and your mapping of that scope to the \
+material (get_course_outline). Ask for anything missing and show the mapping before you save it. Analyse an old \
+paper the learner uploaded with record_exam_profile. Create concepts from material you read (create_concepts, linked \
+to section IDs). Then show priorities across courses with get_study_plan without course_id. To study, practise or \
+get feedback on a course, the learner starts a new conversation and picks that course under Study."""
 
 
 def instructions(db: Session, conv: AiConversation) -> str:
@@ -79,9 +116,10 @@ def instructions(db: Session, conv: AiConversation) -> str:
                 f'\n\nThis conversation studies the course "{title}" (course_id {course.id}). At the start, call '
                 "get_study_context and get_study_plan with that course_id. If get_study_context says needs_setup, "
                 "ask what the learner prepares for (which kolokvij or exam, the date, which material) before "
-                "anything else. Then propose a session that fits their time today."
+                "anything else. Then propose a session that fits their time today.\n\n" + STUDY_SETUP
             )
-    return text
+        return text  # the study set of tools (tools_for), even when the course was archived meanwhile
+    return text + "\n\n" + PLANNING
 
 
 # ---------------------------------------------------------------- arguments
@@ -137,6 +175,18 @@ class SummaryFormArgs(BaseModel):
 
 class AssessmentArgs(ConnectorAssessmentIn):
     attempt_id: uuid.UUID
+
+
+class ConceptsArgs(ConnectorConceptsIn):
+    course_id: uuid.UUID
+
+
+class TargetUpdateArgs(TargetUpdateIn):
+    target_id: uuid.UUID
+
+
+class ProfileArgs(TargetProfileIn):
+    target_id: uuid.UUID
 
 
 # ---------------------------------------------------------------- tools
@@ -239,6 +289,21 @@ def _create_quiz(db: Session, ctx: WriteCtx, a: QuizIn) -> tuple[Any, dict[str, 
         "your message and wait until they say they submitted it; then get_quiz_results."
     )
     return body, {"kind": "quiz", "quiz_id": body["quiz_id"], "title": body.get("title")}
+
+
+def _create_concepts(db: Session, ctx: WriteCtx, a: ConceptsArgs) -> tuple[Any, None]:
+    payload = ConnectorConceptsIn.model_validate(a.model_dump(exclude={"course_id"}))
+    return _body(_c().create_concepts(course_id=a.course_id, payload=payload, ctx=ctx, db=db)), None
+
+
+def _update_target(db: Session, ctx: WriteCtx, a: TargetUpdateArgs) -> tuple[Any, None]:
+    payload = TargetUpdateIn.model_validate(a.model_dump(exclude={"target_id"}, exclude_unset=True))
+    return _body(_c().update_target(target_id=a.target_id, payload=payload, ctx=ctx, db=db)), None
+
+
+def _record_profile(db: Session, ctx: WriteCtx, a: ProfileArgs) -> tuple[Any, None]:
+    payload = TargetProfileIn.model_validate({**a.model_dump(exclude={"target_id"}), "model_name": ctx.model})
+    return _body(_c().record_profile(target_id=a.target_id, payload=payload, ctx=ctx, db=db)), None
 
 
 def _n(value: Any, key: str) -> int:
@@ -408,8 +473,102 @@ _TOOLS = [
         writes=True,
         drop=("model_name", "session_id"),
     ),
+    # ------------------------------------------------ setting up courses and targets
+    Tool(
+        "create_course",
+        "Create a course (or kind interest for personal learning without a deadline; its description is the "
+        "learner's goal). Check list_courses first: a title that exists is refused.",
+        CourseIn,
+        lambda db, ctx, a: (_body(_c().create_course(payload=a, ctx=ctx, db=db)), None),
+        lambda a, r: f"Created the course {a.title[:80]}",
+        writes=True,
+    ),
+    Tool(
+        "organise_courses",
+        "File courses under the learner's university, faculty and semester by name; missing levels are created.",
+        OrganiseCoursesIn,
+        lambda db, ctx, a: (_body(_c().organise_courses(payload=a, ctx=ctx, db=db)), None),
+        lambda a, r: f"Filed {_plural(len(a.course_ids), 'course')} under {a.semester[:60]}",
+        writes=True,
+    ),
+    Tool(
+        "create_concepts",
+        "Save 1-30 concepts of a course from its material, each linked to the section IDs that support it (from "
+        "get_course_outline or get_source_section); without sections a concept is marked inferred. An existing "
+        "term is reused.",
+        ConceptsArgs,
+        _create_concepts,
+        lambda a, r: f"Saved {_plural(_n(r, 'concepts'), 'concept')}",
+        writes=True,
+    ),
+    Tool(
+        "set_study_target",
+        "Record a kolokvij or exam: course, kind (kolokvij, izpit, other), name, due date (YYYY-MM-DD), the "
+        "learner's own words for its scope (kept as written) and your mapping of the scope to sources, pages, "
+        "topics or concepts. Show the mapping to the learner before saving.",
+        TargetIn,
+        lambda db, ctx, a: (_body(_c().create_target(payload=a, ctx=ctx, db=db)), None),
+        lambda a, r: f"Saved {a.name[:60]} on {a.due_date.isoformat()}",
+        writes=True,
+    ),
+    Tool(
+        "update_study_target",
+        "Change a study target the learner told you about: move the date, refine the scope, or record a result "
+        "(status passed, failed or cancelled). Only the fields you send change; the change is recorded.",
+        TargetUpdateArgs,
+        _update_target,
+        lambda a, r: "Updated the study target",
+        writes=True,
+    ),
+    Tool(
+        "record_exam_profile",
+        "After reading an old paper the learner uploaded: the item types and their shares, the Bloom mix, topic "
+        "weights (0.5-2, optionally a concept_id of the course) and up to 10 example items, for a study target.",
+        ProfileArgs,
+        _record_profile,
+        lambda a, r: "Saved the exam profile",
+        writes=True,
+        drop=("model_name",),
+    ),
 ]
 TOOLS: dict[str, Tool] = {t.name: t for t in _TOOLS}
+
+_READ = ["get_study_context", "get_study_plan", "get_exam_readiness", "get_course_outline", "search_sources"]
+_READ += ["get_source_section", "get_notes"]
+STUDY = _READ + [
+    "get_answer",
+    "get_quiz_results",
+    "create_questions",
+    "open_answer_form",
+    "open_summary_form",
+    "record_assessment",
+    "record_assessments",
+    "mark_concepts_known",
+    "create_quiz",
+    "create_concepts",
+    "set_study_target",
+    "update_study_target",
+    "record_exam_profile",
+]
+PLANNING_TOOLS = ["list_courses", *_READ, "get_due_reviews", "create_course", "organise_courses"]
+PLANNING_TOOLS += ["create_concepts", "set_study_target", "update_study_target", "record_exam_profile"]
+# In a study conversation, setting-up calls must stay inside its course.
+COURSE_BOUND = {"create_concepts", "set_study_target", "update_study_target", "record_exam_profile"}
+
+
+def tools_for(course_id: uuid.UUID | None) -> list[Tool]:
+    """The study set for a conversation about one course, the planning set otherwise."""
+    return [TOOLS[n] for n in (STUDY if course_id is not None else PLANNING_TOOLS)]
+
+
+def _outside_course(db: Session, user_id: uuid.UUID, parsed: BaseModel, course_id: uuid.UUID) -> bool:
+    if getattr(parsed, "course_id", None) not in (None, course_id):
+        return True
+    target_id = getattr(parsed, "target_id", None)
+    if target_id is not None:
+        target = db.get(StudyTarget, target_id)
+        return target is not None and target.user_id == user_id and target.course_id != course_id
+    return False
 
 
 def _schema(model: type[BaseModel], drop: tuple[str, ...]) -> dict[str, Any]:
@@ -437,8 +596,9 @@ def _schema(model: type[BaseModel], drop: tuple[str, ...]) -> dict[str, Any]:
     return schema
 
 
-def definitions() -> list[dict[str, Any]]:
-    """The ``tools`` of a request: one namespace of function tools (fewer than 20, as OpenAI suggests)."""
+def definitions(tools: list[Tool] | None = None) -> list[dict[str, Any]]:
+    """The ``tools`` of a request: one namespace of function tools (at most MAX_TOOLS, as OpenAI advises)."""
+    tools = tools if tools is not None else tools_for(None)
     return [
         {
             "type": "namespace",
@@ -453,7 +613,7 @@ def definitions() -> list[dict[str, Any]]:
                     "parameters": _schema(t.args, t.drop),
                     "strict": False,
                 }
-                for t in _TOOLS
+                for t in tools
             ],
         }
     ]
@@ -492,12 +652,27 @@ def refused(call: siwc.ToolCall, code: str, message: str) -> tuple[dict[str, Any
     return entry, _output({"ok": False, "error": code, "message": message})
 
 
-def run(db: Session, ctx: Ctx, model: str, message_id: uuid.UUID, call: siwc.ToolCall) -> tuple[dict[str, Any], str]:
-    """Run one call as the learner. Returns (the step recorded on the message, the output sent to ChatGPT). A failed
-    call is rolled back and reported to ChatGPT, which may correct itself; nothing is retried here."""
+def run(
+    db: Session,
+    ctx: Ctx,
+    model: str,
+    message_id: uuid.UUID,
+    call: siwc.ToolCall,
+    course_id: uuid.UUID | None = None,
+) -> tuple[dict[str, Any], str]:
+    """Run one call as the learner, from the set of this conversation (``course_id`` as in tools_for). Returns (the
+    step recorded on the message, the output sent to ChatGPT). A failed call is rolled back and reported to ChatGPT,
+    which may correct itself; nothing is retried here."""
     tool = TOOLS.get(call.name)
     if tool is None:
         return refused(call, "unknown_tool", f"There is no RecallSpring tool called {call.name[:80]!r}.")
+    if tool not in tools_for(course_id):
+        where = (
+            "a planning conversation (no course picked under Study)"
+            if course_id is not None
+            else "a conversation with a course picked under Study"
+        )
+        return refused(call, "not_in_this_conversation", f"{tool.name} is available in {where}.")
     try:
         args = json.loads(call.arguments or "{}")
     except ValueError:
@@ -527,6 +702,12 @@ def run(db: Session, ctx: Ctx, model: str, message_id: uuid.UUID, call: siwc.Too
     )
     try:
         parsed = tool.args.model_validate(args)
+        if course_id is not None and tool.name in COURSE_BOUND and _outside_course(db, ctx.user.id, parsed, course_id):
+            raise ApiError(
+                422,
+                "other_course",
+                "This conversation is about one course; set up other courses in a planning conversation.",
+            )
         result, form = tool.run(db, wctx, parsed)
     except ValidationError as exc:
         db.rollback()

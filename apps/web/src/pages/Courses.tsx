@@ -189,7 +189,7 @@ export function CoursesPage() {
           if (courses.length === 0 && all.length === 0) {
             return (
               <Empty title="No courses yet">
-                Plan your semester in a planning chat with Claude or Codex (see the <Link to="/guide">Guide</Link>):
+                Plan your semester in a planning chat with your assistant (see the <Link to="/guide">Guide</Link>):
                 it creates your courses and files them under your university, faculty and semester.
               </Empty>
             );

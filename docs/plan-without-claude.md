@@ -111,8 +111,8 @@ Built 2026-11-21 for Windows 10/11 with PostgreSQL in Docker Desktop (owner's an
 `scripts/install.ps1` and `docs/install-windows.md`, the first-run page and `POST /auth/setup` (this computer only),
 `/welcome` and Settings → Profile (`users.assistant`, migration 0018), the time zone chosen at first run (the server
 default is now UTC, not Europe/Ljubljana), and UI wording that follows the chosen assistant. The repository holds no
-owner data; the demo seed runs only on request (`services/api/README.md`). Known gap: ChatGPT in RecallSpring has no
-tools to create courses, concepts or exam dates yet.
+owner data; the demo seed runs only on request (`services/api/README.md`). Afterwards (owner in chat) ChatGPT in
+Chat got the course-setup tools too, in planning conversations (docs/04).
 
 - An install guide and a first-run page: create your account, time zone (today's default is Europe/Ljubljana), and
   choose your assistant (Claude, Codex or ChatGPT in the app).

@@ -118,13 +118,21 @@ function SetupCard({ a }: { a: AssistantWords }) {
         <Card title="Study in Chat">
           <div className="stack">
             <p className="small">
-              Sign in under <Link to="/settings#chatgpt">Settings → ChatGPT</Link>, then open <Link to="/chat">Chat</Link>, start a
-              conversation and pick the course under <strong>Study</strong>. One conversation is one study session.
+              Sign in under <Link to="/settings#chatgpt">Settings → ChatGPT</Link> and add your material under{" "}
+              <Link to="/library">Library</Link>. In <Link to="/chat">Chat</Link>, each new conversation has one job, chosen under{" "}
+              <strong>Study</strong>:
             </p>
-            <p className="small notice" style={{ margin: 0 }}>
-              ChatGPT in RecallSpring cannot yet create courses, their concepts or exam dates. Set those up once with Claude or
-              Codex (the planning steps below); Exams also lets you add dates by hand.
-            </p>
+            <div className="structure" aria-label="Kinds of Chat conversations">
+              <div className="structure-project">Chat</div>
+              <ul>
+                <li>
+                  <strong>Planning (all courses)</strong> <span className="muted small">courses, dates, scope, material, old papers, priorities</span>
+                </li>
+                <li>
+                  <strong>[course]</strong> <span className="muted small">learning, practice and reviews; one conversation is one study session</span>
+                </li>
+              </ul>
+            </div>
           </div>
         </Card>
       );
@@ -193,8 +201,8 @@ export function GuidePage() {
                 <p className="small muted">{fill(step.why, a)}</p>
                 {step.claudeTip && a.key === "claude" && <p className="small muted">{step.claudeTip}</p>}
                 {step.planning && a.key === "chatgpt" && (
-                  <p className="small notice" style={{ margin: 0 }}>
-                    Chat cannot do this yet: use Claude or Codex for this step, or add dates under <Link to="/exams">Exams</Link>.
+                  <p className="small muted" style={{ margin: 0 }}>
+                    In Chat: a new conversation with <strong>Planning (all courses)</strong> picked under Study.
                   </p>
                 )}
                 <ul className="prompts">

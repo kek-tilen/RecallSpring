@@ -844,7 +844,7 @@ export function ChatPage() {
   const [model, setModel] = useState(() => remembered());
   const [visuals, setVisuals] = useState(() => remembered(VISUALS_STORE) !== "off");
   const [tools, setTools] = useState(() => remembered(TOOLS_STORE) !== "off");
-  // Study mode for a new conversation: the course ChatGPT starts from ("" = a general chat).
+  // Study mode for a new conversation: the course ChatGPT starts from ("" = a planning conversation).
   const [studyCourse, setStudyCourse] = useState("");
   const courses = useQuery({ queryKey: keys.courses, queryFn: () => get<Course[]>("/courses"), enabled: tools && !currentId });
   const [sideOpen, setSideOpen] = useState(false);
@@ -971,7 +971,7 @@ export function ChatPage() {
                 <label className="chat-study small">
                   Study
                   <select value={studyCourse} onChange={(e) => setStudyCourse(e.target.value)}>
-                    <option value="">No course (general chat)</option>
+                    <option value="">Planning (all courses)</option>
                     {courses.data!.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.title}

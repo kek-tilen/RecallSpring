@@ -192,7 +192,7 @@ export function Upload({ courseId: fixedCourse, folderId }: { courseId?: string;
       return;
     }
     if (!chosen) {
-      setLocalError("Create a course first (under Courses, or ask your assistant).");
+      setLocalError("Create a course first: ask your assistant in a planning chat (see the Guide).");
       return;
     }
     upload.mutate(picked);

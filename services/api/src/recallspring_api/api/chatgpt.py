@@ -79,14 +79,20 @@ def _api_error(exc: siwc.SiwcError, tools: bool = False) -> ApiError:
 
 
 def _tool_turn(
-    db: Session, ctx: WriteCtx, question: AiMessage, model: str, instructions: str, turns: list[dict[str, str]]
+    db: Session,
+    ctx: WriteCtx,
+    question: AiMessage,
+    model: str,
+    instructions: str,
+    turns: list[dict[str, str]],
+    course_id: uuid.UUID | None = None,
 ) -> tuple[str, siwc.Reply, list[dict[str, Any] | None], int, bool]:
     """Rounds of one learner message with RecallSpring's tools: ChatGPT answers or asks for calls; RecallSpring runs
     them as the learner and sends the outputs back, up to chat_tools.MAX_ROUNDS responses and MAX_CALLS calls. Each
     step is saved on the learner's message as soon as it ran. Returns (text, last response, usages, rounds,
     stopped at the limit)."""
     items = siwc.history_items(turns)
-    tools = chat_tools.definitions()
+    tools = chat_tools.definitions(chat_tools.tools_for(course_id))
     texts: list[str] = []
     usages: list[dict[str, Any] | None] = []
     steps: list[dict[str, Any]] = list(question.tool_calls or [])
@@ -106,7 +112,7 @@ def _tool_turn(
                     call, "too_many_calls", "Step limit for this message reached; answer with what you have."
                 )
             else:
-                entry, output = chat_tools.run(db, ctx, out.model, question.id, call)
+                entry, output = chat_tools.run(db, ctx, out.model, question.id, call, course_id)
             steps.append(entry)
             question.tool_calls = list(steps)
             db.commit()  # each step is on record before the next request
@@ -230,7 +236,9 @@ def send_message(
     rounds, stopped = 1, False
     try:
         if use_tools:
-            text, result, usages, rounds, stopped = _tool_turn(db, ctx, question, payload.model, instructions, turns)
+            text, result, usages, rounds, stopped = _tool_turn(
+                db, ctx, question, payload.model, instructions, turns, conv.course_id
+            )
             usage = conv_svc.combine_usage(usages)
         else:
             result = siwc.reply(ctx.user.id, payload.model, instructions, turns)

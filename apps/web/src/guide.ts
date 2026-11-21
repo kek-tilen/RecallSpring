@@ -28,7 +28,7 @@ export interface GuideStep {
   check?: string;
   /** A shortcut that exists only in Claude Desktop (its + menu). */
   claudeTip?: string;
-  /** Needs the planning tools (courses, targets, interests), which the Chat page's ChatGPT does not have yet. */
+  /** Done in a planning conversation (in Chat: "Planning (all courses)" under Study). */
   planning?: boolean;
 }
 

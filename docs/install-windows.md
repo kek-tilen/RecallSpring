@@ -59,8 +59,9 @@ the assistant tutors you with them. Grades from any of them count the same and s
 | **ChatGPT in RecallSpring** (preview) | a ChatGPT Plus or Pro plan | Settings → ChatGPT → Sign in with ChatGPT, then Chat |
 | Decide later | nothing | material, notes, reviews and plans work without an assistant |
 
-ChatGPT in RecallSpring studies courses that are already set up. It cannot yet create courses, their concepts or
-exam dates; do that once with Claude or Codex (exam dates can also be added under Exams).
+With ChatGPT in RecallSpring, a new Chat conversation with **Planning (all courses)** picked under Study sets up your
+courses, their concepts, kolokvij and exam dates; a conversation with one course picked is for learning it. Your
+material goes in through Library.
 
 You can change the assistant and the time zone any time in **Settings → Profile**. Only wording and setup tips follow
 the choice; every assistant keeps working.
