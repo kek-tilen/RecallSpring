@@ -109,11 +109,12 @@ def test_an_assistant_checks_a_self_assessment(owner_api: Api, conn: ConnectorAp
     assert conn.get(f"/courses/{ids['course_id']}/context").json()["self_assessments_to_check"] == 0
 
 
-def test_chatgpt_in_chat_can_list_them_in_a_study_conversation() -> None:
-    import uuid
+def test_chat_sees_them_in_the_study_context(owner_api: Api, conn: ConnectorApi, frozen: FrozenClock) -> None:
+    from recallspring_api.services.chat_tools import INSTRUCTIONS, MAX_TOOLS, STUDY
 
-    from recallspring_api.services.chat_tools import COURSE_BOUND, tools_for
-
-    assert "get_self_assessments_to_check" in {t.name for t in tools_for(uuid.uuid4())}
-    assert "get_self_assessments_to_check" not in {t.name for t in tools_for(None)}
-    assert "get_self_assessments_to_check" in COURSE_BOUND
+    ids, attempt_id = _answered(owner_api)
+    owner_api.post(f"/attempts/{attempt_id}/self-assessment", {"points": ["met", "missing"], "grade": 2})
+    ctx = conn.get(f"/courses/{ids['course_id']}/context").json()
+    assert [i["question_id"] for i in ctx["self_assessments"]] == [ids["question_id"]]
+    # Chat keeps at most MAX_TOOLS per conversation: no extra tool, the context lists them and get_answer reads them.
+    assert len(STUDY) <= MAX_TOOLS and "self_assessments" in INSTRUCTIONS

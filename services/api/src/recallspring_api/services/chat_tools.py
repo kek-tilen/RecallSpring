@@ -85,8 +85,9 @@ answer is 3, 4 only for real transfer). Status "provisional" when you are unsure
 defensible, "ungraded" with grade null when it cannot be judged. Reward reasoning, not agreement with you. Cite \
 only section IDs you received. Then explain the feedback and the next review dates RecallSpring returned.
 - Self-assessments: when get_study_context shows self_assessments_to_check > 0, the learner graded some answers \
-themselves (no assistant was available). Early in the session offer to check them: get_self_assessments_to_check, \
-then grade each attempt_id by the grading_scale with record_assessment; your grade replaces theirs. When yours \
+themselves (no assistant was available); the oldest are listed in self_assessments. Early in the session offer to \
+check them: get_answer(question_id), then grade it by the grading_scale with record_assessment; your grade \
+replaces theirs. When yours \
 differs by 2 or more (the result says self_assessment.differs), explain kindly which expected points decided it.
 - Questions and open simulation items always need expected_points (the learner checks against them when you are \
 not available): short, checkable points, each from a section you read.
@@ -413,14 +414,6 @@ _TOOLS = [
         lambda a, r: "Read your answer" if isinstance(r, dict) and r.get("answered") else "No answer saved yet",
     ),
     Tool(
-        "get_self_assessments_to_check",
-        "Answers in this course the learner graded themselves against the expected points because no assistant "
-        "was available. Check each: get_answer is not needed, grade it by attempt_id with record_assessment.",
-        CourseArg,
-        lambda db, ctx, a: (_c().self_assessments_to_check(course_id=a.course_id, ctx=ctx, db=db), None),
-        lambda a, r: f"Found {len(r.get('items', []))} self-assessed answers to check" if isinstance(r, dict) else "",
-    ),
-    Tool(
         "get_quiz_results",
         "A simulation's answers, answer keys, rubrics and which open answers still need a grade.",
         QuizArg,
@@ -556,7 +549,6 @@ _READ += ["get_source_section", "get_notes"]
 STUDY = _READ + [
     "get_answer",
     "get_quiz_results",
-    "get_self_assessments_to_check",
     "create_questions",
     "open_answer_form",
     "open_summary_form",
@@ -573,7 +565,6 @@ PLANNING_TOOLS = ["list_courses", *_READ, "get_due_reviews", "create_course", "o
 PLANNING_TOOLS += ["create_concepts", "set_study_target", "update_study_target", "record_exam_profile"]
 # In a study conversation, setting-up calls must stay inside its course.
 COURSE_BOUND = {"create_concepts", "set_study_target", "update_study_target", "record_exam_profile"}
-COURSE_BOUND |= {"get_self_assessments_to_check"}
 
 
 def tools_for(course_id: uuid.UUID | None) -> list[Tool]:

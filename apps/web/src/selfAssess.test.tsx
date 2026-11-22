@@ -44,7 +44,7 @@ function show(view: object = VIEW) {
 }
 
 function mark(point: string, state: "Got it" | "Partly" | "Missed") {
-  const group = screen.getByRole("group", { name: point });
+  const group = screen.getAllByRole("group").find((g) => g.querySelector("legend")?.textContent?.endsWith(point))!;
   fireEvent.click(group.querySelector(`input[value="${{ "Got it": "met", Partly: "partial", Missed: "missing" }[state]}"]`)!);
 }
 
@@ -74,7 +74,7 @@ describe("self-assessment", () => {
 
   it("4 Transfer needs a reason", async () => {
     show({ ...VIEW, expected_points: ["sign bit 1"] });
-    await screen.findByRole("group", { name: "sign bit 1" });
+    await screen.findByRole("group", { name: "1. sign bit 1" });
     mark("sign bit 1", "Got it");
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "4" } });
     const save = screen.getByRole("button", { name: "Save my self-assessment" }) as HTMLButtonElement;

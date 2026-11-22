@@ -489,7 +489,11 @@ function AnswerDetail({ row }: { row: AttemptRow }) {
                     <div className="pre">{current.remediation}</div>
                   </div>
                 )}
-                <div className="tiny muted">AI grades are study feedback, not a validated score.</div>
+                <div className="tiny muted">
+                  {current.evaluator_kind === "self"
+                    ? "Your own check: provisional until an assistant checks it."
+                    : "AI grades are study feedback, not a validated score."}
+                </div>
               </div>
             )}
             {earlier.length > 0 && (
@@ -562,7 +566,12 @@ export function AnswersTab({ courseId }: { courseId: string }) {
                     </td>
                     <td className="small">{ATTEMPT_KIND[a.kind] ?? a.kind}</td>
                     <td>
-                      {a.status === "saved_awaiting_evaluation" ? (
+                      {a.graded_by === "self" ? (
+                        <span className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                          <GradeChip grade={a.grade} status={a.assessment_status} />
+                          <SelfTag a={{ evaluator_kind: "self" }} />
+                        </span>
+                      ) : a.status === "saved_awaiting_evaluation" ? (
                         <span className="chip">Awaiting feedback</span>
                       ) : (
                         <GradeChip grade={a.grade} status={a.assessment_status} />

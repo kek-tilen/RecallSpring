@@ -757,7 +757,10 @@ def course_context(
         else None
     )
     view["focus_time"] = focus.course_focus(db, ctx.user, course.id, clock.now())
-    view["self_assessments_to_check"] = len(self_svc.unchecked(db, ctx.user, course.id))
+    to_check = self_svc.unchecked(db, ctx.user, course.id)
+    view["self_assessments_to_check"] = len(to_check)
+    # The oldest few, so an assistant can offer to check them right away (get_answer / get_attempt, then grade).
+    view["self_assessments"] = to_check[:10]
     return view
 
 

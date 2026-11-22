@@ -146,11 +146,13 @@ function SelfAssessForm({ v, onDone }: { v: SelfCheckView; onDone?: () => void }
           {v.sources.length > 0 && ` Compare with: ${v.sources.join("; ")}.`}
         </p>
       </div>
-      <ol className="stack" style={{ gap: 8, margin: 0, paddingLeft: 20 }}>
+      <ol className="stack self-points" style={{ gap: 8, margin: 0, padding: 0 }}>
         {v.expected_points.map((point, i) => (
           <li key={i}>
             <fieldset className="self-point">
-              <legend className="small">{point}</legend>
+              <legend className="small">
+                {i + 1}. {point}
+              </legend>
               <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
                 {STATES.map((s) => (
                   <label key={s.value} className="row small" style={{ gap: 4 }}>

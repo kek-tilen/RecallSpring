@@ -4099,6 +4099,10 @@ math mtable mtd {
   border-radius: 10px;
 }
 
+.self-points {
+  list-style: none;
+}
+
 .self-point {
   margin: 0;
   padding: 0;
