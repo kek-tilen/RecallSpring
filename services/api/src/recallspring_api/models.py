@@ -367,7 +367,7 @@ class Assessment(Base):
     created_at: Mapped[datetime] = _created()
 
     __table_args__ = (
-        CheckConstraint("evaluator_kind IN ('ai','human','deterministic')", name="evaluator_kind"),
+        CheckConstraint("evaluator_kind IN ('ai','human','deterministic','self')", name="evaluator_kind"),
         CheckConstraint("status IN ('final','provisional','ungraded')", name="status"),
         CheckConstraint("confidence IN ('low','medium','high')", name="confidence"),
         CheckConstraint("grade IS NULL OR grade BETWEEN 0 AND 4", name="grade_range"),

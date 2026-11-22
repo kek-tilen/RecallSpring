@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { get, newKey, request } from "../api";
+import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
 import { Async, Card, ErrorNote, GradeChip, PageHead } from "../components/ui";
 import { dateTime } from "../format";
 import { keys } from "../queries";
@@ -149,11 +150,16 @@ export function ChatSentAnswer({ questionId }: { questionId: string }) {
                 <SavedPhotos ids={a.photos ?? []} label="Photos saved with your answer" />
                 <div className="row tiny muted" style={{ gap: 8, flexWrap: "wrap" }}>
                   {current && <GradeChip grade={current.grade} status={current.status} />}
+                  <SelfTag a={current} />
                   <span>
                     Saved {dateTime(a.submitted_at)}
                     {!current && " · not graded yet"} · <Link to={`/courses/${q.course_id}?tab=answers`}>All answers</Link>
                   </span>
                 </div>
+                <SelfCheckNote attempt={a} />
+                {!current && a.kind === "answer" && (
+                  <SelfAssessOffer attemptId={a.id} intro="ChatGPT not available? Check your answer against the expected points." />
+                )}
               </>
             )}
           </div>
@@ -238,6 +244,7 @@ function AnswerForm({ q, sessionId, onSaved }: {
           <p className="small muted" style={{ margin: 0 }}>
             Your assistant gives feedback; you can see it later under the concept in <Link to={`/courses/${q.course_id}`}>the course</Link>.
           </p>
+          {savedText !== null && <SelfAssessOffer attemptId={saved.attempt_id} />}
         </div>
       </Card>
     );

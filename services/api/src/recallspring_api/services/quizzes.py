@@ -95,6 +95,9 @@ def create_quiz(db: Session, user: User, payload: QuizIn, provenance: dict[str, 
             rubric["correct_option"] = item.correct_option
         elif item.options or item.correct_option:
             raise ApiError(422, "invalid_item", f"Item {position}: open questions have no options.")
+        elif not [p for p in item.expected_points if p.strip()]:
+            # The learner checks an open answer against them when no assistant is available (self-assessment).
+            raise ApiError(422, "invalid_item", f"Item {position}: open questions need expected_points.")
         question = Question(
             user_id=user.id,
             course_id=payload.course_id,

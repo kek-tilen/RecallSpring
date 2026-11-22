@@ -15,11 +15,13 @@ from ..models import Assessment, Attempt, Concept, QuestionConcept, Quiz, Review
 
 
 def effective_assessment(assessments: list[Assessment]) -> Assessment | None:
-    """A learner correction (human) wins over any AI/deterministic evaluation; otherwise the latest one."""
+    """A learner correction (human) wins over any AI/deterministic evaluation; otherwise the latest one. A
+    self-assessment counts only until any other grade exists (an assistant's check replaces it)."""
     if not assessments:
         return None
     humans = [a for a in assessments if a.evaluator_kind == "human"]
-    pool = humans or assessments
+    checked = [a for a in assessments if a.evaluator_kind != "self"]
+    pool = humans or checked or assessments
     return max(pool, key=lambda a: (a.created_at, str(a.id)))
 
 

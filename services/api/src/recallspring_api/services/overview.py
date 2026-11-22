@@ -344,6 +344,7 @@ _EVENT_TEXT = {
     "assessment.recorded": "Answer graded",
     "assessment.challenged": "You challenged a grade",
     "assessment.corrected": "You corrected a grade",
+    "assessment.self_assessed": "You assessed your answer",
     "review.deferred": "Review deferred",
     "quiz.created": "Simulation created",
     "quiz.submitted": "Simulation submitted",
@@ -389,6 +390,8 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
     if event_type == "attempt.submitted":
         via = {"answer_form": "answer form", "assistant_transcription": "copied by your assistant", "app_ui": "web app"}
         return f"{payload.get('kind')} via {via.get(payload.get('captured_via'), payload.get('captured_via'))}"
+    if event_type == "assessment.self_assessed":
+        return f"{payload.get('grade')}/4 (provisional; suggested {payload.get('suggested')}/4), to be checked"
     if event_type == "assessment.corrected":
         return f"{payload.get('old_grade')} → {payload.get('new_grade')}"
     if event_type == "note.saved":

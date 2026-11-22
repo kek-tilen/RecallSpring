@@ -376,6 +376,15 @@ class AttemptOut(BaseModel):
     photos: list[dict[str, Any]] = Field(default_factory=list)  # [{id, filename, available}]
 
 
+class SelfAssessmentIn(BaseModel):
+    """The learner's own check of a saved answer: one state per expected point, in order, and the grade they chose
+    (RecallSpring suggests one from the states; 4 needs a reason)."""
+
+    points: list[Literal["met", "partial", "missing"]] = Field(min_length=1, max_length=12)
+    grade: int = Field(ge=0, le=4)
+    reason: str | None = Field(default=None, max_length=2000)
+
+
 class ChallengeIn(BaseModel):
     reason: str = Field(min_length=1, max_length=2000)
     corrected_grade: int | None = Field(default=None, ge=0, le=4)
@@ -654,7 +663,8 @@ class ConnectorQuestionItem(BaseModel):
     concept_ids: list[uuid.UUID] = Field(min_length=1, max_length=10)
     bloom_level: int = Field(ge=1, le=6)
     prompt: str = Field(min_length=1, max_length=4000)
-    expected_points: list[str] = Field(default_factory=list, max_length=12)
+    # Required (2026-11-22): the learner checks their answer against them when no assistant is available.
+    expected_points: list[str] = Field(min_length=1, max_length=12)
     source_refs: list[str] = Field(default_factory=list, max_length=20)
     difficulty: int | None = Field(default=None, ge=1, le=5)
 

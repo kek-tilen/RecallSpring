@@ -37,7 +37,7 @@
 | `messages` | `id`, session, role, content, source refs, visual block IDs, status; separately from attempts |
 | `questions` | `id`, topic/concepts, Bloom level 1–6, prompt, answer rubric, source refs, difficulty, provenance, generated_at |
 | `attempts` | `id`, question, user, session, **exact raw answer**, kind (`answer/dont_know/skip`), answer mode (`closed_notes/open_notes`), `captured_via` (`app_ui/answer_form/assistant_transcription`), submitted_at, idempotency key unique, status |
-| `assessments` | `id`, attempt, evaluator/model/version, grade 0–4 or NULL, rubric subscores, feedback, evidence, uncertainty, status (`final/provisional/ungraded`), created_at |
+| `assessments` | `id`, attempt, evaluator (`ai` / `human` / `deterministic` / `self`, the learner's own check, migration 0022)/model/version, grade 0–4 or NULL, rubric subscores, feedback, evidence, uncertainty, status (`final/provisional/ungraded`), created_at |
 | `mastery_state` | user/concept key, evidence_count, last_success_at, estimated level band, confidence low/medium/high, last recomputed_at |
 | `review_state` | user/concept key, interval_days, last_review_at, due_at, consecutive_successes, lapse_count, scheduling policy version |
 | `focus_sessions` | id, owner, optional course, client session id (unique per owner, so a retry is not counted twice), started/ended at, planned minutes (1–240), focused seconds (60–14 400, pauses excluded), completed or stopped early, `deleted_at` (a wrongly timed block the learner removed after confirming; restorable for 30 days, audited; migration 0015); time spent, never evidence of learning (migration 0014) |

@@ -99,6 +99,8 @@ export function gradedBy(kind: string | null | undefined, grader?: { name: strin
       return "RecallSpring (answer key)";
     case "human":
       return "You";
+    case "self":
+      return "You (self-assessed)";
     default:
       return kind ?? "—";
   }

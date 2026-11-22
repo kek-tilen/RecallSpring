@@ -65,6 +65,10 @@ async def test_tool_surface_is_read_and_append_only() -> None:
     assert tools["open_answer_form"].meta == {"ui": {"resourceUri": FORM_URI}}
     assert tools["submit_answer_from_form"].meta["ui"]["visibility"] == ["app"]  # hidden from the model
     assert tools["get_source_section"].annotations.read_only_hint is True
+    assert tools["get_self_assessments_to_check"].annotations.read_only_hint is True
+    # Questions need a rubric: the learner checks against it when no assistant is available.
+    drafts = tools["create_questions"].input_schema["$defs"]["QuestionDraft"]
+    assert "expected_points" in drafts["required"]
     assert all(t.annotations.destructive_hint is False for t in tools.values())
 
 

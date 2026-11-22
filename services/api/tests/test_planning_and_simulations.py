@@ -226,7 +226,13 @@ def make_quiz(c: ConnectorApi, course: str, concept: str, **extra: Any) -> dict:
             "bloom_level": 4,
             "style": "deeper",
         },
-        {"type": "open", "prompt": "Name two Nmap timing templates.", "concept_ids": [concept], "points": 2},
+        {
+            "type": "open",
+            "prompt": "Name two Nmap timing templates.",
+            "concept_ids": [concept],
+            "expected_points": ["two of T0-T5, e.g. T3 normal and T4 aggressive"],
+            "points": 2,
+        },
     ]
     r = c.post(
         "/quizzes",
@@ -319,6 +325,9 @@ def test_invalid_simulations_are_rejected(owner_api: Api, conn: ConnectorApi) ->
         "options": [{"key": "A", "text": "a"}],
     }
     assert conn.post("/quizzes", {**base, "items": [open_with_options]}).json()["code"] == "invalid_item"
+    open_without_points = {"type": "open", "prompt": "Explain -sF.", "concept_ids": [ids["Nmap"]]}
+    r = conn.post("/quizzes", {**base, "items": [open_without_points]})
+    assert r.json()["code"] == "invalid_item" and "expected_points" in r.json()["message"]
     quiz = make_quiz(conn, course, ids["Nmap"])
     form = conn.get(f"/quizzes/{quiz['quiz_id']}").json()
     r = conn.post(

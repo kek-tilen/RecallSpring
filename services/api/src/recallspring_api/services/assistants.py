@@ -64,4 +64,6 @@ def grader(evaluator_kind: str | None, provider: str | None, model: str | None) 
         return {"name": provider_name(provider), "model": model}
     if evaluator_kind == "deterministic":
         return {"name": "RecallSpring (answer key)", "model": None}
+    if evaluator_kind == "self":
+        return {"name": "You (self-assessed)", "model": None}
     return {"name": "You", "model": None}

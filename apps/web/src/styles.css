@@ -4086,3 +4086,26 @@ math mtable mtd {
   background: var(--surface);
   font-size: 0.92rem;
 }
+
+/* Self-assessment: the learner's own check against the expected points (provisional until an assistant checks). */
+.self-tag {
+  border-style: dashed;
+  font-size: 0.78rem;
+}
+
+.self-assess {
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.self-point {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.self-point legend {
+  padding: 0;
+  margin-bottom: 4px;
+}

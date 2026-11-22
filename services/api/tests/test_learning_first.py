@@ -97,7 +97,13 @@ def test_diagnostic_pretest_never_schedules_reviews_and_marks_shown_concepts_kno
             "items": [
                 mcq(ids["Shown"]),
                 mcq(ids["Missed"]),
-                {"type": "open", "prompt": "Explain.", "concept_ids": [ids["Open"]], "points": 2},
+                {
+                    "type": "open",
+                    "prompt": "Explain.",
+                    "concept_ids": [ids["Open"]],
+                    "expected_points": ["the main idea"],
+                    "points": 2,
+                },
             ],
         },
     )

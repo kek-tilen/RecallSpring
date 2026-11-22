@@ -82,6 +82,7 @@ from ..services import attempts as attempt_svc
 from ..services import folders as folder_svc
 from ..services import interests as interest_svc
 from ..services import quizzes as quiz_svc
+from ..services import self_assessment as self_svc
 from ..services import sources as source_svc
 from ..services import targets as target_svc
 from ..services.courses import ensure_new_title
@@ -506,6 +507,7 @@ def record_one_assessment(
         )
     question = db.get(Question, attempt.question_id)
     assert question is not None
+    own = next((a for a in attempt_svc.assessments_for(db, attempt.id) if a.evaluator_kind == "self"), None)
     candidate_ids = []
     for ref in payload.evidence_refs:
         try:
@@ -576,6 +578,12 @@ def record_one_assessment(
             if s is not None
         ],
     }
+    if own is not None:
+        # The learner had graded this answer themselves; tell them when the check differs by 2 or more.
+        body["self_assessment"] = {
+            "grade": own.grade,
+            "differs": own.grade is not None and row.grade is not None and abs(own.grade - row.grade) >= 2,
+        }
     return body
 
 
@@ -715,6 +723,22 @@ def _today(ctx: Ctx):  # type: ignore[no-untyped-def]
     return clock.now().astimezone(ZoneInfo(ctx.user.timezone)).date()
 
 
+@router.get("/self-assessments")
+def self_assessments_to_check(
+    course_id: uuid.UUID | None = None, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Answers the learner graded themselves (no assistant was available), oldest first. Check each one: get_attempt,
+    then record_assessment by the grading scale; your grade replaces theirs in the review schedule."""
+    if course_id is not None:
+        owned(db, Course, course_id, ctx.user.id)
+    items = self_svc.unchecked(db, ctx.user, course_id)
+    return {
+        "items": items,
+        "how_to_check": "For each: get_attempt(attempt_id), grade it by the grading_scale like any answer with "
+        "record_assessment, and tell the learner when your grade differs from theirs by 2 or more, and why.",
+    }
+
+
 @router.get("/courses/{course_id}/context")
 def course_context(
     course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
@@ -733,6 +757,7 @@ def course_context(
         else None
     )
     view["focus_time"] = focus.course_focus(db, ctx.user, course.id, clock.now())
+    view["self_assessments_to_check"] = len(self_svc.unchecked(db, ctx.user, course.id))
     return view
 
 

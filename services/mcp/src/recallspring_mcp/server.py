@@ -67,6 +67,11 @@ Start of every study session in a course:
    "provisional" when several answers are defensible or you are unsure, "ungraded" with grade null when it cannot
    be judged. Reward reasoning, not agreement with you. Cite
    only section IDs you received. Explain the feedback and the next review dates RecallSpring returned.
+   Self-assessments: when get_study_context shows self_assessments_to_check > 0, the learner graded answers
+   themselves against the expected points while no assistant was available. Offer to check them:
+   get_self_assessments_to_check, then get_attempt and record_assessment for each; your grade replaces theirs.
+   When it differs by 2 or more (self_assessment.differs in the result), explain which expected points decided it.
+   Every question and open simulation item needs expected_points: short, checkable, each from a section you read.
 6. End with record_session_summary. Update the target when the learner reports a result (update_study_target).
 
 Building the library (only when the learner asks): create_course; import_file for a PDF, Word (.docx),
@@ -507,6 +512,14 @@ async def _answer_photos(photos: list[dict[str, Any]]) -> tuple[list[Image], lis
 
 
 @mcp.tool(annotations=READ)
+async def get_self_assessments_to_check(course_id: str | None = None) -> str:
+    """Answers the learner graded themselves (against the expected points) because no assistant was available,
+    oldest first, optionally in one course. Check each: get_attempt(attempt_id), then record_assessment by the
+    grading_scale. Your grade becomes the one the review schedule uses; theirs stays in the history."""
+    return as_json(await get_client().get("/self-assessments", course_id=course_id))
+
+
+@mcp.tool(annotations=READ)
 async def get_answer(question_id: str) -> str | list[str | Image]:
     """The learner's latest saved answer to a question, ready to grade (like get_attempt). Use it after giving the
     learner a RecallSpring link to answer, once they say they answered."""
@@ -527,7 +540,12 @@ class QuestionDraft(BaseModel):
     concept_ids: list[str] = Field(min_length=1, max_length=10, description="Concept IDs from get_course_outline")
     bloom_level: int = Field(ge=1, le=6, description="3 Apply, 4 Analyze, 5 Evaluate by default")
     prompt: str = Field(min_length=1, max_length=4000, description="The question; no hints or answers")
-    expected_points: list[str] = Field(default_factory=list, max_length=12, description="Private rubric")
+    expected_points: list[str] = Field(
+        min_length=1,
+        max_length=12,
+        description="Private rubric: short, checkable points from the sections you read. Required: the learner "
+        "checks their answer against them when no assistant is available.",
+    )
     source_refs: list[str] = Field(default_factory=list, max_length=20, description="Section IDs you read")
 
 
@@ -941,7 +959,9 @@ class QuizItemDraft(BaseModel):
     points: int = Field(default=1, ge=1, le=20)
     options: list[OptionDraft] = Field(default_factory=list, description="mcq only, keys A-H")
     correct_option: str | None = Field(default=None, description="mcq only")
-    expected_points: list[str] = Field(default_factory=list, description="open only: private rubric")
+    expected_points: list[str] = Field(
+        default_factory=list, description="open: required private rubric (short, checkable points)"
+    )
     source_refs: list[str] = Field(default_factory=list)
     style: Literal["past_paper", "deeper"] = "past_paper"
 

@@ -20,9 +20,10 @@ from ..db import get_db, new_session
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
 from ..models import Assessment, Attempt, Question, StudySession
-from ..schemas import AttemptCreatedOut, AttemptIn, AttemptOut, ChallengeIn
+from ..schemas import AttemptCreatedOut, AttemptIn, AttemptOut, ChallengeIn, SelfAssessmentIn
 from ..services import attempts as svc
 from ..services import photos as photo_svc
+from ..services import self_assessment as self_svc
 from ..services.events import learning_event
 from ..services.ownership import owned
 from ..services.reviews import concept_ids_for_question, recompute
@@ -202,6 +203,37 @@ async def evaluate_attempt(attempt_id: uuid.UUID, ctx: WriteCtx = Depends(write_
             return commit_with_response(db, ctx, None, 200, svc.attempt_view(db, attempt))
 
     return await run_in_threadpool(finish)
+
+
+@router.get("/attempts/{attempt_id}/self-assessment")
+def self_assessment_view(
+    attempt_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """The expected points (and cited pages) to check a saved answer against, and whether a self-assessment is
+    possible (no grade yet, the question has expected points)."""
+    return self_svc.check_view(db, ctx.user, owned(db, Attempt, attempt_id, ctx.user.id))
+
+
+@router.post("/attempts/{attempt_id}/self-assessment")
+def record_self_assessment(
+    attempt_id: uuid.UUID, payload: SelfAssessmentIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Append the learner's own provisional grade (audited); an assistant checks it later. Returns the attempt and
+    the review schedule it produced (a short follow-up, never a longer interval)."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    attempt = owned(db, Attempt, attempt_id, ctx.user.id, for_update=True)
+    self_svc.record(db, ctx.user, attempt, list(payload.points), payload.grade, payload.reason, ctx.request_id)
+    schedules = recompute(db, ctx.user, concept_ids_for_question(db, attempt.question_id), clock.now())
+    body = {
+        **svc.attempt_view(db, attempt),
+        "schedule": [
+            {"concept_id": str(cid), "due_at": s.due_at.isoformat(), "reason": s.reason.message}
+            for cid, s in schedules.items()
+            if s is not None
+        ],
+    }
+    return commit_with_response(db, ctx, payload, 200, body)
 
 
 @router.post("/assessments/{assessment_id}/challenge", response_model=AttemptOut)

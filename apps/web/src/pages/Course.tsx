@@ -6,6 +6,7 @@ import { get } from "../api";
 import { Async, BandChip, BandMeter, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip, StudyMeter } from "../components/ui";
 import { CourseDialog, CourseDot, FocusControl, groupPath } from "../components/organise";
 import { TargetDialog } from "../components/TargetDialog";
+import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
 import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, gradedBy, plural, relativeDay } from "../format";
 import { useCourseOverview, useGroups } from "../queries";
 import type { AttemptDetail, AttemptRow, ConceptRow, CourseOverview, StudyStatus, Target, TargetProfile } from "../types";
@@ -443,13 +444,18 @@ function AnswerDetail({ row }: { row: AttemptRow }) {
               <SavedPhotos ids={a.photos ?? []} label="Photos of your work" />
             </div>
             {!current ? (
-              <p className="small muted" style={{ margin: 0 }}>
-                {a.status === "saved_awaiting_evaluation" ? "Not graded yet: ask your assistant for feedback." : "No grade recorded."}
-              </p>
+              <div className="stack" style={{ gap: 8 }}>
+                <p className="small muted" style={{ margin: 0 }}>
+                  {a.status === "saved_awaiting_evaluation" ? "Not graded yet: ask your assistant for feedback." : "No grade recorded."}
+                </p>
+                {a.kind === "answer" && <SelfAssessOffer attemptId={a.id} />}
+              </div>
             ) : (
               <div className="feedback stack" style={{ gap: 8 }}>
-                <div className="row" style={{ gap: 8 }}>
+                <SelfCheckNote attempt={a} />
+                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
                   <GradeChip grade={current.grade} status={current.status} />
+                  <SelfTag a={current} />
                   <span className="tiny muted">
                     {gradedBy(current.evaluator_kind, row.grader)} · confidence {CONFIDENCE[current.confidence] ?? current.confidence}
                     {current.status === "provisional" && " · provisional"}

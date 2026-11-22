@@ -189,7 +189,14 @@ def test_learning_first_forms_and_bad_calls_are_reported_back(owner_api: Api, fa
     ids = owner_api.course_with_question()
     new_q = {
         "course_id": ids["course_id"],
-        "questions": [{"concept_ids": [ids["concept_id"]], "bloom_level": 1, "prompt": "Where does glycolysis run?"}],
+        "questions": [
+            {
+                "concept_ids": [ids["concept_id"]],
+                "bloom_level": 1,
+                "prompt": "Where does glycolysis run?",
+                "expected_points": ["in the cytoplasm"],
+            }
+        ],
     }
     summary = {
         "course_id": ids["course_id"],

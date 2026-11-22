@@ -54,6 +54,9 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/attempts/{id}/evaluate` | Start model-backed assessment; safe retry |
 | GET | `/attempts/{id}` | Raw answer, assessments, state, `photos` `[{id, filename, available}]` (also in the connector's view; the MCP server returns them as images with `get_attempt` / `get_answer`) |
 | POST | `/assessments/{id}/challenge` | Record disagreement/correction request |
+| GET | `/attempts/{id}/self-assessment` | `{available, reason, message, question, expected_points, sources, self_assessment}`: what the learner checks a saved answer against. Not available for "I don't know", for answers with a grade, or when the question has no expected points |
+| POST | `/attempts/{id}/self-assessment` | `{points: [met/partial/missing per expected point], grade 0-4, reason?}` (4 needs a reason; `points_mismatch`, `reason_required`, 409 when not available). Appends a `self` assessment, always provisional; audited `assessment.self_assessed`; returns the attempt and its schedule |
+| GET | `/connector/self-assessments?course_id=` | Self-assessed answers an assistant has not checked yet, oldest first; `get_study_context` gives `self_assessments_to_check`. Recording an assistant grade on one returns `self_assessment: {grade, differs}` (differs = 2 or more apart) |
 | GET | `/reviews/due` | Due queue and reasons |
 | POST | `/reviews/{id}/defer` | Record explicit defer |
 | GET | `/planner/today` | Deterministic ranked daily plan (`plan-v2`: `interests` and `focus` explained), optional `course_id` and `minutes` |
