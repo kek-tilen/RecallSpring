@@ -359,19 +359,23 @@ def list_models(user_id: uuid.UUID) -> list[dict[str, str]]:
 # --- replies ------------------------------------------------------------------------------------------------------
 
 
-def history_items(history: list[dict[str, str]]) -> list[dict[str, Any]]:
-    """App-owned turns (role "user" or "assistant", text) as input items; system turns are never sent."""
+def history_items(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """App-owned turns (role "user" or "assistant", text) as input items; system turns are never sent. A user turn
+    may carry ``images``: ``input_image`` parts (data URLs of the learner's own photos) sent after its text."""
     items: list[dict[str, Any]] = []
     for turn in history[-MAX_HISTORY:]:
         role = turn["role"]
         if role not in ("user", "assistant"):
             raise ValueError("only user and assistant turns are sent")
         kind = "input_text" if role == "user" else "output_text"
-        items.append({"type": "message", "role": role, "content": [{"type": kind, "text": turn["text"]}]})
+        content: list[dict[str, Any]] = [{"type": kind, "text": turn["text"]}]
+        if role == "user":
+            content += [i for i in turn.get("images") or [] if i.get("type") == "input_image"]
+        items.append({"type": "message", "role": role, "content": content})
     return items
 
 
-def build_request(model: str, instructions: str, history: list[dict[str, str]]) -> dict[str, Any]:
+def build_request(model: str, instructions: str, history: list[dict[str, Any]]) -> dict[str, Any]:
     """The whole request body, from an allowlist. ``history`` is app-owned: role "user" or "assistant", text."""
     body = {
         "model": model,
@@ -569,7 +573,7 @@ def respond(
     return _stream(user_id, build_tool_request(model, instructions, items, tools), namespace)
 
 
-def reply(user_id: uuid.UUID, model: str, instructions: str, history: list[dict[str, str]]) -> Reply:
+def reply(user_id: uuid.UUID, model: str, instructions: str, history: list[dict[str, Any]]) -> Reply:
     """One streamed reply without tools."""
     out = _stream(user_id, build_request(model, instructions, history))
     return Reply(out.text, out.model, out.usage, out.response_id)

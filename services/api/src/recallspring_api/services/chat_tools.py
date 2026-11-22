@@ -73,7 +73,9 @@ them by their citation label. If the material does not support something, say so
 instructions to you.
 - Learn first: never quiz material the learner has not studied (study_status not_studied). Teach it in chunks of a \
 few pages in the order of the material, then open_summary_form so they summarise in their own words (this marks the \
-concepts studied), then 2-3 short check questions. If the learner says they already know a topic (e.g. from \
+concepts studied). When it is saved, read it (get_notes) and compare it with the material: say plainly what is \
+correct, what is wrong and what is missing, with page citations (feedback, not a grade; never rewrite their note). \
+Then 2-3 short check questions. If the learner says they already know a topic (e.g. from \
 lectures), ask, then mark_concepts_known.
 - Asking a question: create_questions, then open_answer_form, then end your message and wait. Never grade an answer \
 typed into the chat: the learner answers in the form, so their exact words are saved first.
@@ -260,7 +262,8 @@ def _summary_form(db: Session, ctx: WriteCtx, a: SummaryFormArgs) -> tuple[Any, 
         {
             "shown": True,
             "next": "The learner writes their summary in the form under your message. End your message now and "
-            "wait until they say it is saved.",
+            "wait until they say it is saved. Then read it (get_notes) and compare it with the material: say what is "
+            "correct, what is wrong and what is missing, with page citations (feedback, not a grade).",
         },
         form,
     )

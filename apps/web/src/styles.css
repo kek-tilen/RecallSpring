@@ -3672,3 +3672,81 @@ a.cite:hover {
 /* Course delete: a quiet red text button in the edit dialog, the name to type set apart. */
 .btn.danger-text { color: var(--danger); }
 .course-name-to-type { font-family: var(--mono, ui-monospace, monospace); overflow-wrap: anywhere; }
+
+/* Photos of the learner's work (components/Photos.tsx): answer forms and the Chat composer. */
+.photo-drop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.photo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chat-msg.you .photo-strip {
+  justify-content: flex-end;
+}
+
+.photo-thumb {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 96px;
+}
+
+.photo-thumb img {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+}
+
+.photo-thumb.is-saving img {
+  opacity: 0.6;
+}
+
+.photo-thumb.is-failed .photo-state {
+  color: var(--danger);
+}
+
+.photo-state {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.photo-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface-elevated);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.photo-remove:focus-visible {
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 2px;
+}

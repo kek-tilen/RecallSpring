@@ -20,7 +20,7 @@ const CLAUDE_IMAGE_BYTES = 4_500_000; // Claude can look at images up to this si
 const MAX_SIDE = 2400; // plenty for handwriting; keeps phone photos small
 
 /** Phone photos are often too large for Claude: shrink them in the browser (the server never decodes images). */
-async function shrinkImage(file: File): Promise<File> {
+export async function shrinkImage(file: File): Promise<File> {
   if (!file.type.startsWith("image/") || file.size <= CLAUDE_IMAGE_BYTES) return file;
   try {
     const bitmap = await createImageBitmap(file);

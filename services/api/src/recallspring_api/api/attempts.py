@@ -22,6 +22,7 @@ from ..errors import ApiError
 from ..models import Assessment, Attempt, Question, StudySession
 from ..schemas import AttemptCreatedOut, AttemptIn, AttemptOut, ChallengeIn
 from ..services import attempts as svc
+from ..services import photos as photo_svc
 from ..services.events import learning_event
 from ..services.ownership import owned
 from ..services.reviews import concept_ids_for_question, recompute
@@ -66,6 +67,7 @@ def save_attempt(db: Session, ctx: WriteCtx, payload: AttemptIn, *, captured_via
         owned(db, StudySession, payload.session_id, ctx.user.id)
     if len(payload.answer_text) > get_settings().max_answer_chars:
         raise ApiError(422, "answer_too_long", "The answer is too long to save.")
+    photo_ids = photo_svc.checked(db, ctx.user.id, payload.photo_ids, question.course_id)
     try:
         attempt = svc.create_attempt(
             db,
@@ -78,6 +80,7 @@ def save_attempt(db: Session, ctx: WriteCtx, payload: AttemptIn, *, captured_via
             answer_mode=payload.answer_mode,
             captured_via=captured_via,
             request_id=ctx.request_id,
+            photo_ids=photo_ids,
         )
     except IntegrityError:
         db.rollback()

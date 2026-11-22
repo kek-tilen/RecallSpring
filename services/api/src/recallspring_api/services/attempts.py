@@ -13,6 +13,7 @@ from .. import clock
 from ..errors import ApiError
 from ..models import Assessment, Attempt, Question, User
 from ..schemas import AssessmentOut, AttemptOut
+from . import photos
 from .events import audit, learning_event
 from .reviews import concept_ids_for_question, effective_assessment, recompute
 
@@ -44,6 +45,7 @@ def attempt_view(db: Session, attempt: Attempt) -> dict[str, Any]:
         last_evaluation_error=attempt.last_evaluation_error,
         assessments=[AssessmentOut.model_validate(a) for a in assessments],
         effective_assessment_id=eff.id if eff else None,
+        photos=photos.views(db, attempt.photo_ids),
     ).model_dump(mode="json")
 
 
@@ -103,11 +105,13 @@ def create_attempt(
     answer_mode: str,
     captured_via: str,
     request_id: str,
+    photo_ids: list[uuid.UUID] | None = None,
 ) -> Attempt:
     """Stage the attempt (and, for "I don't know", its deterministic assessment) in the current transaction."""
     now = clock.now()
-    if kind == "answer" and not answer_text.strip():
-        raise ApiError(422, "answer_empty", 'Write an answer, or choose "I don\'t know" or "Skip".')
+    photo_ids = list(photo_ids or []) if kind == "answer" else []
+    if kind == "answer" and not answer_text.strip() and not photo_ids:
+        raise ApiError(422, "answer_empty", 'Write an answer or add a photo, or choose "I don\'t know" or "Skip".')
     status = {"answer": "saved_awaiting_evaluation", "dont_know": "evaluated", "skip": "not_applicable"}[kind]
     attempt = Attempt(
         user_id=user.id,
@@ -119,6 +123,7 @@ def create_attempt(
         answer_mode=answer_mode,
         captured_via=captured_via,
         status=status,
+        photo_ids=[str(p) for p in photo_ids],
         submitted_at=now,
     )
     db.add(attempt)
@@ -135,6 +140,7 @@ def create_attempt(
             "answer_mode": answer_mode,
             "captured_via": captured_via,
             "client_request_id": str(client_request_id),
+            "photos": len(photo_ids),
         },
         request_id=request_id,
     )

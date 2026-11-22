@@ -1,3 +1,4 @@
+import { PhotoStrip, SavedPhotos, usePhotos } from "../components/Photos";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
@@ -39,6 +40,7 @@ interface AiMessage {
   citations: Cites;
   context: SentExcerpt[];
   tool_calls: ToolStep[];
+  photo_ids?: string[];
 }
 
 /** A form ChatGPT asked RecallSpring to show (services/chat_tools.py). */
@@ -114,6 +116,7 @@ const MODEL_STORE = "rs.chatgpt.model";
 const VISUALS_STORE = "rs.chatgpt.visuals";
 const TOOLS_STORE = "rs.chatgpt.recallspring";
 const FULL_STORE = "rs.chat.fullpage";
+const CHAT_FOLDER = "Chat images";
 
 const NOT_ANSWERED: Record<string, string> = {
   usage_limit: "your ChatGPT plan's usage limit was reached",
@@ -304,7 +307,8 @@ function ToolSteps({ steps }: { steps: ToolStep[] }) {
 const FORM_MESSAGES = {
   answer: (id: string) => `[RecallSpring] I saved my answer to question ${id} in the form. Please give me feedback.`,
   dont_know: (id: string) => `[RecallSpring] I answered "I don't know" to question ${id} in the form.`,
-  summary: (title: string) => `[RecallSpring] I saved my summary of "${title}" in the form. Please continue.`,
+  summary: (title: string) =>
+    `[RecallSpring] I saved my summary of "${title}" in the form. Please check it against the material (what is right, wrong or missing), then continue.`,
 };
 
 function summaryLink(f: Extract<ToolForm, { kind: "summary" }>): string {
@@ -407,6 +411,7 @@ function Thread({
               {m.role === "user" ? (
                 <>
                   <div className="chat-bubble pre">{m.text}</div>
+                  <SavedPhotos ids={(m.photo_ids ?? []).map((id) => ({ id }))} label="Images sent with this message" />
                   <div className="tiny muted" title={exactTime(m.created_at)}>
                     {shortTime(m.created_at)}
                     {m.model_requested && ` · to ${names.get(m.model_requested) ?? m.model_requested}`}
@@ -704,13 +709,14 @@ function Composer({
   material,
   onMaterial,
   onAttach,
+  photoCourse,
 }: {
   canSend: boolean;
   models: Model[];
   model: string;
   onModel: (slug: string) => void;
   busy: boolean;
-  onSend: (text: string) => Promise<unknown>;
+  onSend: (text: string, photoIds: string[]) => Promise<unknown>;
   placeholder: string;
   visuals: boolean;
   onVisuals: (on: boolean) => void;
@@ -719,8 +725,11 @@ function Composer({
   material: { filename: string; reading?: boolean }[];
   onMaterial: () => void;
   onAttach: () => void;
+  /** The course pasted or dropped images are saved in (null: a planning chat, images need a course). */
+  photoCourse: string | null;
 }) {
   const [text, setText] = useState("");
+  const photos = usePhotos(photoCourse, CHAT_FOLDER);
   const box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const el = box.current;
@@ -729,11 +738,12 @@ function Composer({
     el.style.height = `${Math.min(el.scrollHeight, Math.round(window.innerHeight * 0.4))}px`;
   }, [text]);
   async function submit() {
-    const value = text.trim();
-    if (!value || !model || busy) return;
+    const value = text.trim() || (photos.ids.length ? "Please look at the attached image." : "");
+    if (!value || !model || busy || photos.saving) return;
     try {
-      await onSend(value);
+      await onSend(value, photos.ids);
       setText("");
+      photos.clear();
     } catch {
       /* the message stays in the box; the error is shown above */
     }
@@ -747,7 +757,7 @@ function Composer({
   const names = material.map((f) => f.filename);
   // Files RecallSpring is still reading (reported for an existing conversation).
   const reading = material.filter((f) => f.reading).map((f) => f.filename);
-  const ready = canSend && !!text.trim() && !!model && !busy;
+  const ready = canSend && (!!text.trim() || photos.ids.length > 0) && !photos.saving && !!model && !busy;
   return (
     <div className="composer-wrap">
       <form
@@ -759,6 +769,7 @@ function Composer({
         onClick={(e) => {
           if (e.target === e.currentTarget) box.current?.focus();
         }}
+        {...photos.dropProps}
       >
         {reading.length > 0 && (
           <div className="tiny muted" role="status">
@@ -781,6 +792,12 @@ function Composer({
             )}
           </div>
         )}
+        <PhotoStrip photos={photos.photos} onRemove={photos.remove} />
+        {photos.notice && (
+          <div className="tiny muted" role="status">
+            {photos.notice}
+          </div>
+        )}
         <label className="composer-input">
           <span className="sr-only">Message to ChatGPT</span>
           <textarea
@@ -790,6 +807,7 @@ function Composer({
             maxLength={4000}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKey}
+            onPaste={photos.onPaste}
             placeholder={placeholder}
             disabled={!canSend}
             aria-describedby="composer-hint"
@@ -914,17 +932,20 @@ export function ChatPage() {
   const material = current ? current.material : currentId ? [] : draft;
 
   const send = useMutation({
-    mutationFn: (text: string) =>
-      request<Conversation>("/ai/chatgpt/messages", {
+    mutationFn: (input: string | { text: string; photoIds: string[] }) => {
+      const { text, photoIds } = typeof input === "string" ? { text: input, photoIds: [] } : input;
+      return request<Conversation>("/ai/chatgpt/messages", {
         json: {
           conversation_id: currentId,
           model: chosen,
           message: text,
+          photo_ids: photoIds,
           visuals,
           recallspring: tools,
           ...(currentId ? {} : { source_ids: draft.map((f) => f.id), course_id: tools && studyCourse ? studyCourse : null }),
         },
-      }),
+      });
+    },
     onSuccess: (c) => {
       qc.setQueryData([...LIST_KEY, c.id], c);
       void qc.invalidateQueries({ queryKey: LIST_KEY, exact: true });
@@ -1078,7 +1099,7 @@ export function ChatPage() {
             <Thread
               conv={current}
               names={names}
-              pending={send.isPending ? (send.variables ?? null) : null}
+              pending={send.isPending && send.variables !== undefined ? (typeof send.variables === "string" ? send.variables : send.variables.text) : null}
               onFormSaved={canSend && chosen ? (text) => send.mutate(text) : null}
             />
           )}
@@ -1098,7 +1119,8 @@ export function ChatPage() {
                 remember(slug);
               }}
               busy={send.isPending}
-              onSend={(text) => send.mutateAsync(text)}
+              onSend={(text, photoIds) => send.mutateAsync({ text, photoIds })}
+              photoCourse={current?.course?.id ?? (studyCourse || null)}
               visuals={visuals}
               onVisuals={(on) => {
                 setVisuals(on);

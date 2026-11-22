@@ -111,7 +111,8 @@
       setStatus(skip ? "Marked as studied." : "Summary saved as your note at " + new Date(data.saved_at).toLocaleTimeString() + ".");
       request("ui/message", { role: "user", content: { type: "text",
         text: (skip ? "I studied this part without writing a summary." : "I saved my summary in RecallSpring.") +
-              " Please continue with 2-3 short check questions on it." } }).catch(() => {});
+              (skip ? " Please continue with 2-3 short check questions on it."
+                    : " Please read it, tell me what is right, wrong or missing compared with the material, then continue with 2-3 short check questions on it.") } }).catch(() => {});
     } catch (err) {
       setBusy(false);
       setStatus("Not saved: " + (err && err.message ? err.message : "unknown error") + " Your text is still here.", true);

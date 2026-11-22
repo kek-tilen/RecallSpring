@@ -1,3 +1,4 @@
+import { SavedPhotos } from "../components/Photos";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
@@ -436,7 +437,10 @@ function AnswerDetail({ row }: { row: AttemptRow }) {
               <div className="tiny muted">
                 Your answer · {a.answer_mode === "open_notes" ? "with notes or material" : "from memory"} · {dateTime(a.submitted_at)}
               </div>
-              <div className="answer pre">{a.kind === "answer" ? a.answer_text : ATTEMPT_KIND[a.kind] ?? a.kind}</div>
+              {(a.kind !== "answer" || a.answer_text) && (
+                <div className="answer pre">{a.kind === "answer" ? a.answer_text : ATTEMPT_KIND[a.kind] ?? a.kind}</div>
+              )}
+              <SavedPhotos ids={a.photos ?? []} label="Photos of your work" />
             </div>
             {!current ? (
               <p className="small muted" style={{ margin: 0 }}>

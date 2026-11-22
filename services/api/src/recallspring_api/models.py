@@ -315,6 +315,8 @@ class Attempt(Base):
     answer_mode: Mapped[str] = mapped_column(String(20), nullable=False)
     captured_via: Mapped[str] = mapped_column(String(30), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Photos of the learner's work (migration 0019): ids of image sources in the course Library, saved first.
+    photo_ids: Mapped[list[Any]] = _json_list()
     evaluation_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_evaluation_error: Mapped[str | None] = mapped_column(String(80))
     submitted_at: Mapped[datetime] = _created()
@@ -707,6 +709,8 @@ class AiMessage(Base):
     # On a learner's message (migration 0017): what ChatGPT read or saved in RecallSpring while answering it
     # ([{call_id, name, arguments, status, error_code, summary, ms, form?}]); the tools' outputs are not stored.
     tool_calls: Mapped[list[Any] | None] = mapped_column(JSONB)
+    # On a learner's message (migration 0019): images pasted or dropped into the message (image source ids).
+    photo_ids: Mapped[list[Any]] = _json_list()
     created_at: Mapped[datetime] = _created()
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

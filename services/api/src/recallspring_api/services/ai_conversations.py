@@ -103,6 +103,8 @@ def message_view(m: AiMessage, refs: dict[str, dict[str, Any]] | None = None) ->
         "context": m.context or [] if m.role == "user" else [],
         # On the learner's message: what ChatGPT read or saved in RecallSpring while answering it.
         "tool_calls": m.tool_calls or [] if m.role == "user" else [],
+        # On the learner's message: images pasted or dropped into it (image sources in the Library).
+        "photo_ids": [str(p) for p in m.photo_ids or []] if m.role == "user" else [],
     }
 
 
@@ -111,7 +113,7 @@ def _messages(db: Session, conversation_id: uuid.UUID) -> list[AiMessage]:
     return list(db.scalars(stmt))
 
 
-def history(messages: list[AiMessage]) -> tuple[list[dict[str, str]], bool]:
+def history(messages: list[AiMessage]) -> tuple[list[dict[str, Any]], bool]:
     """The turns to send: user messages that got a reply (or the newest one) and the replies, newest first within
     the limits. Returns (turns, whether older turns were left out)."""
     usable = [m for m in messages if not (m.role == "user" and m.error_code)]
@@ -120,7 +122,11 @@ def history(messages: list[AiMessage]) -> tuple[list[dict[str, str]], bool]:
     for m in reversed(usable):
         if len(turns) >= MAX_TURNS_SENT or chars + len(m.text) > MAX_CHARS_SENT:
             break
-        turns.append({"role": m.role, "text": m.text})
+        text = m.text
+        if m.role == "user" and m.photo_ids:  # images go only with the newest message (chatgpt.py); say so here
+            n = len(m.photo_ids)
+            text += f"\n\n[{n} image{'s' if n > 1 else ''} attached to this message; shown when it was sent]"
+        turns.append({"role": m.role, "text": text})
         chars += len(m.text)
     turns.reverse()
     while turns and turns[0]["role"] != "user":  # start with the learner's turn
@@ -242,6 +248,7 @@ def save_question(
     text: str,
     client_request_id: uuid.UUID,
     course_id: uuid.UUID | None = None,
+    photo_ids: list[uuid.UUID] | None = None,
 ) -> tuple[AiConversation, AiMessage]:
     """Save the learner's message (a new conversation when none is given; ``course_id`` makes it a study
     conversation, checked by the caller). The caller commits before calling ChatGPT."""
@@ -270,6 +277,7 @@ def save_question(
         text=text,
         client_request_id=client_request_id,
         model_requested=model,
+        photo_ids=[str(p) for p in photo_ids or []],
         created_at=now,
     )
     db.add(msg)

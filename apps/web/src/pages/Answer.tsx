@@ -1,3 +1,4 @@
+import { ANSWER_FOLDER, AnswerPhotos, usePhotos } from "../components/Photos";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
@@ -105,6 +106,8 @@ function AnswerForm({ q, sessionId, onSaved }: { q: QuestionView; sessionId: str
   const [draft, setText, clearDraft] = useDraft(`rs-answer-draft:${q.id}`);
   const [openNotes, setOpenNotes] = useState(false);
   const [saved, setSaved] = useState<Saved | null>(null);
+  const photos = usePhotos(q.course_id, ANSWER_FOLDER);
+  const hasAnswer = !!draft.text.trim() || photos.ids.length > 0;
   const save = useMutation({
     mutationFn: (kind: AnswerKind) =>
       request<Saved>("/attempts", {
@@ -116,10 +119,12 @@ function AnswerForm({ q, sessionId, onSaved }: { q: QuestionView; sessionId: str
           kind,
           answer_text: kind === "answer" ? draft.text : "",
           answer_mode: openNotes ? "open_notes" : "closed_notes",
+          photo_ids: kind === "answer" ? photos.ids : [],
         },
       }),
     onSuccess: (s, kind) => {
       clearDraft();
+      photos.clear();
       setSaved(s);
       void qc.invalidateQueries({ queryKey: keys.dashboard });
       void qc.invalidateQueries({ queryKey: ["questions", q.id] });
@@ -154,8 +159,10 @@ function AnswerForm({ q, sessionId, onSaved }: { q: QuestionView; sessionId: str
         style={{ gap: 12 }}
         onSubmit={(e) => {
           e.preventDefault();
-          if (draft.text.trim()) save.mutate("answer");
+          if (hasAnswer && !photos.saving) save.mutate("answer");
         }}
+        onPaste={photos.onPaste}
+        {...photos.dropProps}
       >
         <p id="answer-prompt" className="pre" style={{ margin: 0, fontWeight: 600 }}>
           {q.prompt}
@@ -170,12 +177,13 @@ function AnswerForm({ q, sessionId, onSaved }: { q: QuestionView; sessionId: str
           <textarea rows={8} maxLength={20000} value={draft.text} aria-describedby="answer-prompt" onChange={(e) => setText(e.target.value)} />
           <span className="hint">The draft stays in this browser until you save it.</span>
         </label>
+        <AnswerPhotos photos={photos} />
         <label className="row small">
           <input type="checkbox" checked={openNotes} onChange={(e) => setOpenNotes(e.target.checked)} />I used my notes or the material
         </label>
         {save.error && <ErrorNote error={save.error} />}
         <div className="row">
-          <button type="submit" className="btn primary" disabled={!draft.text.trim() || save.isPending}>
+          <button type="submit" className="btn primary" disabled={!hasAnswer || photos.saving || save.isPending}>
             {onSaved ? "Save and send to ChatGPT" : "Save answer"}
           </button>
           <button type="button" className="btn ghost" disabled={save.isPending} onClick={() => save.mutate("dont_know")}>

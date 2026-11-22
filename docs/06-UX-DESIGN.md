@@ -54,6 +54,16 @@ Components:
   with notes), the grade that counts with who gave it, confidence and how many passages of the material it rests on,
   the feedback, *What was good*, *What was missing*, *Next step*, earlier grades, and the reminder that AI grades
   are study feedback, not a validated score.
+- **Photos of work on paper** (owner 2026-11-22): every answer form (Chat, the RecallSpring answer page) invites,
+  optionally, "Solved it on paper? A photo of your work counts as your answer": `Add a photo`, Ctrl+V or drag and
+  drop, up to 4, thumbnails with remove and Saving/Saved. Each photo is saved first as an image in the course
+  Library, folder `Answer photos` (category notes), then linked to the answer; a photo alone is enough. Course →
+  Answers shows them with the answer. The Chat message box also takes pasted or dropped images (folder
+  `Chat images`; a planning chat asks to choose a course first); ChatGPT sees them with that message. The forms
+  that Claude and Codex show inline do not take photos yet: the RecallSpring link (answer page) does.
+- **Summary check** (owner 2026-11-22): after a summary is saved, the assistant reads it and says what is correct,
+  what is wrong and what is missing compared with the material, with page citations. It is feedback, not a grade,
+  and the note is never rewritten.
 - **Read again** (2026-11-22): a material list with files that could not be read shows how many and `Read these N files again`; a failed or partly read file has `Read the text again` on its page. It extracts again with the current reader; earlier citations stay.
 - **New course** (owner 2026-11-22): Courses → `New course` opens a form with the name (any language, kept as
   typed), the type (university course or personal interest with an optional goal), the semester, an optional colour

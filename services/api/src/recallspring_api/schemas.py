@@ -188,6 +188,8 @@ class ChatGptMessageIn(BaseModel):
     visuals: bool = True
     # Only for a new conversation: the files whose matching excerpts may be sent (services/chat_material.py).
     source_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+    # Images pasted or dropped into this message, saved first in the course Library; sent to ChatGPT to look at.
+    photo_ids: list[uuid.UUID] = Field(default_factory=list, max_length=4)
     # "Use RecallSpring": ChatGPT may read and add study records through RecallSpring's tools
     # (services/chat_tools.py) while answering this message.
     recallspring: bool = False
@@ -320,6 +322,8 @@ class AttemptIn(BaseModel):
     kind: Literal["answer", "dont_know", "skip"] = "answer"
     answer_text: str = Field(default="", max_length=20_000)
     answer_mode: Literal["closed_notes", "open_notes"] = "closed_notes"
+    # Photos of work solved on paper: image sources in the question's course (saved first, e.g. "Answer photos").
+    photo_ids: list[uuid.UUID] = Field(default_factory=list, max_length=4)
 
 
 class AttemptCreatedOut(BaseModel):
@@ -362,6 +366,7 @@ class AttemptOut(BaseModel):
     last_evaluation_error: str | None
     assessments: list[AssessmentOut]
     effective_assessment_id: uuid.UUID | None
+    photos: list[dict[str, Any]] = Field(default_factory=list)  # [{id, filename, available}]
 
 
 class ChallengeIn(BaseModel):

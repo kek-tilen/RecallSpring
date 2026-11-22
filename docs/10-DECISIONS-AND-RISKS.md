@@ -69,6 +69,9 @@
 | Settings → Assistants shows what is really connected (tokens, ChatGPT sign-in, last use) instead of a picker in Profile; wording names the only connected assistant, else "your assistant". Course → Answers opens the exact answer and the grade explanation. A light Nord theme, Snow Storm | Approved 2026-11-22 (owner in chat; answers and Snow Storm asked by the owner) |
 | New course form on the Courses page; deleting a course soft-deletes everything in it (restorable 30 days) only after "I understand" is ticked and the exact course name is typed (the button stays disabled until then; the server checks the name again). Chat has a Full page mode without the menu and the conversation list | Approved 2026-11-22 (owner in chat) |
 | PDFs that pypdf cannot open (lecture slides protected with AES against editing; pypdf needs the optional `cryptography` package for them) are read with PDFium, already a pinned dependency, instead of adding a new one. Failed files can be read again from the material list | 2026-11-22, after the owner's 8 Digitalna tehnika PDFs failed (`pdf_unreadable`) |
+| Answers can be photos of work on paper (optional, invited in the form; Ctrl+V, drag and drop, up to 4), saved first in the Library folder "Answer photos" and shown to the grading assistant (ChatGPT as `input_image`, Claude/Codex as images from `get_attempt`). Images pasted into Chat are sent with that message only. After a summary the assistant says what is right, wrong or missing (not a grade) | Approved 2026-11-22 (owner in chat; Library folder, summary check and Chat images chosen in the app's questions) |
+
+Risk (2026-11-22): images cost far more tokens than text; Chat sends an image once, with its message, and grading sends only the photos of the answer being graded. Handwriting may be misread: the grade rules (provisional when unsure, never invent) apply to photos too.
 
 ## Working assumptions (do not mistake for owner approval)
 

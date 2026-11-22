@@ -280,6 +280,7 @@ export interface AttemptDetail {
   submitted_at: string;
   assessments: AssessmentDetail[];
   effective_assessment_id: string | null;
+  photos?: { id: string; filename: string | null; available: boolean }[];
 }
 
 export interface AttemptRow {
