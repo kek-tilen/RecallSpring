@@ -111,6 +111,8 @@ Views with a grade carry `graded_by` (evaluator kind) and `grader` `{name, model
 
 **Apps without MCP Apps forms** (e.g. Codex): `open_answer_form`, `open_quiz` and `open_summary_form` check whether the client announced the MCP Apps extension (`io.modelcontextprotocol/ui` with the `text/html;profile=mcp-app` type). If not, they return a link to the learner's RecallSpring web app (`RS_WEB_URL`, default the API address): `/answer/{question_id}?session=…`, `/simulations/{quiz_id}` (the clock starts when the learner opens it) or `/summary?course=…&concepts=…&title=…&covered=…`. The learner answers there (`captured_via = app_ui`); `get_answer` reads the latest saved answer of a question (connector `GET /questions/{id}` returns `latest_attempt`).
 
+**Forms in RecallSpring's Chat:** a form sent from Chat stays in the conversation with the question and the learner's exact text. The answer form of an earlier turn shows the learner's newest answer to that question and its grade (web `GET /questions/{id}` returns `latest_attempt_id`; then `GET /attempts/{id}`); an earlier form never answered stays a link.
+
 Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhere else (owner routes need the session cookie and CSRF token). Every request counts towards the owner's daily connector limit. All writes are append-only; there are **no** delete, restore, export, budget, consent or routing tools.
 
 | Tool | Kind | Contract |

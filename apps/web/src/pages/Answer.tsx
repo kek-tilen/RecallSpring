@@ -3,10 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { get, newKey, request } from "../api";
-import { Async, Card, ErrorNote, PageHead } from "../components/ui";
+import { Async, Card, ErrorNote, GradeChip, PageHead } from "../components/ui";
 import { dateTime } from "../format";
 import { keys } from "../queries";
-import type { ConceptRow } from "../types";
+import type { AttemptDetail, ConceptRow } from "../types";
 
 /**
  * Pages an assistant links to when it cannot show RecallSpring's forms inside its chat (e.g. Codex): answer one
@@ -23,6 +23,7 @@ interface QuestionView {
   bloom_level: number;
   prompt: string;
   rubric: Record<string, unknown> | null;
+  latest_attempt_id?: string | null;
 }
 
 interface Draft {
@@ -100,6 +101,67 @@ export function ChatAnswerForm({ questionId, onSaved }: { questionId: string; on
 }
 
 export type AnswerKind = "answer" | "dont_know";
+
+/**
+ * In Chat, the answer form of an earlier turn: the question with the learner's newest answer to it (and its grade
+ * once there is one), so the conversation still shows what was sent. Not answered yet: a link to the form.
+ */
+export function ChatSentAnswer({ questionId }: { questionId: string }) {
+  const question = useQuery({ queryKey: ["questions", questionId], queryFn: () => get<QuestionView>(`/questions/${questionId}`) });
+  const attemptId = question.data?.latest_attempt_id ?? null;
+  const attempt = useQuery({
+    queryKey: ["attempt", attemptId],
+    queryFn: () => get<AttemptDetail>(`/attempts/${attemptId}`),
+    enabled: !!attemptId,
+  });
+  return (
+    <Async q={question} lines={2}>
+      {(q) => {
+        if (!q.latest_attempt_id) {
+          return (
+            <p className="tiny muted" style={{ margin: 0 }}>
+              <Link to={`/answer/${q.id}`}>Answer form</Link> (not answered yet)
+            </p>
+          );
+        }
+        const a = attempt.data;
+        const current = a ? (a.assessments.find((s) => s.id === a.effective_assessment_id) ?? a.assessments.at(-1)) : undefined;
+        return (
+          <div className="stack chat-form-saved" style={{ gap: 8 }}>
+            <p className="tiny muted" style={{ margin: 0 }}>
+              Question · Bloom {q.bloom_level}
+            </p>
+            <p className="pre" style={{ margin: 0, fontWeight: 600 }}>
+              {q.prompt}
+            </p>
+            {attempt.error && <ErrorNote error={attempt.error} />}
+            {a && (
+              <>
+                {a.kind === "answer" ? (
+                  <div className="chat-form-answer pre" aria-label="Your answer">
+                    {a.answer_text || "(photos only)"}
+                  </div>
+                ) : (
+                  <p className="small muted" style={{ margin: 0 }}>
+                    You said you don&apos;t know.
+                  </p>
+                )}
+                <SavedPhotos ids={a.photos ?? []} label="Photos saved with your answer" />
+                <div className="row tiny muted" style={{ gap: 8, flexWrap: "wrap" }}>
+                  {current && <GradeChip grade={current.grade} status={current.status} />}
+                  <span>
+                    Saved {dateTime(a.submitted_at)}
+                    {!current && " · not graded yet"} · <Link to={`/courses/${q.course_id}?tab=answers`}>All answers</Link>
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      }}
+    </Async>
+  );
+}
 
 function AnswerForm({ q, sessionId, onSaved }: {
   q: QuestionView;

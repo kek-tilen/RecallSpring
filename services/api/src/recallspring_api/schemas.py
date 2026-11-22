@@ -310,6 +310,9 @@ class QuestionOut(BaseModel):
     rubric: dict[str, Any] | None = Field(
         default=None, description="Only present once the learner has submitted an attempt for this question."
     )
+    latest_attempt_id: uuid.UUID | None = Field(
+        default=None, description="The learner's newest answer to this question (Chat shows it under its form)."
+    )
 
 
 class QuestionListOut(BaseModel):

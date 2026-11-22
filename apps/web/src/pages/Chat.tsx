@@ -12,7 +12,7 @@ import { Confirm, ErrorNote, Loading } from "../components/ui";
 import { dateTime, plural } from "../format";
 import { keys } from "../queries";
 import type { Course } from "../types";
-import { ChatAnswerForm, ChatSummaryForm } from "./Answer";
+import { ChatAnswerForm, ChatSentAnswer, ChatSummaryForm } from "./Answer";
 
 interface Usage {
   input_tokens?: number;
@@ -346,6 +346,13 @@ function ChatForm({ form, live, onSend }: {
     setSent(true);
     onSend?.(text, photoIds);
   };
+  if (!sent && (!live || !onSend) && form.kind === "answer") {
+    return (
+      <div className="chat-form-card">
+        <ChatSentAnswer questionId={form.question_id} />
+      </div>
+    );
+  }
   if (!sent && (!live || !onSend)) {
     return (
       <p className="tiny muted" style={{ margin: 0 }}>

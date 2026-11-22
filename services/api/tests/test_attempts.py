@@ -147,9 +147,12 @@ def test_empty_written_answer_is_rejected(owner_api: Api) -> None:
 
 def test_rubric_is_hidden_until_the_learner_has_answered(owner_api: Api) -> None:
     ids = owner_api.course_with_question()
-    assert owner_api.get(f"/questions/{ids['question_id']}").json()["rubric"] is None
-    owner_api.answer(ids["question_id"])
-    assert owner_api.get(f"/questions/{ids['question_id']}").json()["rubric"]["expected_points"]
+    first = owner_api.get(f"/questions/{ids['question_id']}").json()
+    assert first["rubric"] is None and first["latest_attempt_id"] is None
+    attempt = owner_api.answer(ids["question_id"]).json()
+    q = owner_api.get(f"/questions/{ids['question_id']}").json()
+    assert q["rubric"]["expected_points"]
+    assert q["latest_attempt_id"] == attempt["attempt_id"]  # Chat shows this answer under the question's old form
 
 
 def test_grade_correction_appends_human_assessment_and_recomputes_schedule(owner_api: Api, frozen: FrozenClock) -> None:

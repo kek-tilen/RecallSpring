@@ -60,7 +60,7 @@ const CONV = {
 
 const QUESTION = { id: "q1", course_id: "k1", bloom_level: 1, prompt: "Where does glycolysis run?", rubric: null };
 
-function routeFetch(sent: { path: string; body: unknown }[]) {
+function routeFetch(sent: { path: string; body: unknown }[], conv: typeof CONV = CONV, question: object = QUESTION) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(typeof input === "string" ? input : (input as Request).url, "http://localhost");
     const path = url.pathname.replace("/api/v1", "");
@@ -72,7 +72,7 @@ function routeFetch(sent: { path: string; body: unknown }[]) {
     if (path === "/ai/chatgpt/conversations") {
       return json(200, { conversations: [{ id: "c1", title: "Quiz me", created_at: CONV.created_at, updated_at: CONV.updated_at, deleted_at: null, replies: 1 }], deleted: [], usage: { last_24_hours: CONV.totals, last_30_days: CONV.totals } });
     }
-    if (path === "/ai/chatgpt/conversations/c1") return json(200, CONV);
+    if (path === "/ai/chatgpt/conversations/c1") return json(200, conv);
     if (path === "/sources" && method === "POST") {
       return json(201, { id: "s9", course_id: "k1", filename: "lecture3.pdf", kind: "pdf", category: "material", parse_state: "pending", section_count: 0 });
     }
@@ -80,7 +80,22 @@ function routeFetch(sent: { path: string; body: unknown }[]) {
       const file = { id: "s9", course_id: "k1", filename: "lecture3.pdf", kind: "pdf", category: "material", has_text: false, reading: true };
       return json(200, { ...CONV, material: [file] });
     }
-    if (path === "/questions/q1") return json(200, QUESTION);
+    if (path === "/questions/q1") return json(200, question);
+    if (path === "/attempts/a1" && method === "GET") {
+      return json(200, {
+        id: "a1",
+        question_id: "q1",
+        kind: "answer",
+        answer_text: "V citoplazmi.",
+        answer_mode: "closed_notes",
+        captured_via: "app_ui",
+        status: "evaluated",
+        submitted_at: "2026-11-21T20:01:00Z",
+        assessments: [{ id: "s1", grade: 3, status: "final", confidence: "high", evidence_refs: [], strengths: [], gaps: [], feedback: "Right.", remediation: null, evaluator_kind: "ai", created_at: "2026-11-21T20:02:00Z" }],
+        effective_assessment_id: "s1",
+        photos: [],
+      });
+    }
     if (path === "/attempts") return json(201, { attempt_id: "a1", status: "saved_awaiting_evaluation", saved_at: "2026-11-21T20:01:00Z" });
     if (path === "/ai/chatgpt/messages") return json(200, { ...CONV, messages: [...CONV.messages, msg({ id: "m3", position: 3, role: "user", text: "next" })] });
     return json(404, { code: "not_found", message: "Not found." });
@@ -122,6 +137,33 @@ describe("ChatGPT using RecallSpring in Chat", () => {
     expect(screen.getByText("Where does glycolysis run?")).toBeTruthy();
     expect(screen.getByLabelText("Your answer").textContent).toBe("  V citoplazmi.\n");
     expect(screen.queryByText("(shown earlier)")).toBeNull();
+  });
+
+  it("shows the answer form of an earlier turn with the saved answer and its grade, not just a link", async () => {
+    const later = {
+      ...CONV,
+      messages: [
+        ...CONV.messages,
+        msg({ id: "m3", position: 3, role: "user", text: "[RecallSpring] I saved my answer to question q1 in the form." }),
+        msg({ id: "m4", position: 4, role: "assistant", text: "3/4, well done." }),
+      ],
+    };
+    routeFetch([], later, { ...QUESTION, rubric: { expected_points: ["cytoplasm"] }, latest_attempt_id: "a1" });
+    show();
+    expect(await screen.findByLabelText("Your answer")).toBeTruthy();
+    expect(screen.getByLabelText("Your answer").textContent).toBe("V citoplazmi.");
+    expect(screen.getByText("Where does glycolysis run?")).toBeTruthy();
+    expect(document.querySelector(".chat-form-saved .chip")?.textContent).toMatch(/^3\/4/);
+    expect(screen.queryByRole("textbox", { name: /your answer/i })).toBeNull();
+    expect(screen.queryByText("(shown earlier)")).toBeNull();
+  });
+
+  it("an earlier form never answered stays a link", async () => {
+    const later = { ...CONV, messages: [...CONV.messages, msg({ id: "m3", position: 3, role: "user", text: "Skip it" })] };
+    routeFetch([], later, { ...QUESTION, latest_attempt_id: null });
+    show();
+    expect(await screen.findByText("(not answered yet)")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Answer form" }).getAttribute("href")).toBe("/answer/q1");
   });
 
   it("lets the learner chat without RecallSpring and remembers it", async () => {

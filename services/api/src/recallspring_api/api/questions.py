@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
-from sqlalchemy import exists, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import clock
@@ -29,7 +29,12 @@ router = APIRouter(tags=["questions"])
 
 def question_view(db: Session, q: Question, user_id: uuid.UUID) -> dict[str, Any]:
     concept_ids = list(db.scalars(select(QuestionConcept.concept_id).where(QuestionConcept.question_id == q.id)))
-    answered = db.scalar(select(exists().where(Attempt.question_id == q.id, Attempt.user_id == user_id)))
+    latest = db.scalar(
+        select(Attempt.id)
+        .where(Attempt.question_id == q.id, Attempt.user_id == user_id)
+        .order_by(Attempt.submitted_at.desc())
+        .limit(1)
+    )
     return QuestionOut(
         id=q.id,
         course_id=q.course_id,
@@ -40,7 +45,8 @@ def question_view(db: Session, q: Question, user_id: uuid.UUID) -> dict[str, Any
         difficulty=q.difficulty,
         provenance=q.provenance,
         created_at=q.created_at,
-        rubric=q.rubric if answered else None,
+        rubric=q.rubric if latest else None,
+        latest_attempt_id=latest,
     ).model_dump(mode="json")
 
 
