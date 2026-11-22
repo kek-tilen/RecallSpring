@@ -50,7 +50,8 @@ Then quit and reopen Antigravity.
 3. Write “Start studying”. Antigravity asks before each RecallSpring tool until you allow it; keep asking on for the
    tools that save something (grades, questions) if you want to see each one.
 
-Answer questions on RecallSpring's own pages when Antigravity gives you a link, then tell it you are done.
+Antigravity shows RecallSpring's answer and summary forms right in the conversation (seen 2026-11-22). If it gives
+you a link instead, answer on RecallSpring's page and then tell it you are done.
 
 ## 4. Remove
 
