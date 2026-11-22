@@ -401,7 +401,7 @@ def _reason(row: dict[str, Any]) -> str:
     grade = row["last_grade"]
     fb = row["feedback"]
     if isinstance(grade, int):
-        text = f"Last answer {grade}/4 ({GRADE_LABELS[grade]})"
+        text = f"Last answer {GRADE_LABELS[grade]} ({grade}/4)"
         if fb and fb["status"] == "provisional":
             text += ", provisional"
     else:

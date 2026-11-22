@@ -834,6 +834,7 @@ class QuizAnswer(BaseModel):
     option: str | None = Field(default=None, pattern=r"^[A-H]$")
     text: str | None = Field(default=None, max_length=20_000)
     dont_know: bool = False
+    guessing: bool = Field(default=False, description="the learner marked a closed answer as a guess")
 
 
 class QuizDraftIn(BaseModel):

@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import backup, clock
+from ..learning.scheduler import grade_text
 from ..models import (
     Assessment,
     Attempt,
@@ -36,7 +37,7 @@ from ..models import (
     StudyTarget,
     User,
 )
-from . import assistants, mastery
+from . import assistants, check_first, mastery
 from .attempts import assessments_for
 from .folders import tree as folder_tree
 from .learning import effective_status
@@ -116,6 +117,7 @@ def course_overview(db: Session, user: User, course: Course) -> dict[str, Any]:
         else {}
     )
     sections = _sections_by_concept(db, [c.id for c in concepts])
+    checks = check_first.results(db, user.id, [c.id for c in concepts])
     study = {"not_studied": 0, "studied": 0, "known": 0}
     bands = {b: 0 for b in mastery.BANDS}
     rows = []
@@ -137,6 +139,7 @@ def course_overview(db: Session, user: User, course: Course) -> dict[str, Any]:
                 "difficulty_source": diff.source,
                 "review": _review(state, now),
                 "sections": sections.get(c.id, [])[:4],
+                "check": checks.get(c.id),
             }
         )
     targets = live_targets(db, course.id)
@@ -152,6 +155,11 @@ def course_overview(db: Session, user: User, course: Course) -> dict[str, Any]:
         ],
         "progress": {"study": study, "bands": bands, "concepts": len(concepts)},
         "concepts": rows,
+        "chapters": [
+            {"key": g["key"], "title": g["title"], "concept_ids": [str(c) for c in g["concept_ids"]]}
+            for g in check_first.chapters(db, course, concepts)
+        ],
+        "practice_limit": check_first.practice_limit(db, course, today),
         "sources": [  # archived material (or material in an archived folder) is left out
             view
             for view in (
@@ -383,7 +391,7 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         else:  # connector grades before 2026-11 had no provider in the event: they came from Claude
             who = assistants.provider_name(provider or "claude_app") + (f" ({model})" if model else "")
         grade = payload.get("grade")
-        return f"{grade}/4 ({payload.get('status')}) by {who}" if grade is not None else f"ungraded by {who}"
+        return f"{grade_text(grade)} ({payload.get('status')}) by {who}" if grade is not None else f"ungraded by {who}"
     if event_type == "source.parsed":
         n = payload.get("sections")
         return f"{payload.get('state')}, {n} section{'' if n == 1 else 's'}"
@@ -391,7 +399,10 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         via = {"answer_form": "answer form", "assistant_transcription": "copied by your assistant", "app_ui": "web app"}
         return f"{payload.get('kind')} via {via.get(payload.get('captured_via'), payload.get('captured_via'))}"
     if event_type == "assessment.self_assessed":
-        return f"{payload.get('grade')}/4 (provisional; suggested {payload.get('suggested')}/4), to be checked"
+        return (
+            f"{grade_text(payload.get('grade'))} (provisional; suggested {grade_text(payload.get('suggested'))}), "
+            "to be checked"
+        )
     if event_type == "assessment.corrected":
         return f"{payload.get('old_grade')} → {payload.get('new_grade')}"
     if event_type == "note.saved":

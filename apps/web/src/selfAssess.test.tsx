@@ -65,7 +65,7 @@ describe("self-assessment", () => {
     mark("sign bit 1", "Got it");
     mark("normalised 1.1 × 2^-2", "Missed");
     mark("exponent 01111101", "Partly");
-    expect(document.body.textContent).toContain("Your grade (suggested: 2/4 · Partial)");
+    expect(document.body.textContent).toContain("Your grade (suggested: Partial (2/4))");
     expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("2");
     fireEvent.click(save);
     await waitFor(() => expect(sent).toHaveLength(1));
@@ -100,7 +100,7 @@ describe("self-assessment", () => {
       effective_assessment_id: "x",
     } as unknown as AttemptDetail;
     const { container } = render(<SelfCheckNote attempt={attempt} />);
-    expect(container.textContent).toContain("Your self-assessment was 3/4 · Solid; the check gave 1/4 · Fragile.");
+    expect(container.textContent).toContain("Your self-assessment was Solid (3/4); the check gave Fragile (1/4).");
     expect(gradedBy("self")).toBe("You (self-assessed)");
   });
 });

@@ -178,7 +178,7 @@ function SelfAssessForm({ v, onDone }: { v: SelfCheckView; onDone?: () => void }
             <select value={grade ?? 0} onChange={(e) => setChosen(Number(e.target.value))}>
               {GRADE_LABEL.map((label, g) => (
                 <option key={g} value={g}>
-                  {g}/4 · {label}
+                  {label} ({g}/4)
                 </option>
               ))}
             </select>

@@ -17,7 +17,7 @@
 
 Default on new topics: gently ramp levels 3->4->5 **when evidence of foundation exists**. Default on revisions: mix levels 1–5 and topics, progressively increasing transfer. Make level selector flexible; not every topic admits a meaningful level-5 prompt.
 
-Practice ramp (2026-11-22): reading and notes are phases 1–2; practice then follows each concept's `practice.next_level` in `get_course_outline`, worked out by RecallSpring without a model call (`services/bloom.py`). A level counts as reached with a final grade of 3 or 4 from an assistant or the learner's correction (provisional and self-assessed grades never move it up). It ramps 3 Apply → 4 Analyze → 5 Evaluate, steps back one level (never below 3) after a 0–1 answer, and once 5 is reached suggests the level among 3–5 practised least recently (mixed). An exam profile's Bloom mix takes precedence; quizzes mix concepts and levels.
+Practice ramp (2026-11-22): reading and notes are phases 1–2; practice then follows each concept's `practice.next_level` in `get_course_outline`, worked out by RecallSpring without a model call (`services/bloom.py`). A level counts as reached with a final grade of 3 or 4 from an assistant or the learner's correction (provisional and self-assessed grades never move it up). It ramps 3 Apply → 4 Analyze → 5 Evaluate, steps back one level (never below 3) after a 0–1 answer, and once 5 is reached suggests the level among 3–5 practised least recently (mixed). An exam profile's Bloom mix takes precedence; quizzes mix concepts and levels. The learner's practice limit per course (2–5) caps all of it; RecallSpring says when the exam paper asks for higher levels until the learner keeps the limit on purpose (ADR-009).
 
 ## Learning lifecycle
 
@@ -89,7 +89,7 @@ Suggested baseline weighted priority: overdue duration capped, low recent eviden
 ### Implemented: learning first (ADR-006)
 
 - Each concept is `not_studied`, `studied` or `known`. New material is taught before it is practised: Claude explains a few pages at a time in the order of the material, the learner writes a summary in their own words (saved exactly as a note), then 2–3 short checks. Only then do practice questions and kolokvij simulations follow.
-- RecallSpring refuses Claude's practice on unstudied concepts. A learner who already knows a topic says so (self-report, audited) or asks for a diagnostic pre-test, which never affects reviews and marks shown concepts as known.
+- RecallSpring refuses Claude's practice on unstudied concepts. A learner who already knows a topic says so (self-report, audited) or chooses **Check first** (ADR-009): a short diagnostic quiz per chapter or for a bit of everything, offered gently. Two correct closed answers or one Solid open answer show a concept (green: known, rare reviews from 21 days); half of that is yellow (learn only the gaps, summary optional); nothing is red (learn it first). A guess counts nothing. Check answers never enter the review evidence or the practice ramp.
 - The plan shows `Learn next` items with the pages to study, then `Practice`, `Review due`, `Strengthen` and `Maintain`.
 
 ### Implemented: interests, university first and focus (ADR-007, `plan-v2`)

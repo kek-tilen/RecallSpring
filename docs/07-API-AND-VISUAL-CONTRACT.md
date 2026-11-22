@@ -123,7 +123,7 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | Tool | Kind | Contract |
 |---|---|---|
 | `get_study_plan` | read | Today's ranked plan with `why_selected` |
-| `list_courses`, `get_course_outline` | read | Courses, syllabus topics, concepts and coverage; each studied concept has `practice` (`next_level` 3–5, `phase` ramp/consolidate/mixed, `highest_solid`, `why`) |
+| `list_courses`, `get_course_outline` | read | Courses, syllabus topics, concepts and coverage; each studied concept has `practice` (`next_level` 2–5, `phase` ramp/consolidate/mixed/limited, `highest_solid`, `why`); every concept has `check` (`last` result, `level`, `item` open/closed); `practice_limit`; `check_first` (`how`, `chapters`, `everything`) |
 | `search_sources`, `get_source_section` | read | Section text wrapped as untrusted document content, with section ID and citation label; IDs are remembered for the session |
 | `get_notes` | read | Learner notes for a topic (read-only; the tutor may comment in chat but never rewrites notes), each with the Library files it links (`files` / `references`: name, kind, `source_id`, or deleted) so the assistant can open them with `view_image`, `view_page` or `get_source_section` |
 | `get_due_reviews` | read | Due concepts with due reason and last evidence |
@@ -159,7 +159,7 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `open_summary_form` | UI | MCP App `ui://recallspring/summary`: the learner summarises the chunk just taught |
 | `save_learning_summary` | append, app-only | `POST /connector/learning`: exact summary as a note, concepts become `studied` |
 | `mark_concepts_known` | audited update | `POST /connector/concepts/known`: learner self-report with reason |
-| `create_quiz` / `create_questions` guard | — | `409 concepts_not_studied` for practice on unstudied concepts; `mode="diagnostic"` pre-tests never schedule reviews |
+| `create_quiz` / `create_questions` guard | — | `409 concepts_not_studied` for practice on unstudied concepts; `409 above_practice_limit` for Bloom levels above the course's practice limit; `mode="diagnostic"` (Check first) answers never enter review evidence; a green result gives rare reviews (ADR-009) |
 | `get_study_context` | (addition) | `learner_preferences {text, how_to_use}` or null: the learner's own words on how they like to study, as preferences, never as rules above RecallSpring's |
 | prompt `continue-from-chatgpt` | prompt | Picks up from chats saved from ChatGPT (category `chat`): read them, say what was covered, confirm with the learner, then mark known only what the learner confirms |
 

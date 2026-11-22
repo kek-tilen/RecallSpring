@@ -42,7 +42,7 @@ from ..models import (
     StudyTarget,
     User,
 )
-from . import learning, mastery
+from . import check_first, learning, mastery
 from .targets import active_target, latest_profile, live_targets, scope_concepts
 
 PLAN_POLICY = "plan-v2"
@@ -152,6 +152,7 @@ def today_plan(
 
     sections_map, order_keys = _material(db, [c.id for c in concepts])
     status_map = {c.id: learning.effective_status(c, c.id in states) for c in concepts}
+    checks = check_first.results(db, user.id, [c.id for c in concepts if status_map[c.id] == "not_studied"])
     main: list[dict[str, Any]] = []
     maintenance: list[tuple[datetime, dict[str, Any]]] = []
     for concept in concepts:
@@ -213,9 +214,22 @@ def today_plan(
                 + "with your assistant's explanation, then summarise it in your own words."
                 + context
             )
+            check = checks.get(concept.id)
+            partly = check is not None and check["result"] == "yellow"
+            if partly:  # Check first showed part of it: only the gaps, after what was not shown at all
+                why = (
+                    "Check first showed part of it: learn only the gaps from its feedback"
+                    + (f" ({pages})" if pages else "")
+                    + "; a summary in your own words is optional."
+                    + context
+                )
+            elif check is not None and check["result"] == "red":
+                why = "Not shown in Check first. " + why
             item = _item("Learn next", concept, courses, why, band, diff, target_name)
-            item["_score"] = urgency * 0.95  # in material order, not by difficulty
+            item["_score"] = urgency * (0.93 if partly else 0.95)  # in material order, not by difficulty
             item["_order"] = order_keys.get(concept.id, ())
+            if partly:
+                item["estimated_minutes"] = max(6, item["estimated_minutes"] - 6)
             if weight > 1.0:
                 item["estimated_minutes"] += 4  # frequent on past papers: study it in more depth
             main.append(item)

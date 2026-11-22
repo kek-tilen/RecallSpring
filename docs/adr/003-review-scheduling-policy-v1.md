@@ -1,5 +1,7 @@
 # ADR-003 — Review scheduling policy `rs-interval-v1`
 
+> Extended by ADR-009 (`rs-interval-v2`): a concept shown in Check first starts with rare reviews.
+
 - **Status:** Accepted (deterministic refinement allowed by docs/05), 2026-11-19
 - **Code:** `services/api/src/recallspring_api/learning/scheduler.py`; tests: `services/api/tests/test_scheduler.py`
 

@@ -36,6 +36,12 @@
   textarea { width: 100%; min-height: 96px; resize: vertical; padding: 10px 12px; font: inherit; color: var(--ink);
     background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-control); }
   .dk { display: inline-flex; gap: 6px; align-items: center; margin-top: 8px; color: var(--muted); font-size: 14px; }
+  .answer-extras { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  button.guess { min-height: 32px; padding: 0 12px; margin-top: 8px; border-radius: 999px; font-size: 14px;
+    font-weight: 500; background: transparent; color: var(--muted); border: 1px dashed var(--border); }
+  button.guess:hover { background: var(--surface); color: var(--ink); }
+  button.guess[aria-pressed="true"] { border-style: solid; border-color: var(--primary); color: var(--primary);
+    background: var(--surface); font-weight: 600; }
   .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
   button { min-height: 44px; padding: 0 18px; font: inherit; border-radius: var(--radius-control); cursor: pointer;
     border: 1px solid var(--primary); background: var(--primary); color: var(--on-primary); font-weight: 600; }
@@ -106,6 +112,8 @@
       if (item.type === "mcq") {
         const sel = ui.form.querySelector(`input[name="q-${item.question_id}"]:checked`);
         answer.option = sel ? sel.value : null;
+        const guess = ui.form.querySelector(`[data-guess="${item.question_id}"]`);
+        answer.guessing = !!(guess && guess.getAttribute("aria-pressed") === "true");
       } else {
         const ta = ui.form.querySelector(`[data-text="${item.question_id}"]`);
         answer.text = ta ? ta.value : "";
@@ -154,11 +162,26 @@
         ta.setAttribute("aria-labelledby", q.id); ta.placeholder = "Your answer";
         card.appendChild(ta);
       }
+      const extras = el("div", "answer-extras");
       const dkLabel = el("label", "dk");
       const dk = document.createElement("input"); dk.type = "checkbox"; dk.dataset.dk = item.question_id;
       dk.checked = !!saved.dont_know;
       dkLabel.appendChild(dk); dkLabel.appendChild(document.createTextNode("I don't know"));
-      card.appendChild(dkLabel);
+      extras.appendChild(dkLabel);
+      if (item.type === "mcq") {
+        // A guess is saved with the answer and never counts as known, even when it is right.
+        const guess = el("button", "guess", "I'm guessing");
+        guess.type = "button"; guess.dataset.guess = item.question_id;
+        guess.setAttribute("aria-pressed", saved.guessing ? "true" : "false");
+        guess.title = "A guess never counts as known, even when it is right";
+        guess.addEventListener("click", () => {
+          if (locked) return;
+          guess.setAttribute("aria-pressed", guess.getAttribute("aria-pressed") === "true" ? "false" : "true");
+          guess.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        extras.appendChild(guess);
+      }
+      card.appendChild(extras);
       ui.form.appendChild(card);
     });
     if (data.status === "submitted" && data.results) { showResults(data.results); return; }
@@ -168,7 +191,7 @@
 
   function lock() {
     locked = true;
-    ui.form.querySelectorAll("input, textarea").forEach((n) => { n.disabled = true; });
+    ui.form.querySelectorAll("input, textarea, button.guess").forEach((n) => { n.disabled = true; });
     ui.submit.disabled = true;
     if (tick) clearInterval(tick);
   }

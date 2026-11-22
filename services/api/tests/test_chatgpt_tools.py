@@ -178,7 +178,7 @@ def test_grades_carry_the_model_openai_reported_and_evidence_is_checked(owner_ap
     assert stored["provider"] == "chatgpt" and stored["model"] == MODEL and stored["model_reported_by"] == "provider"
     assert stored["evidence_refs"] == [ids["section_ids"][0]] and stored["status"] == "provisional"
     steps = r.json()["messages"][0]["tool_calls"]
-    assert [s["summary"] for s in steps] == ["Read your answer", "Saved feedback: 3/4 (provisional)"]
+    assert [s["summary"] for s in steps] == ["Read your answer", "Saved feedback: Solid (3/4) (provisional)"]
     assert steps[1]["writes"] is True
     detail = owner_api.get(f"/concepts/{ids['concept_id']}/detail").json()
     assert detail["attempts"][0]["grader"] == {"name": "ChatGPT", "model": MODEL}

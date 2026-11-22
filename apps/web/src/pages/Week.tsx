@@ -70,7 +70,7 @@ function Grades({ w }: { w: WeekReview }) {
         {w.grades.distribution.map((n, grade) => (
           <tr key={grade}>
             <th scope="row" className="small">
-              {grade} · {GRADE_LABEL[grade]}
+              {GRADE_LABEL[grade]} ({grade}/4)
             </th>
             <td>
               <span className="grade-bar" style={{ width: `${(100 * n) / max}%` }} aria-hidden="true" />

@@ -1,4 +1,4 @@
-"""Deterministic scheduler policy rs-interval-v1 (pure unit tests, no database)."""
+"""Deterministic scheduler policy rs-interval-v1/v2 (pure unit tests, no database)."""
 
 from __future__ import annotations
 

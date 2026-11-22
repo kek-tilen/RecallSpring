@@ -97,7 +97,7 @@ def test_readiness_by_material_with_the_weakest_and_next_steps(
 
     weakest = view["weakest"]
     assert [w["term"] for w in weakest] == ["ATP"]
-    assert weakest[0]["reason"] == "Last answer 1/4 (Fragile)." and weakest[0]["gaps"][0] == "Mixes up ATP and NADH"
+    assert weakest[0]["reason"] == "Last answer Fragile (1/4)." and weakest[0]["gaps"][0] == "Mixes up ATP and NADH"
     steps = view["next_steps"]
     assert steps[0].startswith("Learn the 2 concepts not studied yet, starting with Lecture 2.md: about 1 a day.")
     assert steps[1].startswith("Strengthen 1 weak concept: ATP.")

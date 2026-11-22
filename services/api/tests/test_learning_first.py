@@ -84,7 +84,7 @@ def test_self_reported_knowledge_is_audited_and_allows_practice(conn: ConnectorA
     assert item["category"] == "Practice" and item["study_status"] == "known"
 
 
-def test_diagnostic_pretest_never_schedules_reviews_and_marks_shown_concepts_known(
+def test_check_first_marks_shown_concepts_known_with_rare_reviews_only(
     owner_api: Api, conn: ConnectorApi, frozen: FrozenClock
 ) -> None:
     cid, ids = course(conn, ["Shown", "Missed", "Open"])
@@ -96,6 +96,7 @@ def test_diagnostic_pretest_never_schedules_reviews_and_marks_shown_concepts_kno
             "mode": "diagnostic",
             "items": [
                 mcq(ids["Shown"]),
+                mcq(ids["Shown"]),  # two correct closed answers make one full green
                 mcq(ids["Missed"]),
                 {
                     "type": "open",
@@ -116,8 +117,9 @@ def test_diagnostic_pretest_never_schedules_reviews_and_marks_shown_concepts_kno
             "client_request_id": str(uuid.uuid4()),
             "answers": [
                 {"question_id": q[0], "option": "A"},
-                {"question_id": q[1], "option": "B"},
-                {"question_id": q[2], "text": "Because of the handshake."},
+                {"question_id": q[1], "option": "A"},
+                {"question_id": q[2], "option": "B"},
+                {"question_id": q[3], "text": "Because of the handshake."},
             ],
         },
     ).json()
@@ -125,7 +127,9 @@ def test_diagnostic_pretest_never_schedules_reviews_and_marks_shown_concepts_kno
 
     status = {c["term"]: c["study_status"] for c in conn.get(f"/courses/{cid}/outline").json()["concepts"]}
     assert status == {"Shown": "known", "Missed": "not_studied", "Open": "not_studied"}  # open answer not graded yet
-    assert owner_api.get("/reviews/due", horizon_days=30).json()["items"] == []  # diagnostics never schedule
+    assert owner_api.get("/reviews/due", horizon_days=14).json()["items"] == []  # known: no early reviews
+    rare = owner_api.get("/reviews/due", horizon_days=30).json()["items"]
+    assert [i["term"] for i in rare] == ["Shown"]  # the first light check-up after 21 days
 
     open_attempt = next(i for i in conn.get(f"/quizzes/{qid}/results").json()["items"] if i["type"] == "open")
     conn.post(
@@ -144,9 +148,9 @@ def test_diagnostic_pretest_never_schedules_reviews_and_marks_shown_concepts_kno
     )
     status = {c["term"]: c["study_status"] for c in conn.get(f"/courses/{cid}/outline").json()["concepts"]}
     assert status["Open"] == "known" and status["Missed"] == "not_studied"
-    assert owner_api.get("/reviews/due", horizon_days=30).json()["items"] == []
+    assert owner_api.get("/reviews/due", horizon_days=14).json()["items"] == []
     cats = {i["term"]: i["category"] for i in conn.get("/plan").json()["items"]}
-    assert cats["Missed"] == "Learn next" and cats["Shown"] == "Practice"
+    assert cats["Missed"] == "Learn next" and "Shown" not in cats and "Open" not in cats  # known: background
 
 
 def test_new_material_is_learned_in_the_order_of_the_material(owner_api: Api, conn: ConnectorApi) -> None:

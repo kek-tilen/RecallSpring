@@ -53,14 +53,23 @@ Start of every study session in a course:
    plainly what is correct, what is wrong and what is missing, with page citations (feedback, not a grade; never
    rewrite their note). Then 2-3 short check questions (Bloom 1-2, create_questions +
    open_answer_form). If the learner says they already know a topic (e.g. from lectures), ask and use
-   mark_concepts_known. A pre-test only when the learner asks: create_quiz with mode="diagnostic" (it does not
-   affect reviews; concepts they show are marked known). RecallSpring refuses practice on unstudied concepts.
+   mark_concepts_known. RecallSpring refuses practice on unstudied concepts.
+   CHECK FIRST (optional, the learner's choice): when a new chapter or target starts and the learner may already
+   know some of it, mention once, briefly and gently, that they can check first: a chapter, or a bit of everything
+   for the target (or the course without one). Never insist; learning first stays the default. For a check use
+   get_course_outline's check_first (chapters[].check_concept_ids or everything.concept_ids) and create_quiz with
+   mode="diagnostic": per concept ask at its check.level, check.item "open" = one open question, "closed" = two
+   closed ones (multiple choice or true/false). A check never affects the practice ramp. After grading,
+   RecallSpring sorts each concept: green (known: keep it in the background, it gets rare reviews), yellow (explain
+   only the gaps from the feedback, then open_summary_form; the learner may write or skip), red (learn it first).
 4. Practice and simulations for studied material: create_quiz in the style of the exam profile (the past-paper /
    deeper share is in get_study_context), then open_quiz and wait. Bloom levels: with an exam profile follow its
    Bloom mix; without one (or for concepts it does not cover) use each concept's practice.next_level from
    get_course_outline. RecallSpring ramps 3 Apply -> 4 Analyze -> 5 Evaluate as final answers reach Solid, steps
    back after a 0-1 answer, and once 5 is solid suggests mixed levels (the least recently practised); a quiz mixes
-   concepts and levels rather than one level only. Single questions: create_questions +
+   concepts and levels rather than one level only. Never go above practice_limit.level (the learner's choice;
+   RecallSpring refuses higher levels). If practice_limit.warning is set, explain it once (the exam paper asks
+   for higher levels) and let the learner decide; they can keep the limit on the course page. Single questions: create_questions +
    open_answer_form. If your app cannot show RecallSpring's forms, these tools return a RecallSpring link instead:
    give it to the learner, wait until they say they answered, then call get_answer (or get_quiz_results). Only if
    the learner cannot use the link either, ask in chat and save with submit_chat_answer, copying their words
@@ -414,7 +423,9 @@ async def list_courses() -> str:
 @mcp.tool(annotations=READ)
 async def get_course_outline(course_id: str) -> str:
     """Topics, concepts (with linked source section IDs, review state and, for studied concepts, the Bloom level
-    to practise next: practice.next_level, phase ramp / consolidate / mixed, and why) and sources of one course."""
+    to practise next: practice.next_level, phase ramp / consolidate / mixed / limited, and why; check: the last
+    Check first result and how to check it), the practice_limit, check_first (chapters, a bit of everything, how)
+    and sources of one course."""
     return as_json(await get_client().get(f"/courses/{course_id}/outline"))
 
 
@@ -986,7 +997,8 @@ async def create_quiz(
     multiple-choice items (options A-H + correct_option; RecallSpring grades them) and open items (expected_points
     = private rubric; you grade them after submission). Follow the past-paper/deeper share from
     get_study_context and mark each item's style. mode="practice" needs studied concepts (RecallSpring refuses
-    otherwise); mode="diagnostic" is a pre-test only when the learner asks for one. Then show it with open_quiz."""
+    otherwise); mode="diagnostic" is Check first, only when the learner chooses it (see check_first in
+    get_course_outline). Bloom levels above the course's practice limit are refused. Then show it with open_quiz."""
     payload = {
         "course_id": course_id,
         "title": title,

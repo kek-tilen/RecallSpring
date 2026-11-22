@@ -1,7 +1,7 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ApiError } from "../api";
-import { BAND_LABEL, DIFFICULTY_SOURCE, STUDY_LABEL, gradeLabel } from "../format";
+import { BAND_LABEL, DIFFICULTY_SOURCE, STUDY_LABEL, gradeHelp, gradeLabel } from "../format";
 import type { Band, Progress, StudyStatus } from "../types";
 
 export function Card({ title, meta, children, tint, action, id }: {
@@ -130,9 +130,27 @@ export function Difficulty({ value, source }: { value: number; source?: string }
 export function GradeChip({ grade, status }: { grade: number | null | undefined; status?: string | null }) {
   const tone = grade === null || grade === undefined ? "chip" : grade >= 3 ? "chip good" : grade === 2 ? "chip warn" : "chip bad";
   return (
-    <span className={tone}>
-      {gradeLabel(grade)}
-      {status && status !== "final" && <span className="muted">· {status}</span>}
+    <span className="grade-chip">
+      <span className={tone}>
+        {gradeLabel(grade)}
+        {status && status !== "final" && <span className="muted">· {status}</span>}
+      </span>
+      <HelpTip text={gradeHelp(grade)} label="What does this grade mean?" />
+    </span>
+  );
+}
+
+/** A small "?" that explains something on hover or keyboard focus. */
+export function HelpTip({ text, label }: { text: string; label: string }) {
+  const id = useId();
+  return (
+    <span className="help-tip">
+      <button type="button" className="help-tip-btn" aria-label={label} aria-describedby={id}>
+        ?
+      </button>
+      <span role="tooltip" id={id} className="help-tip-text">
+        {text}
+      </span>
     </span>
   );
 }

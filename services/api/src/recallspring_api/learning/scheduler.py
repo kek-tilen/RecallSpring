@@ -1,4 +1,4 @@
-"""Deterministic review scheduler, policy ``rs-interval-v1`` (docs/05-LEARNING-ENGINE.md, ADR-003).
+"""Deterministic review scheduler, policy ``rs-interval-v2`` (docs/05-LEARNING-ENGINE.md, ADR-003).
 
 Pure functions only: no database, no clock, no model calls. The review state of a concept is always the
 result of replaying its evidence (effective assessments of attempts) and explicit deferrals in order, so
@@ -16,6 +16,9 @@ Rules
   existing earlier due date when early).
 * Certain grade <= 1: step 0, due the next local day; a lapse is counted after a success streak.
 * Deferral: due becomes ``max(due, until)``; the step is unchanged.
+* v2 (2026-11-22): a concept shown in Check first (``KnownFromCheck``) without any practice yet starts at step
+  ``CHECK_KNOWN_STEP`` with its first review after ``CHECK_KNOWN_DAYS`` days (rare reviews for what is already
+  known). With earlier practice evidence it changes nothing. v1 schedules are otherwise unchanged.
 """
 
 from __future__ import annotations
@@ -27,9 +30,11 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-POLICY_VERSION = "rs-interval-v1"
+POLICY_VERSION = "rs-interval-v2"
 INTERVALS: tuple[int, ...] = (1, 3, 7, 14, 30, 60, 120)
 MAX_STEP = len(INTERVALS) - 1
+CHECK_KNOWN_STEP = 3  # the next success moves on to 30 days
+CHECK_KNOWN_DAYS = 21
 
 Status = Literal["final", "provisional", "ungraded"]
 Confidence = Literal["low", "medium", "high"]
@@ -48,6 +53,14 @@ class Evidence:
     @property
     def certain(self) -> bool:
         return self.status == "final" and self.grade is not None and self.confidence != "low"
+
+
+@dataclass(frozen=True)
+class KnownFromCheck:
+    """The learner showed the concept in Check first (a diagnostic quiz)."""
+
+    occurred_at: datetime
+    quiz_id: uuid.UUID
 
 
 @dataclass(frozen=True)
@@ -102,7 +115,8 @@ def local_day_start(now: datetime, tz: ZoneInfo, days_ahead: int) -> datetime:
     return datetime.combine(local_date, time(0, 0), tzinfo=tz).astimezone(UTC)
 
 
-def _grade_text(grade: int | None) -> str:
+def grade_text(grade: int | None) -> str:
+    """A grade as shown everywhere: its meaning, then the number, e.g. "Solid (3/4)"."""
     return f"{GRADE_LABELS[grade]} ({grade}/4)" if grade is not None else "ungraded"
 
 
@@ -160,7 +174,7 @@ def apply_evidence(state: ReviewSchedule | None, ev: Evidence, tz: ZoneInfo) -> 
                 base,
                 reason=DueReason(
                     "early_no_promotion",
-                    f"Answered {_grade_text(grade)} before the review was due; the current interval is kept.",
+                    f"Answered {grade_text(grade)} before the review was due; the current interval is kept.",
                     None,
                     grade,
                     ev.attempt_id,
@@ -175,7 +189,7 @@ def apply_evidence(state: ReviewSchedule | None, ev: Evidence, tz: ZoneInfo) -> 
             consecutive_successes=state.consecutive_successes + 1,
             reason=DueReason(
                 "promoted",
-                f"Last review was {_grade_text(grade)}; next review in {days} days.",
+                f"Last review was {grade_text(grade)}; next review in {days} days.",
                 days,
                 grade,
                 ev.attempt_id,
@@ -193,7 +207,7 @@ def apply_evidence(state: ReviewSchedule | None, ev: Evidence, tz: ZoneInfo) -> 
             consecutive_successes=0,
             reason=DueReason(
                 "partial",
-                f"Last review was {_grade_text(grade)}; reviewing again in {days} days.",
+                f"Last review was {grade_text(grade)}; reviewing again in {days} days.",
                 days,
                 grade,
                 ev.attempt_id,
@@ -208,7 +222,26 @@ def apply_evidence(state: ReviewSchedule | None, ev: Evidence, tz: ZoneInfo) -> 
         consecutive_successes=0,
         lapse_count=state.lapse_count + (1 if lapsed else 0),
         reason=DueReason(
-            "lapse", f"Last review was {_grade_text(grade)}; reviewing again the next day.", 1, grade, ev.attempt_id
+            "lapse", f"Last review was {grade_text(grade)}; reviewing again the next day.", 1, grade, ev.attempt_id
+        ),
+    )
+
+
+def apply_known_from_check(state: ReviewSchedule | None, ev: KnownFromCheck, tz: ZoneInfo) -> ReviewSchedule:
+    if state is not None:
+        return state
+    at = _require_aware(ev.occurred_at)
+    return ReviewSchedule(
+        step=CHECK_KNOWN_STEP,
+        due_at=local_day_start(at, tz, CHECK_KNOWN_DAYS),
+        last_review_at=at,
+        consecutive_successes=1,
+        lapse_count=0,
+        evidence_count=1,
+        reason=DueReason(
+            "known_from_check",
+            f"You showed this in Check first; a light check-up in {CHECK_KNOWN_DAYS} days.",
+            CHECK_KNOWN_DAYS,
         ),
     )
 
@@ -233,15 +266,22 @@ def apply_deferral(state: ReviewSchedule | None, d: Deferral) -> ReviewSchedule 
     )
 
 
-def replay(events: Iterable[Evidence | Deferral], tz: ZoneInfo) -> ReviewSchedule | None:
+def replay(events: Iterable[Evidence | KnownFromCheck | Deferral], tz: ZoneInfo) -> ReviewSchedule | None:
     """Replay evidence and deferrals in chronological order (ties: evidence before deferral, then id)."""
 
-    def sort_key(e: Evidence | Deferral) -> tuple[datetime, int, str]:
+    def sort_key(e: Evidence | KnownFromCheck | Deferral) -> tuple[datetime, int, str]:
         if isinstance(e, Evidence):
             return (_require_aware(e.occurred_at), 0, str(e.attempt_id))
+        if isinstance(e, KnownFromCheck):
+            return (_require_aware(e.occurred_at), 0, str(e.quiz_id))
         return (_require_aware(e.occurred_at), 1, _require_aware(e.until).isoformat())
 
     state: ReviewSchedule | None = None
     for event in sorted(events, key=sort_key):
-        state = apply_evidence(state, event, tz) if isinstance(event, Evidence) else apply_deferral(state, event)
+        if isinstance(event, Evidence):
+            state = apply_evidence(state, event, tz)
+        elif isinstance(event, KnownFromCheck):
+            state = apply_known_from_check(state, event, tz)
+        else:
+            state = apply_deferral(state, event)
     return state

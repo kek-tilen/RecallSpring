@@ -25,7 +25,7 @@ from ..models import (
     User,
 )
 from ..schemas import QuizAnswer, QuizIn
-from . import assistants
+from . import assistants, check_first
 from .attempts import add_assessment, assessments_for, create_attempt
 from .events import learning_event
 from .learning import mark, require_studied
@@ -64,6 +64,7 @@ def create_quiz(db: Session, user: User, payload: QuizIn, provenance: dict[str, 
             raise not_found("Session")
     if payload.mode == "practice":  # learning first (ADR-006): no practice simulation on unstudied material
         require_studied(db, user.id, [cid for item in payload.items for cid in item.concept_ids])
+    check_first.require_within_limit(db, user.id, payload.course_id, [item.bloom_level for item in payload.items])
     now = clock.now()
     quiz = Quiz(
         user_id=user.id,
@@ -225,9 +226,11 @@ def submit(
                 raise ApiError(422, "invalid_option", "An answer selects an option that does not exist.")
             answered = option is not None and not answer.get("dont_know")
             answer_text = f"{option}) {keys[option]}" if answered else ""
+            guessing = answered and bool(answer.get("guessing"))
         else:
             answered = bool(text.strip()) and not answer.get("dont_know")
             answer_text = text if answered else ""
+            guessing = False  # only closed answers can be marked as a guess
         attempt = create_attempt(
             db,
             user=user,
@@ -241,6 +244,7 @@ def submit(
             request_id=request_id,
         )
         attempt.quiz_id = quiz.id
+        attempt.guessing = guessing
         if question.question_type == "mcq" and answered:
             attempt.selected_option = option
             correct = question.rubric.get("correct_option")
@@ -253,10 +257,14 @@ def submit(
                     "rubric_version": MCQ_RUBRIC,
                     "status": "final",
                     "grade": 3 if right else 0,
-                    "confidence": "medium" if right else "high",
-                    "feedback": f"Correct: {option}) {keys[option]}."
-                    if right
-                    else f"You chose {option}); the correct answer is {correct}) {keys[correct]}.",
+                    # A guess never lengthens a review interval (low confidence) and never counts as known.
+                    "confidence": "low" if guessing else ("medium" if right else "high"),
+                    "feedback": (
+                        f"Correct: {option}) {keys[option]}."
+                        if right
+                        else f"You chose {option}); the correct answer is {correct}) {keys[correct]}."
+                    )
+                    + (" You marked it as a guess, so it does not count as known." if guessing else ""),
                 },
                 evaluator_kind="deterministic",
                 provider=None,
@@ -284,28 +292,29 @@ def submit(
 
 
 def apply_diagnostic(db: Session, user: User, quiz: Quiz, request_id: str | None) -> list[dict[str, Any]]:
-    """A concept shown in a diagnostic pre-test (every item on it graded final, not low confidence, grade >= 3)
-    is marked *known*, so its learning step can be shortened; everything else stays to be learned. Concepts with
-    ungraded items wait. Called after submission and after each grade."""
+    """Check first (services/check_first.py): a concept shown in the check (at least one full green) is marked
+    *known* and gets rare reviews; partly shown and not shown concepts stay to be learned. Concepts with an open
+    answer still to grade wait. Called after submission and after each grade."""
     if quiz.mode != "diagnostic":
         return []
-    attempts = {a.question_id: a for a in db.scalars(select(Attempt).where(Attempt.quiz_id == quiz.id))}
-    verdict: dict[uuid.UUID, str] = {}  # "yes" | "no" | "pending"
-    for _, question in _items(db, quiz):
-        attempt = attempts.get(question.id)
-        eff = effective_assessment(assessments_for(db, attempt.id)) if attempt else None
-        if attempt is not None and eff is None:
-            outcome = "pending"
-        elif eff is not None and eff.status == "final" and eff.confidence != "low" and (eff.grade or 0) >= 3:
-            outcome = "yes"
-        else:
-            outcome = "no"
-        for concept_id in concept_ids_for_question(db, question.id):
-            pair = (verdict.get(concept_id, "yes"), outcome)
-            verdict[concept_id] = "no" if "no" in pair else ("pending" if "pending" in pair else "yes")
-    known_ids = [cid for cid, v in verdict.items() if v == "yes"]
+    concept_ids = list(
+        dict.fromkeys(cid for _, question in _items(db, quiz) for cid in concept_ids_for_question(db, question.id))
+    )
+    shown = check_first.results(db, user.id, concept_ids, quiz.id)
+    known_ids = [cid for cid, r in shown.items() if r["result"] == "green"]
     concepts = list(db.scalars(select(Concept).where(Concept.id.in_(known_ids)))) if known_ids else []
-    return mark(db, user, concepts, "known", "diagnostic", request_id)
+    marked = mark(db, user, concepts, "known", "diagnostic", request_id)
+    # A concept only marked "known" (never studied in a session) that the check did not show comes back to the
+    # front: it is learned first again. Studied concepts stay studied and get practice instead.
+    missed = [cid for cid, r in shown.items() if r["result"] in ("yellow", "red")]
+    reopen = (
+        list(db.scalars(select(Concept).where(Concept.id.in_(missed), Concept.study_status == "known")))
+        if missed
+        else []
+    )
+    marked += mark(db, user, reopen, "not_studied", "diagnostic", request_id)
+    recompute(db, user, concept_ids, clock.now())
+    return marked
 
 
 def results_view(db: Session, quiz: Quiz, *, for_learner: bool = False) -> dict[str, Any]:
@@ -342,6 +351,7 @@ def results_view(db: Session, quiz: Quiz, *, for_learner: bool = False) -> dict[
             "earned": points,
             "answer": attempt.answer_text if attempt else None,
             "kind": attempt.kind if attempt else None,
+            "guessing": bool(attempt and attempt.guessing),
             "grade": eff.grade if eff else None,
             "assessment_status": eff.status if eff else None,
             "feedback": eff.feedback if eff else None,

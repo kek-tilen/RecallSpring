@@ -77,7 +77,7 @@ from ..schemas import (
     TargetProfileIn,
     TargetUpdateIn,
 )
-from ..services import assistants, bloom, focus, overview, readiness, week
+from ..services import assistants, bloom, check_first, focus, overview, readiness, week
 from ..services import attempts as attempt_svc
 from ..services import folders as folder_svc
 from ..services import interests as interest_svc
@@ -196,11 +196,16 @@ def outline(course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session
             select(Concept).where(Concept.course_id == course_id, Concept.deleted_at.is_(None)).order_by(Concept.term)
         )
     )
-    # The next practice level per concept (3 → 4 → 5, then mixed; services/bloom.py), only for studied concepts.
-    levels = bloom.suggestions(db, ctx.user.id, [c.id for c in rows])
+    # The next practice level per concept (3 → 4 → 5, then mixed; services/bloom.py), only for studied concepts,
+    # never above the learner's practice limit; and what Check first would ask (services/check_first.py).
+    today = _today(ctx)
+    levels = bloom.suggestions(db, ctx.user.id, [c.id for c in rows], check_first.ceiling(course))
+    states = {c.id: db.get(ReviewState, (ctx.user.id, c.id)) for c in rows}
+    statuses = {c.id: effective_status(c, states[c.id] is not None) for c in rows}
+    check = check_first.plan(db, course, rows, statuses, levels, today)
     for c in rows:
-        state = db.get(ReviewState, (ctx.user.id, c.id))
-        status = effective_status(c, state is not None)
+        state = states[c.id]
+        status = statuses[c.id]
         links = [str(s) for s in db.scalars(select(ConceptSource.section_id).where(ConceptSource.concept_id == c.id))]
         concepts.append(
             {
@@ -220,6 +225,7 @@ def outline(course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session
                     "evidence_count": state.evidence_count,
                 },
                 "practice": None if status == "not_studied" else levels[c.id],
+                "check": check["concepts"][c.id],
             }
         )
     folder_tree = folder_svc.tree(db, ctx.user.id)
@@ -253,6 +259,8 @@ def outline(course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session
             {"id": str(t.id), "title": t.title, "parent_id": str(t.parent_id) if t.parent_id else None} for t in topics
         ],
         "concepts": concepts,
+        "practice_limit": check_first.practice_limit(db, course, today),
+        "check_first": {k: check[k] for k in ("how", "chapters", "everything", "closed_share")},
         "sources": sources,
         "folders": [
             folder_tree.path(f.id)
@@ -391,6 +399,9 @@ def create_questions(
         return replay
     provenance = assistants.provenance(ctx.client, ctx.model, payload.model_name)
     require_studied(db, ctx.user.id, [cid for item in payload.questions for cid in item.concept_ids])
+    check_first.require_within_limit(
+        db, ctx.user.id, payload.course_id, [item.bloom_level for item in payload.questions]
+    )
     created = []
     for item in payload.questions:
         _course_concepts(db, ctx.user.id, payload.course_id, item.concept_ids)

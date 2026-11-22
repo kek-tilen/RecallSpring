@@ -105,6 +105,31 @@ export interface ConceptRow {
   difficulty_source: string;
   review: ReviewInfo | null;
   sections: SectionRef[];
+  check?: CheckResult | null;
+}
+
+/** The latest Check first result of a concept (services/check_first.py). */
+export interface CheckResult {
+  result: "green" | "yellow" | "red" | "pending";
+  label: string;
+  why: string;
+  greens: number;
+  checked_at: string | null;
+  quiz_id: string;
+}
+
+export interface Chapter {
+  key: string;
+  title: string;
+  concept_ids: string[];
+}
+
+export interface PracticeLimit {
+  level: number;
+  label: string;
+  set_by_learner: boolean;
+  exam_profile_above: { target_id: string; target: string; share: number; confirmed: boolean } | null;
+  warning: string | null;
 }
 
 export interface TargetProfile {
@@ -216,6 +241,8 @@ export interface CourseOverview {
   targets: Target[];
   progress: Progress;
   concepts: ConceptRow[];
+  chapters?: Chapter[];
+  practice_limit?: PracticeLimit;
   sources: Source[];
   notes: number;
   quizzes: QuizSummary[];

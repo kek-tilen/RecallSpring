@@ -78,7 +78,7 @@ describe("small helpers", () => {
 
   it("labels grades and graders honestly", () => {
     expect(gradeLabel(null)).toBe("Not graded");
-    expect(gradeLabel(3)).toBe("3/4 · Solid");
+    expect(gradeLabel(3)).toBe("Solid (3/4)");
     expect(gradedBy("ai")).toBe("Assistant");
     expect(gradedBy("ai", { name: "Codex", model: "gpt-5.5-codex" })).toBe("Codex · gpt-5.5-codex");
     expect(gradedBy("ai", { name: "Claude", model: null })).toBe("Claude");

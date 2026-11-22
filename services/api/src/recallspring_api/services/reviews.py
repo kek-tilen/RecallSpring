@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from ..learning.scheduler import Deferral, Evidence, ReviewSchedule, local_day_start, replay
+from ..learning.scheduler import Deferral, Evidence, KnownFromCheck, ReviewSchedule, local_day_start, replay
 from ..models import Assessment, Attempt, Concept, QuestionConcept, Quiz, ReviewDeferral, ReviewState, User
 
 
@@ -29,7 +29,9 @@ def concept_ids_for_question(db: Session, question_id: uuid.UUID) -> list[uuid.U
     return list(db.scalars(select(QuestionConcept.concept_id).where(QuestionConcept.question_id == question_id)))
 
 
-def _evidence_for_concept(db: Session, user_id: uuid.UUID, concept_id: uuid.UUID) -> list[Evidence | Deferral]:
+def _evidence_for_concept(
+    db: Session, user_id: uuid.UUID, concept_id: uuid.UUID
+) -> list[Evidence | KnownFromCheck | Deferral]:
     rows = db.execute(
         select(Attempt, Assessment)
         .join(QuestionConcept, QuestionConcept.question_id == Attempt.question_id)
@@ -44,7 +46,7 @@ def _evidence_for_concept(db: Session, user_id: uuid.UUID, concept_id: uuid.UUID
     for attempt, assessment in rows:
         by_attempt[attempt.id] = (attempt, grouped[attempt.id])
         grouped[attempt.id].append(assessment)
-    events: list[Evidence | Deferral] = []
+    events: list[Evidence | KnownFromCheck | Deferral] = []
     for attempt, assessments in by_attempt.values():
         eff = effective_assessment(assessments)
         if eff is not None:
@@ -53,6 +55,11 @@ def _evidence_for_concept(db: Session, user_id: uuid.UUID, concept_id: uuid.UUID
         select(ReviewDeferral).where(ReviewDeferral.user_id == user_id, ReviewDeferral.concept_id == concept_id)
     )
     events.extend(Deferral(d.deferred_at, d.until) for d in deferrals)
+    from . import check_first  # imports this module
+
+    if (check := check_first.results(db, user_id, [concept_id]).get(concept_id)) and check["result"] == "green":
+        # Shown in Check first: rare reviews only (scheduler v2); diagnostic answers stay out of the evidence.
+        events.append(KnownFromCheck(datetime.fromisoformat(check["checked_at"]), uuid.UUID(check["quiz_id"])))
     return events
 
 

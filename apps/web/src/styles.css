@@ -4113,3 +4113,89 @@ math mtable mtd {
   padding: 0;
   margin-bottom: 4px;
 }
+
+/* "I'm guessing" on closed questions: quiet until pressed (a guess never counts as known). */
+.guess-toggle {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.guess-toggle:hover:not(:disabled) { background: var(--surface); color: var(--ink); }
+.guess-toggle[aria-pressed="true"] { border-style: solid; border-color: var(--primary); color: var(--primary); font-weight: 600; }
+.guess-toggle:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Check first on the course page: offered quietly, folded by default. */
+.check-first > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.9rem;
+  width: fit-content;
+}
+.check-first > summary:hover { color: var(--primary); }
+.check-first[open] {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card, 12px);
+  padding: 12px 14px;
+}
+.check-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.check-row > span { flex: 1 1 280px; min-width: 0; }
+.check-row > button { flex: none; }
+.check-ask { padding-left: 12px; border-left: 2px solid var(--border); }
+
+/* A grade with its small "?" explanation (hover or keyboard focus). */
+.grade-chip { display: inline-flex; align-items: center; gap: 4px; }
+.help-tip { position: relative; display: inline-flex; }
+.help-tip-btn {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+.help-tip-btn:hover, .help-tip-btn:focus-visible { color: var(--primary); border-color: var(--primary); }
+.help-tip-text {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  z-index: 30;
+  width: max-content;
+  max-width: min(320px, 80vw);
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s;
+  pointer-events: none;
+}
+.help-tip:hover .help-tip-text, .help-tip-btn:focus-visible + .help-tip-text { visibility: visible; opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .help-tip-text { transition: none; } }

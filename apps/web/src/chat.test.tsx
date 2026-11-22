@@ -153,7 +153,7 @@ describe("ChatGPT using RecallSpring in Chat", () => {
     expect(await screen.findByLabelText("Your answer")).toBeTruthy();
     expect(screen.getByLabelText("Your answer").textContent).toBe("V citoplazmi.");
     expect(screen.getByText("Where does glycolysis run?")).toBeTruthy();
-    expect(document.querySelector(".chat-form-saved .chip")?.textContent).toMatch(/^3\/4/);
+    expect(document.querySelector(".chat-form-saved .chip")?.textContent).toMatch(/^Solid \(3\/4\)/);
     expect(screen.queryByRole("textbox", { name: /your answer/i })).toBeNull();
     expect(screen.queryByText("(shown earlier)")).toBeNull();
   });

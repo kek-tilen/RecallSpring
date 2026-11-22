@@ -63,7 +63,8 @@ def require_studied(db: Session, user_id: uuid.UUID, concept_ids: list[uuid.UUID
 def mark(
     db: Session, user: User, concepts: list[Concept], status: str, source: str, request_id: str | None
 ) -> list[dict[str, Any]]:
-    """``studied`` always applies; ``known`` only upgrades concepts that were not studied yet."""
+    """``studied`` always applies; ``known`` only upgrades concepts that were not studied yet; ``not_studied``
+    (Check first did not show a concept that was only marked known) puts it back to be learned."""
     now = clock.now()
     out = []
     for concept in concepts:

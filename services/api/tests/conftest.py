@@ -164,6 +164,9 @@ class Api:
     def patch(self, path: str, json: Any = None, key: uuid.UUID | str | None = None) -> Any:
         return self.client.patch(f"/api/v1{path}", json=json, headers=self.headers(key))
 
+    def put(self, path: str, json: Any = None, key: uuid.UUID | str | None = None) -> Any:
+        return self.client.put(f"/api/v1{path}", json=json, headers=self.headers(key))
+
     def get(self, path: str, **params: Any) -> Any:
         return self.client.get(f"/api/v1{path}", params=params)
 

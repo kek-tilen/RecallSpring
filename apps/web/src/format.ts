@@ -85,8 +85,26 @@ export const BAND_LABEL: Record<Band, string> = {
 
 export const GRADE_LABEL = ["No evidence", "Fragile", "Partial", "Solid", "Transfer"] as const;
 
+/** What each grade means (the shared scale every assistant grades by). */
+export const GRADE_MEANING = [
+  "blank, “I don't know”, off-topic, or the core idea is wrong.",
+  "a relevant term or fragment, but most expected points are missing or wrong.",
+  "the core idea is right, but an important step or expected point is missing or wrong.",
+  "everything the question asks for is correct: you know it.",
+  "correct and beyond the material: applied to a new case, an own example or a link the material does not make.",
+] as const;
+
+/** The explanation behind the small "?" next to a grade. */
+export function gradeHelp(grade: number | null | undefined): string {
+  const scale = "Scale 0-4: No evidence, Fragile, Partial, Solid, Transfer.";
+  const close = "A correct multiple-choice or true/false answer is Solid (3/4); Transfer needs an open answer. "
+    + "The grade sets your next review; it is not your points.";
+  if (grade === null || grade === undefined) return `Not graded yet. ${scale} ${close}`;
+  return `${gradeLabel(grade)}: ${GRADE_MEANING[grade] ?? ""} ${scale} ${close}`;
+}
+
 export function gradeLabel(grade: number | null | undefined): string {
-  return grade === null || grade === undefined ? "Not graded" : `${grade}/4 · ${GRADE_LABEL[grade] ?? ""}`;
+  return grade === null || grade === undefined ? "Not graded" : `${GRADE_LABEL[grade] ?? "Grade"} (${grade}/4)`;
 }
 
 /** "Codex · gpt-5.5-codex" when the server says who graded; otherwise from the evaluator kind (older views). */

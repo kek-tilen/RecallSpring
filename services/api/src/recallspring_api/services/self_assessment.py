@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..errors import ApiError
+from ..learning.scheduler import grade_text
 from ..models import Assessment, Attempt, Course, Question, User
 from . import attempts as attempt_svc
 from .events import audit, learning_event
@@ -108,7 +109,7 @@ def record(
     met = [p for p, s in zip(points, states, strict=True) if s == "met"]
     gaps = [("Partly: " + p) if s == "partial" else p for p, s in zip(points, states, strict=True) if s != "met"]
     feedback = f"Self-assessed: {len(met)} of {len(points)} expected points met"
-    feedback += f" (suggested {suggested}/4, chosen {grade}/4)." if grade != suggested else "."
+    feedback += f" (suggested {grade_text(suggested)}, chosen {grade_text(grade)})." if grade != suggested else "."
     if reason:
         feedback += f"\nYour reason: {reason}"
     row = attempt_svc.add_assessment(

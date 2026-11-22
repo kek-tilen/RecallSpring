@@ -53,7 +53,7 @@ def test_the_learner_grades_their_answer_and_it_stays_provisional(owner_api: Api
     graded = [h for h in concept["attempts"] if h["grade"] is not None]
     assert graded[0]["graded_by"] == "self" and graded[0]["grader"] == {"name": "You (self-assessed)", "model": None}
     history = [h for h in owner_api.get("/history").json() if h["type"] == "assessment.self_assessed"]
-    assert history[0]["detail"] == "2/4 (provisional; suggested 2/4), to be checked"
+    assert history[0]["detail"] == "Partial (2/4) (provisional; suggested Partial (2/4)), to be checked"
 
 
 def test_four_needs_a_reason_and_a_changed_grade_is_noted(owner_api: Api, frozen: FrozenClock) -> None:
@@ -64,7 +64,7 @@ def test_four_needs_a_reason_and_a_changed_grade_is_noted(owner_api: Api, frozen
     )
     own = r.json()["assessments"][0]
     assert own["grade"] == 4
-    assert own["feedback"].startswith("Self-assessed: 2 of 2 expected points met (suggested 3/4, chosen 4/4).")
+    assert own["feedback"].startswith("Self-assessed: 2 of 2 expected points met (suggested Solid (3/4), chosen Transfer (4/4)).")
     assert "why the cycle needs oxygen" in own["feedback"]
 
 

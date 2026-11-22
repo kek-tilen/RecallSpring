@@ -7,7 +7,7 @@ import { CopyButton } from "./Copy";
 import { useAssistant } from "../assistant";
 import { Confirm, ErrorNote } from "./ui";
 
-type Answer = { option?: string | null; text?: string | null; dont_know?: boolean };
+type Answer = { option?: string | null; text?: string | null; dont_know?: boolean; guessing?: boolean };
 
 export function gradingPrompt(quiz: { title: string; quiz_id: string }): string {
   return `I solved the simulation "${quiz.title}" in RecallSpring (ID ${quiz.quiz_id}). Please grade my open answers and tell me what to repeat.`;
@@ -176,14 +176,30 @@ export function QuizForm({ quiz }: { quiz: QuizView }) {
                 />
               </label>
             )}
-            <label className="row small muted">
-              <input
-                type="checkbox"
-                checked={Boolean(a.dont_know)}
-                onChange={(e) => change(item.question_id, { dont_know: e.target.checked, ...(e.target.checked ? { option: null } : {}) })}
-              />
-              I don't know
-            </label>
+            <div className="row" style={{ gap: 14, flexWrap: "wrap" }}>
+              <label className="row small muted">
+                <input
+                  type="checkbox"
+                  checked={Boolean(a.dont_know)}
+                  onChange={(e) =>
+                    change(item.question_id, { dont_know: e.target.checked, ...(e.target.checked ? { option: null, guessing: false } : {}) })
+                  }
+                />
+                I don't know
+              </label>
+              {item.type === "mcq" && (
+                <button
+                  type="button"
+                  className="guess-toggle"
+                  aria-pressed={Boolean(a.guessing)}
+                  disabled={a.dont_know}
+                  title="A guess never counts as known, even when it is right"
+                  onClick={() => change(item.question_id, { guessing: !a.guessing })}
+                >
+                  I'm guessing
+                </button>
+              )}
+            </div>
           </div>
         );
       })}

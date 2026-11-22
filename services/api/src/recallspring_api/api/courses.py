@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -9,14 +10,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import clock
 from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import not_found
 from ..models import Concept, ConceptSource, Course, SourceSection, SyllabusItem
 from ..schemas import ConceptIn, ConceptOut, CourseIn, CourseOut, SyllabusItemIn, SyllabusItemOut
-from ..services import course_delete
+from ..services import check_first, course_delete
 from ..services.courses import ensure_new_title
-from ..services.events import learning_event
+from ..services.events import audit, learning_event
 from ..services.ownership import owned
 from ..services.sources import sections_in_course
 
@@ -198,3 +200,40 @@ def create_concept(
     db.flush()
     db.refresh(concept)
     return commit_with_response(db, ctx, payload, 201, concept_view(db, concept))
+
+
+class PracticeLimitIn(BaseModel):
+    level: int | None = Field(default=None, ge=2, le=5, description="highest Bloom level to practise; null = 5")
+    keep_despite_exam: bool = Field(
+        default=False, description="the learner keeps the limit although an exam profile asks for higher levels"
+    )
+
+
+@router.put("/courses/{course_id}/practice-limit")
+def set_practice_limit(
+    course_id: uuid.UUID, payload: PracticeLimitIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """The learner's practice limit (Bloom 2-5) for one course; it caps practice, simulations and Check first."""
+    key = {"practice_limit": str(course_id), **payload.model_dump()}
+    if replay := replay_if_seen(db, ctx, key):
+        return replay
+    course = owned(db, Course, course_id, ctx.user.id)
+    level = None if payload.level in (None, 5) else payload.level
+    before = course.bloom_ceiling
+    course.bloom_ceiling = level
+    if payload.keep_despite_exam:
+        course.bloom_ceiling_confirmed_at = clock.now()
+    elif level != before:
+        course.bloom_ceiling_confirmed_at = None  # a new limit is checked against the exam profile again
+    audit(
+        db,
+        actor_id=ctx.user.id,
+        action="course.practice_limit",
+        target_type="course",
+        target_id=course.id,
+        details={"from": before, "to": level, "kept_despite_exam": payload.keep_despite_exam},
+        request_id=ctx.request_id,
+    )
+    db.flush()
+    today = clock.now().astimezone(ZoneInfo(ctx.user.timezone)).date()
+    return commit_with_response(db, ctx, key, 200, check_first.practice_limit(db, course, today))

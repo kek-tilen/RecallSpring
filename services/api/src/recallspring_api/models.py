@@ -178,6 +178,10 @@ class Course(Base):
     color: Mapped[str | None] = mapped_column(String(20))
     # The learner chose to concentrate on this course or interest until this day (inclusive); at most one at a time.
     focus_until: Mapped[date | None] = mapped_column(Date)
+    # Practice limit (migration 0023): the highest Bloom level (2-5) the learner wants; NULL means 5. Confirmed when
+    # the learner kept it although an exam profile of the course asks for higher levels.
+    bloom_ceiling: Mapped[int | None] = mapped_column(SmallInteger)
+    bloom_ceiling_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
@@ -189,6 +193,7 @@ class Course(Base):
         CheckConstraint(
             "color IS NULL OR color IN ('blue','orange','aqua','yellow','magenta','green','violet','red')", name="color"
         ),
+        CheckConstraint("bloom_ceiling IS NULL OR bloom_ceiling BETWEEN 2 AND 5", name="bloom_ceiling"),
     )
 
 
@@ -314,6 +319,8 @@ class Attempt(Base):
     session_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("study_sessions.id"))
     quiz_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("quizzes.id"), index=True)
     selected_option: Mapped[str | None] = mapped_column(String(10))
+    # The learner marked a closed answer as a guess (migration 0023): it never counts as known.
+    guessing: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
     client_request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     answer_text: Mapped[str] = mapped_column(Text, nullable=False)

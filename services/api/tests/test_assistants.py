@@ -65,7 +65,7 @@ def test_a_codex_token_is_its_own_and_labels_its_grades(owner_api: Api, frozen: 
     assert graded[0]["graded_by"] == "ai" and graded[0]["grader"] == {"name": "Codex", "model": "gpt-5.5-codex"}
 
     history = [h for h in owner_api.get("/history").json() if h["type"] == "assessment.recorded"]
-    assert history[0]["detail"] == "3/4 (final) by Codex (gpt-5.5-codex)"
+    assert history[0]["detail"] == "Solid (3/4) (final) by Codex (gpt-5.5-codex)"
 
     tokens = owner_api.get("/settings/connector").json()["tokens"]
     assert {t["client"] for t in tokens} == {"claude", "codex"}
@@ -132,4 +132,4 @@ def test_an_antigravity_token_labels_its_grades(owner_api: Api, frozen: FrozenCl
     graded = [h for h in concept["attempts"] if h["grade"] is not None]
     assert graded[0]["grader"] == {"name": "Antigravity", "model": "gemini-3-pro"}
     history = [h for h in owner_api.get("/history").json() if h["type"] == "assessment.recorded"]
-    assert history[0]["detail"] == "3/4 (final) by Antigravity (gemini-3-pro)"
+    assert history[0]["detail"] == "Solid (3/4) (final) by Antigravity (gemini-3-pro)"

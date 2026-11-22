@@ -45,6 +45,8 @@ worked out without any AI.
 
 - **Learn first, then practise.** The assistant teaches from your material in short chunks, with page citations. You
   summarise in your own words, and only then come the questions. Practice on material you have not studied is refused.
+- **Check first, if you like.** Already know part of it? A short check per chapter, or a bit of everything for the
+  midterm, puts what you know in the background and brings the rest forward. A guess never counts as known.
 - **Built on Bloom's taxonomy.** Reading and your own notes come first (remember, understand). Practice then climbs
   from 3 Apply to 4 Analyze to 5 Evaluate as your answers become solid, steps back after a weak answer, and mixes the
   levels once you reach the top. RecallSpring works out the next level from your grades, without a model call.

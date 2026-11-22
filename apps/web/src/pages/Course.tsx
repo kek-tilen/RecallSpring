@@ -6,8 +6,9 @@ import { get } from "../api";
 import { Async, BandChip, BandMeter, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip, StudyMeter } from "../components/ui";
 import { CourseDialog, CourseDot, FocusControl, groupPath } from "../components/organise";
 import { TargetDialog } from "../components/TargetDialog";
+import { CheckChip, CheckFirstPanel, PracticeLimitControl } from "../components/CheckFirst";
 import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
-import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, gradedBy, plural, relativeDay } from "../format";
+import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, gradeLabel, gradedBy, plural, relativeDay } from "../format";
 import { useCourseOverview, useGroups } from "../queries";
 import type { AttemptDetail, AttemptRow, ConceptRow, CourseOverview, StudyStatus, Target, TargetProfile } from "../types";
 import { NewNoteButton, NoteList } from "./Notes";
@@ -105,6 +106,7 @@ export function CoursePage() {
                     <StudyMeter progress={o.progress} />
                     <BandMeter progress={o.progress} />
                     <p className="tiny muted">{o.note}</p>
+                    {o.practice_limit && <PracticeLimitControl courseId={o.course.id} limit={o.practice_limit} />}
                   </div>
                 </Card>
               </div>
@@ -162,6 +164,7 @@ function ConceptsTab({ o }: { o: CourseOverview }) {
   }
   return (
     <div className="stack">
+      <CheckFirstPanel o={o} />
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div className="row" role="group" aria-label="Filter by study status">
           {STUDY_FILTERS.map((f) => (
@@ -181,6 +184,7 @@ function ConceptsTab({ o }: { o: CourseOverview }) {
             <tr>
               <th>Concept</th>
               <th>Study</th>
+              <th>Check first</th>
               <th>Knowledge</th>
               <th>Difficulty</th>
               <th>Next review</th>
@@ -209,6 +213,9 @@ function ConceptTr({ c }: { c: ConceptRow }) {
       </td>
       <td>
         <StudyChip status={c.study_status} />
+      </td>
+      <td>
+        <CheckChip check={c.check} />
       </td>
       <td>
         <BandChip band={c.band} />
@@ -502,7 +509,7 @@ function AnswerDetail({ row }: { row: AttemptRow }) {
                 <ul>
                   {earlier.map((s) => (
                     <li key={s.id}>
-                      {dateTime(s.created_at)} · {s.grade ?? "ungraded"}/4 · {s.status}
+                      {dateTime(s.created_at)} · {gradeLabel(s.grade)} · {s.status}
                       {s.feedback && <div className="pre muted">{s.feedback}</div>}
                     </li>
                   ))}

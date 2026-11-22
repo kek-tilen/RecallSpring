@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from ..ai import siwc
 from ..deps import Ctx, WriteCtx
 from ..errors import ApiError
+from ..learning.scheduler import grade_text
 from ..models import AiConversation, Concept, Course, Question, StudyTarget
 from ..schemas import (
     AssessmentBatchIn,
@@ -96,7 +97,13 @@ record_assessments for the open answers.
 - Bloom levels for practice: with an exam profile follow its Bloom mix; without one (or for concepts it does not \
 cover) use each concept's practice.next_level from get_course_outline. RecallSpring ramps 3 Apply, 4 Analyze, \
 5 Evaluate as final answers reach Solid, steps back after a 0-1 answer, and once 5 is solid suggests mixed levels; \
-mix concepts and levels in a quiz rather than one level only.
+mix concepts and levels in a quiz rather than one level only. Never go above practice_limit.level (the learner's \
+choice); if practice_limit.warning is set, explain it once and let the learner decide.
+- Check first (optional, the learner's choice): when a new chapter or target starts, mention once, gently, that \
+they can check what they already know (a chapter, or a bit of everything for the target). Never insist. Use \
+check_first from get_course_outline and create_quiz with mode diagnostic: each concept at its check.level, "open" = \
+one open question, "closed" = two closed ones. Afterwards green = known (background), yellow = explain only the \
+gaps, then the summary form (the learner may skip), red = learn it first.
 - AI grades are study feedback, not validated scores; never present them as official marks.
 - Messages starting with [RecallSpring] were sent by RecallSpring for the learner after they used a form; keep \
 replying in the language the learner uses.
@@ -328,7 +335,11 @@ def _n(value: Any, key: str) -> int:
 def _grade(result: Any) -> str:
     latest = (result.get("assessments") or [{}])[-1] if isinstance(result, dict) else {}
     grade = latest.get("grade")
-    return f"Saved feedback: {grade}/4 ({latest.get('status')})" if grade is not None else "Saved feedback (ungraded)"
+    return (
+        f"Saved feedback: {grade_text(grade)} ({latest.get('status')})"
+        if grade is not None
+        else "Saved feedback (ungraded)"
+    )
 
 
 def _plural(n: int, word: str) -> str:
@@ -481,7 +492,7 @@ _TOOLS = [
     Tool(
         "create_quiz",
         "Make an exam simulation (multiple-choice and open items) in the style of the exam profile; mode "
-        "diagnostic for a pre-test. The learner gets a link to take it in RecallSpring.",
+        "diagnostic for Check first. The learner gets a link to take it in RecallSpring.",
         QuizIn,
         _create_quiz,
         lambda a, r: f"Made a simulation: {r.get('title')}" if isinstance(r, dict) else "Made a simulation",
