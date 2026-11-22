@@ -66,7 +66,7 @@ function StudyForm({ initial }: { initial: StudySettings }) {
       </fieldset>
       <label className="field">
         Maintenance share: {maintenance}%
-        <span className="hint">Time kept for material of a passed kolokvij so it is not forgotten.</span>
+        <span className="hint">Time kept for material of a passed midterm so it is not forgotten.</span>
         <input type="range" min={0} max={50} value={maintenance} onChange={(e) => setMaintenance(Number(e.target.value))} />
       </label>
       <label className="field">

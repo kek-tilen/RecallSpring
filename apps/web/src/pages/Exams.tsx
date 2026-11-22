@@ -255,7 +255,7 @@ export function ExamsPage() {
     <div className="page">
       <PageHead
         title="Exams"
-        sub="Every kolokvij and exam on one timeline. Drag one to move its date (or focus it and use the arrow keys), click it to edit."
+        sub="Every midterm and exam on one timeline. Drag one to move its date (or focus it and use the arrow keys), click it to edit."
       >
         <button type="button" className="btn primary" onClick={() => setAdding(true)} disabled={!courses.data?.length}>
           Add exam
@@ -295,7 +295,7 @@ export function ExamsPage() {
               <DuplicatesPanel targets={all.filter((t) => !archivedCourses.has(t.course_id))} />
               {visible.length === 0 ? (
                 <Empty title="No exams yet">
-                  Add one here, or plan your semester in a planning chat with your assistant (see the Guide) to set up all your kolokviji at once.
+                  Add one here, or plan your semester in a planning chat with your assistant (see the Guide) to set up all your midterms and exams at once.
                 </Empty>
               ) : (
                 <Timeline targets={visible} onMove={(t, to) => move.mutate({ target: t, to, from: t.due_date })} onEdit={setEditing} />

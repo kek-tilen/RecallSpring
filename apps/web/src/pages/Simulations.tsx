@@ -21,7 +21,7 @@ function Score({ q }: { q: Pick<QuizSummary, "status" | "earned_points" | "max_p
 
 export function QuizTable({ quizzes, titles }: { quizzes: QuizSummary[]; titles?: Record<string, string> }) {
   if (quizzes.length === 0) {
-    return <Empty title="No simulations yet">Ask your assistant for a kolokvij simulation once you have studied the material.</Empty>;
+    return <Empty title="No simulations yet">Ask your assistant for a midterm simulation once you have studied the material.</Empty>;
   }
   return (
     <div className="table-wrap">
@@ -65,7 +65,7 @@ export function SimulationsPage() {
     <div className="page">
       <PageHead
         title="Simulations"
-        sub="Kolokvij simulations. Answer open ones here or in your assistant's form; multiple-choice is graded from the answer key, open answers by your assistant."
+        sub="Midterm and exam simulations. Answer open ones here or in your assistant's form; multiple-choice is graded from the answer key, open answers by your assistant."
       />
       <Async q={q}>{(quizzes) => <QuizTable quizzes={quizzes} titles={courseTitles(courses.data)} />}</Async>
     </div>

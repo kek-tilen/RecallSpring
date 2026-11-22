@@ -34,7 +34,7 @@ function toScope(rows: MaterialRow[], kept: ScopeItem[]) {
   return [...material, ...others];
 }
 
-/** Create or edit an exam / kolokvij: date, status and result, the scope in the learner's words and its mapping. */
+/** Create or edit an exam / midterm (kind "kolokvij"): date, status and result, the scope in the learner's words and its mapping. */
 export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
   target?: Target & { course_id?: string };
   courseId?: string;
@@ -49,7 +49,7 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
   const chosenCourse = course || courseList?.[0]?.id || "";
   const sources = useSources(chosenCourse || undefined);
   const refresh = useInvalidateOrganisation();
-  const [name, setName] = useState(target?.name ?? "1. kolokvij");
+  const [name, setName] = useState(target?.name ?? "Midterm 1");
   const [kind, setKind] = useState(target?.kind ?? "kolokvij");
   const [due, setDue] = useState(target?.due_date ?? "");
   const [status, setStatus] = useState(target?.status ?? "upcoming");
@@ -138,7 +138,7 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
   }
 
   return (
-    <Modal open={open} title={target ? `Edit ${target.name}` : "Add an exam or kolokvij"} onClose={onClose} wide>
+    <Modal open={open} title={target ? `Edit ${target.name}` : "Add an exam or midterm"} onClose={onClose} wide>
       <form className="stack" onSubmit={submit}>
         {!target && (
           <label className="field">
@@ -160,7 +160,7 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
           <label className="field">
             Type
             <select value={kind} onChange={(e) => setKind(e.target.value)}>
-              <option value="kolokvij">Kolokvij</option>
+              <option value="kolokvij">Midterm exam</option>
               <option value="izpit">Exam</option>
               <option value="other">Other</option>
             </select>

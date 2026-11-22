@@ -94,7 +94,7 @@ export function CoursePage() {
                       <div className="small pre">{active.scope_description}</div>
                     </div>
                   ) : (
-                    <p className="small muted">No exam or kolokvij is set. Your assistant asks for it at the start of a study session.</p>
+                    <p className="small muted">No exam or midterm is set. Your assistant asks for it at the start of a study session.</p>
                   )}
                 </Card>
                 )}
@@ -264,7 +264,7 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
   if (targets.length === 0) {
     return (
       <>
-        <Empty title="No exams or kolokviji yet">
+        <Empty title="No exams or midterms yet">
           Add one here, or your assistant asks what you prepare for at the start of a study session and records it.
           <div style={{ marginTop: 10 }}>
             <button type="button" className="btn primary" onClick={() => setAdding(true)}>

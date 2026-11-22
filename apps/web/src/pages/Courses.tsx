@@ -53,7 +53,7 @@ function CourseCard({ c }: { c: CourseSummary }) {
           {c.active_target.days_left >= 0 ? `${plural(c.active_target.days_left, "day")} left` : "date passed"}
         </div>
       ) : (
-        <div className="notice small muted">No exam or kolokvij set yet.</div>
+        <div className="notice small muted">No exam or midterm set yet.</div>
       )}
       <StudyMeter progress={c.progress} />
       <div className="row small muted" style={{ gap: 16 }}>

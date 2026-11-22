@@ -71,7 +71,7 @@ export const STEPS: GuideStep[] = [
     title: "Plan the semester first",
     where: "Planning chat",
     why:
-      "Dates, scope, material and the type of each kolokvij let RecallSpring plan backwards from the deadline. " +
+      "Dates, scope, material and the type of each midterm and exam let RecallSpring plan backwards from the deadline. " +
       "Give what you know; anything can be added or changed later.",
     claudeTip: "Shortcut: choose Plan semester in Claude's + menu and Claude asks you course by course.",
     planning: true,
@@ -87,11 +87,11 @@ export const STEPS: GuideStep[] = [
         note: "Courses then appear grouped by semester; archive a semester when it ends.",
       },
       {
-        en: "Dates for [course]: 1st kolokvij on [date], 2nd kolokvij on [date], exam period from [date].",
+        en: "Dates for [course]: 1st midterm on [date], 2nd midterm on [date], exam period from [date].",
         sl: "Datumi za [predmet]: 1. kolokvij [datum], 2. kolokvij [datum], izpitno obdobje od [datum].",
       },
       {
-        en: "Scope of the 1st kolokvij in [course]: from [lecture or chapter] to [lecture or chapter].",
+        en: "Scope of the 1st midterm in [course]: from [lecture or chapter] to [lecture or chapter].",
         sl: "Obseg 1. kolokvija pri [predmet]: od [predavanje ali poglavje] do [predavanje ali poglavje].",
       },
       {
@@ -110,15 +110,15 @@ export const STEPS: GuideStep[] = [
         note: "Also works for notebooks (.ipynb), LaTeX, code, CSV and OpenDocument files. Subtitles are cited by time, e.g. 05:00–10:00.",
       },
       {
-        en: "The 1st kolokvij in [course] is [written or online], [minutes] minutes, [number] multiple-choice and [number] open questions, notes [allowed or not allowed].",
+        en: "The 1st midterm in [course] is [written or online], [minutes] minutes, [number] multiple-choice and [number] open questions, notes [allowed or not allowed].",
         sl: "1. kolokvij pri [predmet] je [pisni ali spletni], [minute] minut, [število] vprašanj izbirnega tipa in [število] odprtih, zapiski [dovoljeni ali niso dovoljeni].",
       },
       {
-        en: "Here is an old kolokvij for [course]: [path to the file]. Analyse its style and what it emphasises, and save that.",
+        en: "Here is an old midterm for [course]: [path to the file]. Analyse its style and what it emphasises, and save that.",
         sl: "Tukaj je star kolokvij za [predmet]: [pot do datoteke]. Analiziraj slog in poudarke ter to shrani.",
       },
       {
-        en: "Show me how you mapped each kolokvij to the material, then my plan for this week across all courses.",
+        en: "Show me how you mapped each midterm and exam to the material, then my plan for this week across all courses.",
         sl: "Pokaži, kako si vsak kolokvij povezal z gradivom, in nato moj načrt za ta teden za vse predmete.",
       },
     ],
@@ -172,7 +172,7 @@ export const STEPS: GuideStep[] = [
         sl: "Daj mi 3 kratka vprašanja o tem, kar sem se danes naučil.",
       },
       {
-        en: "Run a [30]-minute simulation of the 1st kolokvij in the style of the old paper.",
+        en: "Run a [30]-minute simulation of the 1st midterm in the style of the old paper.",
         sl: "Pripravi [30]-minutno simulacijo 1. kolokvija v slogu starega kolokvija.",
       },
       {
@@ -256,11 +256,11 @@ export const STEPS: GuideStep[] = [
     planning: true,
     prompts: [
       {
-        en: "I passed the 1st kolokvij in [course] with [result].",
+        en: "I passed the 1st midterm in [course] with [result].",
         sl: "1. kolokvij pri [predmet] sem opravil z [rezultat].",
       },
       {
-        en: "The 2nd kolokvij in [course] moved to [date].",
+        en: "The 2nd midterm in [course] moved to [date].",
         sl: "2. kolokvij pri [predmet] je prestavljen na [datum].",
       },
       {
@@ -268,7 +268,7 @@ export const STEPS: GuideStep[] = [
         sl: "Ta teden imam samo [30] minut na dan.",
       },
       {
-        en: "Which kolokviji are at risk, and by how many minutes per day?",
+        en: "Which midterms and exams are at risk, and by how many minutes per day?",
         sl: "Kateri kolokviji so ogroženi in za koliko minut na dan?",
       },
     ],

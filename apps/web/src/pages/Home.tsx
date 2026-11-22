@@ -39,14 +39,14 @@ function firstCourseHint(a: AssistantWords): ReactNode {
     case "claude":
       return (
         <>
-          Start with a planning chat in Claude: tell it your courses, kolokvij dates, scope and material. The{" "}
+          Start with a planning chat in Claude: tell it your courses, midterm and exam dates, scope and material. The{" "}
           <Link to="/guide">Guide</Link> has prompts to copy. Everything Claude saves appears here.
         </>
       );
     case "codex":
       return (
         <>
-          Open the Planning folder (Documents\RecallSpring Study) in Codex and tell it your courses, kolokvij dates, scope and
+          Open the Planning folder (Documents\RecallSpring Study) in Codex and tell it your courses, midterm and exam dates, scope and
           material. The <Link to="/guide">Guide</Link> has prompts to copy. Everything Codex saves appears here.
         </>
       );
@@ -54,14 +54,14 @@ function firstCourseHint(a: AssistantWords): ReactNode {
       return (
         <>
           Add your material under <Link to="/library">Library</Link>, then start a <strong>Planning</strong> conversation in{" "}
-          <Link to="/chat">Chat</Link> and tell ChatGPT your courses, kolokvij dates, scope and material. The <Link to="/guide">Guide</Link>{" "}
+          <Link to="/chat">Chat</Link> and tell ChatGPT your courses, midterm and exam dates, scope and material. The <Link to="/guide">Guide</Link>{" "}
           has prompts to copy.
         </>
       );
     default:
       return (
         <>
-          <Link to="/welcome">Choose your assistant</Link> to see how to start: it sets up your courses and kolokvij dates with you.
+          <Link to="/welcome">Choose your assistant</Link> to see how to start: it sets up your courses and midterm and exam dates with you.
           Your material goes under <Link to="/library">Library</Link>.
         </>
       );
@@ -213,7 +213,7 @@ export function HomePage() {
                   </Card>
 
                   {d.plan.targets.length > 0 && (
-                    <Card title="Exams and kolokviji">
+                    <Card title="Exams and midterms">
                       <ul className="list">
                         {d.plan.targets.map((t) => (
                           <li key={t.target_id} className="stack" style={{ gap: 4 }}>

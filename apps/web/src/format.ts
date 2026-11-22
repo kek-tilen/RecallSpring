@@ -123,7 +123,7 @@ export const STUDY_SOURCE: Record<string, string> = {
   diagnostic: "diagnostic pre-test",
 };
 
-export const TARGET_KIND: Record<string, string> = { kolokvij: "Kolokvij", izpit: "Exam", other: "Other" };
+export const TARGET_KIND: Record<string, string> = { kolokvij: "Midterm exam", izpit: "Exam", other: "Other" };
 
 export const ATTEMPT_KIND: Record<string, string> = { answer: "Answered", dont_know: "I don't know", skip: "Skipped" };
 

@@ -142,7 +142,7 @@ export function AssistantNextSteps({ assistant, username }: { assistant: Assista
         </li>
         <li>
           Add your material under <Link to="/library">Library</Link>. Then open <Link to="/chat">Chat</Link>: a new conversation with{" "}
-          <strong>Planning (all courses)</strong> under Study sets up your courses and kolokvij dates (“Let&apos;s set up my semester”).
+          <strong>Planning (all courses)</strong> under Study sets up your courses and midterm and exam dates (“Let&apos;s set up my semester”).
         </li>
         <li>
           To learn, start a new conversation, pick the course under <strong>Study</strong> and write “Start studying”.

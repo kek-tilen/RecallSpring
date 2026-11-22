@@ -118,7 +118,7 @@ export function QuizForm({ quiz }: { quiz: QuizView }) {
         <h2>Answer it here</h2>
         <p className="small">
           {plural(view.items.length, "question")} · {view.time_limit_minutes} minutes. The clock starts when you press Start, like in the
-          real kolokvij. Your answers are saved as you type.
+          real midterm. Your answers are saved as you type.
         </p>
         {open.error && <ErrorNote error={open.error} />}
         <div>

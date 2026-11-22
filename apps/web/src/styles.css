@@ -222,6 +222,42 @@ html {
   font-size: 16px;
 }
 
+/* Scrollbars follow the theme: thin, rounded, a border-tone thumb that darkens on hover (page and inner panes). */
+html {
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+* {
+  scrollbar-width: thin;
+}
+
 body {
   margin: 0;
   background: var(--bg);
