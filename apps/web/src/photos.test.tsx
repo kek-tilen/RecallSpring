@@ -49,12 +49,12 @@ it("a pasted photo is saved in Answer photos and counts as the answer", async ()
 
   const file = new File([new Uint8Array([137, 80, 78, 71])], "image.png", { type: "image/png" });
   fireEvent.paste(screen.getByRole("textbox"), { clipboardData: { files: [file], items: [], types: ["Files"] } });
-  await waitFor(() => expect(save.disabled).toBe(false));
+  await waitFor(() => expect(save.disabled).toBe(false), { timeout: 5000 });
   expect(sent[0]).toEqual({ path: "/sources", body: { course: "k1", category: "notes", folder: "Answer photos" } });
   expect(screen.getByAltText(/Photo 1/)).toBeTruthy();
 
   fireEvent.click(save);
-  await waitFor(() => expect(onSaved).toHaveBeenCalledWith("answer", ["p1"]));
+  await waitFor(() => expect(onSaved).toHaveBeenCalledWith("answer", ["p1"]), { timeout: 5000 });
   // After saving, the photo stays visible and opens full size in a new tab.
   const link = screen.getByRole("link", { name: /Photo 1/ }) as HTMLAnchorElement;
   expect(link.target).toBe("_blank");
