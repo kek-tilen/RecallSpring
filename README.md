@@ -18,7 +18,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-0f766e?style=flat" alt="License: AGPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/self--hosted-your%20data%20stays%20home-0f766e?style=flat" alt="Self-hosted" />
+  <img src="https://img.shields.io/badge/self--hosted-your%20data%2C%20your%20choice-0f766e?style=flat" alt="Self-hosted" />
   <img src="https://img.shields.io/badge/status-early%20development-f0a000?style=flat" alt="Status: early development" />
 </p>
 
