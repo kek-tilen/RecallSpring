@@ -75,6 +75,33 @@ function useDropTarget(onDrop: (ids: string[]) => void) {
   };
 }
 
+/** Extract the text again (after a fix to the reader, or a failure that may not repeat). Earlier citations stay. */
+export function ReadAgain({ sources, compact }: { sources: Source[]; compact?: boolean }) {
+  const qc = useQueryClient();
+  const run = useMutation({
+    mutationFn: async () => {
+      for (const s of sources) await request(`/sources/${s.id}/reprocess`, { method: "POST" });
+    },
+    onSettled: () => LIBRARY_KEYS.forEach((key) => void qc.invalidateQueries({ queryKey: [...key] })),
+  });
+  if (sources.length === 0) return null;
+  const label = sources.length === 1 ? "Read the text again" : `Read these ${sources.length} files again`;
+  return (
+    <div className={compact ? "row" : "notice bad row"} style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+      {!compact && (
+        <span className="small">
+          {sources.length === 1 ? "1 file" : `${sources.length} files`} could not be read. If RecallSpring was updated
+          since, reading them again may work.
+        </span>
+      )}
+      <button type="button" className="btn small" disabled={run.isPending} onClick={() => run.mutate()}>
+        {run.isPending ? "Starting…" : label}
+      </button>
+      {run.error && <ErrorNote error={run.error} />}
+    </div>
+  );
+}
+
 export function SourceTable({
   sources,
   titles,
@@ -89,12 +116,15 @@ export function SourceTable({
   showFolder?: boolean;
 }) {
   if (sources.length === 0) return null;
+  const failed = sources.filter((s) => s.parse_state === "failed");
   const dragStart = (e: DragEvent, id: string) => {
     const ids = selected?.has(id) ? [...selected] : [id];
     e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(ids));
     e.dataTransfer.effectAllowed = "move";
   };
   return (
+    <>
+    {failed.length > 0 && <ReadAgain sources={failed} />}
     <div className="table-wrap">
       <table>
         <thead>
@@ -140,6 +170,7 @@ export function SourceTable({
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
@@ -951,6 +982,9 @@ export function SourcePage() {
               <div className="split">
                 <div className="stack">
                   {s.parse_message && <div className={s.parse_state === "failed" ? "notice bad" : "notice warn"}>{s.parse_message}</div>}
+                  {(s.parse_state === "failed" || s.parse_state === "needs_attention") && s.kind !== "image" && (
+                    <ReadAgain sources={[s]} compact />
+                  )}
                   {body}
                 </div>
                 <Details s={s} />

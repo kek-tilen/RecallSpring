@@ -100,30 +100,67 @@ def _with_offsets(sections: list[Section]) -> list[Section]:
     return sections
 
 
-def extract_pdf(path: Path, max_pages: int) -> Result:
+def _pypdf_pages(path: Path, max_pages: int) -> tuple[str, int, list[str] | str]:
+    """(version, page count, page texts or an error code). Raises when pypdf cannot open the file."""
     import pypdf
 
     version = f"{EXTRACTOR_VERSION}/pypdf-{pypdf.__version__}"
+    reader = pypdf.PdfReader(str(path))
+    if reader.is_encrypted and not reader.decrypt(""):
+        return version, 0, "pdf_encrypted"
+    page_count = len(reader.pages)
+    if page_count > max_pages:
+        return version, page_count, "too_many_pages"
+    return version, page_count, [page.extract_text() or "" for page in reader.pages]
+
+
+def _pdfium_pages(path: Path, max_pages: int) -> tuple[str, int, list[str] | str]:
+    """PDFium (already used for page images) when pypdf cannot open a PDF, e.g. lecture slides protected with AES
+    against editing (no password to open), which pypdf reads only with the optional cryptography package."""
+    import pypdfium2 as pdfium
+
+    version = f"{EXTRACTOR_VERSION}/pdfium-{pdfium.PYPDFIUM_INFO}"
     try:
-        reader = pypdf.PdfReader(str(path))
-        if reader.is_encrypted and not reader.decrypt(""):
-            return Result("failed", version, error_code="pdf_encrypted")
-        page_count = len(reader.pages)
+        doc = pdfium.PdfDocument(str(path))
+    except pdfium.PdfiumError as exc:
+        return version, 0, "pdf_encrypted" if "password" in str(exc).lower() else "pdf_unreadable"
+    try:
+        page_count = len(doc)
         if page_count > max_pages:
-            return Result("failed", version, error_code="too_many_pages", page_count=page_count)
-        sections: list[Section] = []
-        empty_pages: list[int] = []
-        for number, page in enumerate(reader.pages, start=1):
-            text = normalize(page.extract_text() or "")
-            if len(text) < MIN_PAGE_CHARS:
-                empty_pages.append(number)
-                continue
-            chunks = _split_long(text, MAX_SECTION_CHARS)
-            for i, chunk in enumerate(chunks):
-                label = f"p. {number}" if len(chunks) == 1 else f"p. {number} ({i + 1}/{len(chunks)})"
-                sections.append(Section(0, label, chunk, page=number))
-    except Exception:  # noqa: BLE001 - any parser failure is reported as unreadable, never raised
-        return Result("failed", version, error_code="pdf_unreadable")
+            return version, page_count, "too_many_pages"
+        texts = []
+        for i in range(page_count):
+            page = doc[i]
+            textpage = page.get_textpage()
+            texts.append(textpage.get_text_bounded().replace("\r\n", "\n"))
+            textpage.close()
+            page.close()
+        return version, page_count, texts
+    finally:
+        doc.close()
+
+
+def extract_pdf(path: Path, max_pages: int) -> Result:
+    try:
+        version, page_count, pages = _pypdf_pages(path, max_pages)
+    except Exception:  # noqa: BLE001 - pypdf could not open or read it: try PDFium before reporting it unreadable
+        try:
+            version, page_count, pages = _pdfium_pages(path, max_pages)
+        except Exception:  # noqa: BLE001 - any parser failure is reported as unreadable, never raised
+            return Result("failed", f"{EXTRACTOR_VERSION}/pdfium", error_code="pdf_unreadable")
+    if isinstance(pages, str):
+        return Result("failed", version, error_code=pages, page_count=page_count or None)
+    sections: list[Section] = []
+    empty_pages: list[int] = []
+    for number, raw in enumerate(pages, start=1):
+        text = normalize(raw)
+        if len(text) < MIN_PAGE_CHARS:
+            empty_pages.append(number)
+            continue
+        chunks = _split_long(text, MAX_SECTION_CHARS)
+        for i, chunk in enumerate(chunks):
+            label = f"p. {number}" if len(chunks) == 1 else f"p. {number} ({i + 1}/{len(chunks)})"
+            sections.append(Section(0, label, chunk, page=number))
     if not sections:
         return Result("failed", version, error_code="no_extractable_text", page_count=page_count)
     notes = []

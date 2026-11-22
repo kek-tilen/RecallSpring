@@ -54,6 +54,7 @@ Components:
   with notes), the grade that counts with who gave it, confidence and how many passages of the material it rests on,
   the feedback, *What was good*, *What was missing*, *Next step*, earlier grades, and the reminder that AI grades
   are study feedback, not a validated score.
+- **Read again** (2026-11-22): a material list with files that could not be read shows how many and `Read these N files again`; a failed or partly read file has `Read the text again` on its page. It extracts again with the current reader; earlier citations stay.
 - **New course** (owner 2026-11-22): Courses → `New course` opens a form with the name (any language, kept as
   typed), the type (university course or personal interest with an optional goal), the semester, an optional colour
   and long-term review; it opens the new course. A taken name shows the server's message. Editing stays in
