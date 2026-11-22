@@ -125,6 +125,10 @@ const ABOUT: Record<AssistantKey, { needs: string; summary: string }> = {
     needs: "Codex (app, CLI or IDE extension), signed in with your ChatGPT plan.",
     summary: "You study in Codex, in one folder per course. Codex uses RecallSpring's connector; you answer questions on RecallSpring's own pages it links to.",
   },
+  antigravity: {
+    needs: "Google Antigravity (app or CLI), signed in with your Google account (free, Google AI Plus or Pro).",
+    summary: "You study in Antigravity, in one folder per course. Antigravity uses RecallSpring's connector; you answer questions on RecallSpring's own pages it links to.",
+  },
   chatgpt: {
     needs: "A ChatGPT Plus or Pro plan. Works while RecallSpring runs on this computer (preview).",
     summary:
@@ -151,18 +155,23 @@ export function AssistantNextSteps({ assistant, username }: { assistant: Assista
       </ol>
     );
   }
-  // The Claude script reads the token file written by connector-token; the Codex script makes its own token.
+  // The Claude script reads the token file written by connector-token; the Codex and Antigravity scripts make their own.
   const commands =
     assistant === "claude"
       ? [
           `services\\api\\.venv\\Scripts\\recallspring connector-token --username ${username}`,
           "powershell -ExecutionPolicy Bypass -File scripts\\install-claude-desktop-connector.ps1",
         ]
-      : [`powershell -ExecutionPolicy Bypass -File scripts\\install-codex-connector.ps1 -Username ${username}`];
+      : [`powershell -ExecutionPolicy Bypass -File scripts\\install-${assistant}-connector.ps1 -Username ${username}`];
+  const app = assistant === "antigravity" ? "Antigravity" : "Codex";
   return (
     <ol className="stack small" style={{ gap: 6, paddingLeft: 20, margin: 0 }}>
       <li>
-        {assistant === "claude" ? "Install Claude Desktop (Microsoft Store) and sign in." : "Install Codex and sign in with ChatGPT."}
+        {assistant === "claude"
+          ? "Install Claude Desktop (Microsoft Store) and sign in."
+          : assistant === "antigravity"
+            ? "Install Google Antigravity (antigravity.google) and sign in with your Google account."
+            : "Install Codex and sign in with ChatGPT."}
       </li>
       <li>
         In PowerShell, in the RecallSpring folder, run{commands.length > 1 ? " one after the other" : ""}:
@@ -176,12 +185,14 @@ export function AssistantNextSteps({ assistant, username }: { assistant: Assista
         ))}
         {assistant === "claude"
           ? " The first makes the connector's token (saved on this computer, never shown). After the second, quit Claude Desktop (tray icon → Quit); the script adds RecallSpring and starts it again."
-          : " It connects Codex and makes a Planning folder and one study folder per course in Documents\\RecallSpring Study."}
+          : ` It connects ${app} and makes a Planning folder and one study folder per course in Documents\\RecallSpring Study.`}
       </li>
       <li>
         {assistant === "claude"
           ? "In Claude Desktop, write “Start studying” (the Guide has prompts for planning and each course)."
-          : "Open a course folder in Codex, trust it when asked, and write “Start studying”."}
+          : assistant === "antigravity"
+            ? "Restart Antigravity, open a course folder as the workspace and write “Start studying”. Allow RecallSpring's tools when it asks."
+            : "Open a course folder in Codex, trust it when asked, and write “Start studying”."}
       </li>
     </ol>
   );

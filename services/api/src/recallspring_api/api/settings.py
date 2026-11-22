@@ -145,7 +145,7 @@ def update_profile(
     if "assistant" in payload.model_fields_set:
         mix: list[str] = []
         if payload.assistant == "mix":
-            mix = [k for k in ("claude", "codex", "chatgpt") if k in (payload.assistant_mix or [])]
+            mix = [k for k in ("claude", "codex", "chatgpt", "antigravity") if k in (payload.assistant_mix or [])]
             if len(mix) < 2:
                 raise ApiError(422, "mix_too_small", "A mix needs at least two assistants.")
         if payload.assistant != user.assistant or mix != list(user.assistant_mix or []):
@@ -162,14 +162,15 @@ def update_profile(
 
 @router.get("/settings/assistants")
 def assistants_status(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Which assistants are connected now, from RecallSpring's own records: Claude Desktop and Codex by an active
-    connector token, ChatGPT in Chat by its sign-in. ``in_use`` is the one the app names in its wording: the only
-    connected one; the welcome page's choice while none is connected yet; none ("your assistant") when several are."""
+    """Which assistants are connected now, from RecallSpring's own records: Claude Desktop, Codex and Antigravity by
+    an active connector token, ChatGPT in Chat by its sign-in. ``in_use`` is the one the app names in its wording:
+    the only connected one; the welcome page's choice while none is connected yet; none ("your assistant") when
+    several are."""
     tokens = db.scalars(
         select(ConnectorToken).where(ConnectorToken.user_id == ctx.user.id, ConnectorToken.revoked_at.is_(None))
     ).all()
     items: list[dict[str, Any]] = []
-    for client in ("claude", "codex"):
+    for client in ("claude", "codex", "antigravity"):
         mine = [t for t in tokens if t.client == client]
         used = max((t.last_used_at for t in mine if t.last_used_at), default=None)
         items.append({"key": client, "connected": bool(mine), "tokens": len(mine), "last_used_at": used})

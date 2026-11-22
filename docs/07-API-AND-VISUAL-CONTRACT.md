@@ -11,8 +11,8 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/auth/login` | Private app session (Argon2id credentials; rate-limited) |
 | GET | `/auth/setup` | `{needs_setup, refusal}`: whether the install still has no account, and why this browser may not create it (`not_local`, `disabled`) |
 | POST | `/auth/setup` | First run: `{username, password (≥ 12), timezone}` creates the first account and signs it in (201). Refused once any account exists (409 `already_set_up`), from another computer (403 `first_run_not_local`), from another site, and in production or with `RS_FIRST_RUN_ENABLED=false` (403 `first_run_disabled`); 422 `invalid_timezone` |
-| PUT | `/settings/profile` | `{timezone?, assistant?, assistant_mix?}` (assistant null = not chosen; set on the welcome page; `"mix"` needs `assistant_mix` with at least two different of claude/codex/chatgpt, else `422 mix_too_small`; stored in that order, cleared when another choice is saved); audited `profile.changed` with from/to; returns the user |
-| GET | `/settings/assistants` | `{items: [{key: claude/codex/chatgpt, connected, tokens, last_used_at, in_mix}], in_use, chosen, mix}` (with a mix its assistants come first; a mix is "your assistant" until exactly one is connected): connected from an active connector token (Claude, Codex) or the ChatGPT sign-in; last use from the tokens or the newest Chat conversation. `in_use` is the only connected assistant, the welcome choice while none is, null when several are (the web then says "your assistant") |
+| PUT | `/settings/profile` | `{timezone?, assistant?, assistant_mix?}` (assistant null = not chosen; set on the welcome page; `"mix"` needs `assistant_mix` with at least two different of claude/codex/chatgpt/antigravity, else `422 mix_too_small`; stored in that order, cleared when another choice is saved); audited `profile.changed` with from/to; returns the user |
+| GET | `/settings/assistants` | `{items: [{key: claude/codex/antigravity/chatgpt, connected, tokens, last_used_at, in_mix}], in_use, chosen, mix}` (with a mix its assistants come first; a mix is "your assistant" until exactly one is connected): connected from an active connector token (Claude, Codex, Antigravity) or the ChatGPT sign-in; last use from the tokens or the newest Chat conversation. `in_use` is the only connected assistant, the welcome choice while none is, null when several are (the web then says "your assistant") |
 | POST | `/auth/logout` | Revoke session |
 | GET | `/ai/providers` | Providers, connection state, capabilities, limits and current usage |
 | PUT | `/ai/providers/{provider}` | Configure a provider (store API key server-side, set limits); never echoes secrets |
@@ -21,7 +21,7 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | GET | `/ai/models` | Models actually available per provider (discovered, not hardcoded) |
 | GET/PUT | `/ai/routing` | Per-task model routing and course/session overrides |
 | GET/PUT | `/settings/connector` | Connector daily limit (1–100 % of default), usage today, tokens |
-| POST | `/settings/connector/tokens` | Create a connector token (shown once; stored as a hash) for `client` `claude` (default label "Claude Desktop") or `codex` ("Codex"); tokens list their `client` |
+| POST | `/settings/connector/tokens` | Create a connector token (shown once; stored as a hash) for `client` `claude` (default label "Claude Desktop") `codex` ("Codex") or `antigravity` ("Antigravity", migration 0021); tokens list their `client` |
 | POST | `/settings/connector/tokens/{id}/revoke` | Revoke a connector token |
 | GET | `/connector/*` | Connector surface: **bearer connector token only**, read + append, see tool contract below |
 | GET/POST | `/courses` | List/create courses |

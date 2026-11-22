@@ -44,10 +44,11 @@ function firstCourseHint(a: AssistantWords): ReactNode {
         </>
       );
     case "codex":
+    case "antigravity":
       return (
         <>
-          Open the Planning folder (Documents\RecallSpring Study) in Codex and tell it your courses, midterm and exam dates, scope and
-          material. The <Link to="/guide">Guide</Link> has prompts to copy. Everything Codex saves appears here.
+          Open the Planning folder (Documents\RecallSpring Study) in {a.name} and tell it your courses, midterm and exam dates, scope and
+          material. The <Link to="/guide">Guide</Link> has prompts to copy. Everything {a.name} saves appears here.
         </>
       );
     case "chatgpt":
@@ -77,9 +78,10 @@ function continueHint(a: AssistantWords, course: string): ReactNode {
         </>
       );
     case "codex":
+    case "antigravity":
       return (
         <>
-          Open the <strong>{course}</strong> folder in Codex and say “Start studying”.
+          Open the <strong>{course}</strong> folder in {a.name} and say “Start studying”.
         </>
       );
     case "chatgpt":

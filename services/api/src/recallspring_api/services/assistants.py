@@ -10,13 +10,24 @@ from __future__ import annotations
 from typing import Any
 
 # Connector token clients (connector_tokens.client, migration 0016) -> the provider stored on their assessments.
-CLIENTS: dict[str, str] = {"claude": "claude_app", "codex": "codex_app", "chatgpt": "chatgpt"}
-CLIENT_NAMES: dict[str, str] = {"claude": "Claude", "codex": "Codex", "chatgpt": "ChatGPT"}
-DEFAULT_LABEL: dict[str, str] = {"claude": "Claude Desktop", "codex": "Codex"}
+CLIENTS: dict[str, str] = {
+    "claude": "claude_app",
+    "codex": "codex_app",
+    "antigravity": "antigravity_app",
+    "chatgpt": "chatgpt",
+}
+CLIENT_NAMES: dict[str, str] = {
+    "claude": "Claude",
+    "codex": "Codex",
+    "antigravity": "Antigravity",
+    "chatgpt": "ChatGPT",
+}
+DEFAULT_LABEL: dict[str, str] = {"claude": "Claude Desktop", "codex": "Codex", "antigravity": "Antigravity"}
 
 _PROVIDER_NAMES: dict[str, str] = {
     "claude_app": "Claude",
     "codex_app": "Codex",
+    "antigravity_app": "Antigravity",
     "chatgpt": "ChatGPT",
     "siwc": "ChatGPT",
     "mock": "Simulated AI",

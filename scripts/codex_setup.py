@@ -4,7 +4,7 @@
 are kept byte for byte, a one-time backup is made, and the result is parsed before it replaces the file. The token
 itself never goes into ``config.toml``; the block only names the file that holds it.
 
-``folders`` makes one study folder per course with an ``AGENTS.md`` (what Codex should do there) and a
+``folders`` makes one study folder per course with an ``AGENTS.md`` (what Codex or Antigravity should do there) and a
 ``.codex/config.toml`` that keeps Codex read-only in that folder (Codex applies it once you trust the folder).
 
     python -I scripts/codex_setup.py config add --python <repo>/services/mcp/.venv/Scripts/python.exe
@@ -193,7 +193,7 @@ def folder_name(title: str) -> str:
 COURSE_AGENTS = """{marker}
 # RecallSpring: {title}
 
-This folder is for studying the RecallSpring {kind} "{title}" (course_id `{course_id}`) with Codex.
+This folder is for studying the RecallSpring {kind} "{title}" (course_id `{course_id}`) with Codex or Antigravity.
 Use the RecallSpring tools for everything and pass this course_id to every tool that accepts it.
 
 - Do not run shell commands, write files or read other files on this computer for studying. Everything lives in
@@ -219,7 +219,7 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
 PLANNING_AGENTS = """{marker}
 # RecallSpring: planning
 
-This folder is for planning across all my RecallSpring courses with Codex. Do not teach or quiz here.
+This folder is for planning across all my RecallSpring courses with Codex or Antigravity. Do not teach or quiz here.
 
 - Do not run shell commands, write files or read other files on this computer. Everything lives in RecallSpring.
   Only when I ask to import a file, use import_file with the path I give you.

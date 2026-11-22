@@ -282,6 +282,7 @@ export const GOOD_TO_KNOW: GuideFact[] = [
   { text: "Grades from {assistant} are estimates. Challenge one whenever you disagree." },
   { text: "After RecallSpring is updated, quit and reopen Claude Desktop so it loads the new connector.", only: ["claude"] },
   { text: "After RecallSpring is updated, start a new Codex session so it loads the new connector.", only: ["codex"] },
+  { text: "After RecallSpring is updated, quit and reopen Antigravity so it loads the new connector.", only: ["antigravity"] },
   { text: "Your daily connector limit and study time are in Settings; every change appears in History." },
   { text: "Studied with ChatGPT before? Library → Move in brings your chats and custom instructions over; then use the “Continue from ChatGPT” prompt in a course chat." },
 ];

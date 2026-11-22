@@ -24,7 +24,7 @@ infra/compose.dev.yml     Local development database (loopback only)
 
 For your own computer: install Python 3.12+, Node 22+ and Docker Desktop, then run
 `powershell -ExecutionPolicy Bypass -File scripts\install.ps1` and open `http://127.0.0.1:4318/`. The first visit
-creates your account and asks which assistant you study with (Claude, Codex or ChatGPT in RecallSpring). Full guide:
+creates your account and asks which assistant you study with (Claude, Codex, Google Antigravity or ChatGPT in RecallSpring). Full guide:
 [docs/install-windows.md](docs/install-windows.md).
 
 ## Local development (Windows / macOS / Linux)

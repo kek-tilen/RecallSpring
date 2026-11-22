@@ -108,7 +108,7 @@ function StudyForm({ initial }: { initial: StudySettings }) {
   );
 }
 
-const ASSISTANT: Record<AssistantClient, string> = { claude: "Claude Desktop", codex: "Codex" };
+const ASSISTANT: Record<AssistantClient, string> = { claude: "Claude Desktop", codex: "Codex", antigravity: "Antigravity" };
 
 function TokenRow({ t, onRevoke }: { t: ConnectorToken; onRevoke: (t: ConnectorToken) => void }) {
   return (
@@ -163,7 +163,7 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
   return (
     <div className="stack" style={{ gap: 18 }}>
       <p className="small">
-        Claude Desktop or Codex uses RecallSpring through the connector, on your own Claude or ChatGPT plan. RecallSpring never sees
+        Claude Desktop, Codex or Antigravity uses RecallSpring through the connector, on your own Claude, ChatGPT or Google plan. RecallSpring never sees
         those sign-ins. Each assistant has its own token, and its grades are labelled with its name. Requests today: <strong>{c.used_today}</strong> of <strong>{c.daily_limit}</strong>.
       </p>
       <form
@@ -195,6 +195,9 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
           <button type="button" className="btn small" onClick={() => create.mutate("codex")} disabled={create.isPending}>
             New token for Codex
           </button>
+          <button type="button" className="btn small" onClick={() => create.mutate("antigravity")} disabled={create.isPending}>
+            New token for Antigravity
+          </button>
         </div>
       </div>
       {create.error && <ErrorNote error={create.error} />}
@@ -219,7 +222,9 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
           <span className="tiny">
             {shown.client === "codex"
               ? "Usually you do not need this: scripts/install-codex-connector.ps1 creates its own Codex token; see docs/codex-setup.md."
-              : "The installer script writes it to the connector's token file for you; see docs/connector-setup.md."}{" "}
+              : shown.client === "antigravity"
+                ? "Usually you do not need this: scripts/install-antigravity-connector.ps1 creates its own token; see docs/antigravity-setup.md."
+                : "The installer script writes it to the connector's token file for you; see docs/connector-setup.md."}{" "}
             Never paste it into a chat.
           </span>
         </div>
@@ -392,6 +397,7 @@ function ThemePicker() {
 const STUDY_IN: Record<AssistantKey, string> = {
   claude: "Claude Desktop, through the connector",
   codex: "Codex (app, CLI or IDE extension), through the connector",
+  antigravity: "Google Antigravity (app or CLI), through the connector",
   chatgpt: "RecallSpring's Chat, signed in with ChatGPT (preview)",
 };
 
@@ -540,7 +546,7 @@ export function SettingsPage() {
   }, []);
   return (
     <div className="page">
-      <PageHead title="Settings" sub="Your profile, study time, your assistants (Claude Desktop, Codex, ChatGPT), backups and how RecallSpring looks. Every change is recorded in History." />
+      <PageHead title="Settings" sub="Your profile, study time, your assistants (Claude Desktop, Codex, Antigravity, ChatGPT), backups and how RecallSpring looks. Every change is recorded in History." />
       <div className="grid cols-2" style={{ alignItems: "start" }}>
         <div className="stack" style={{ gap: 16 }}>
           <Card title="Study time">

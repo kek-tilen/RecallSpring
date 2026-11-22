@@ -1,6 +1,6 @@
 # Study with Claude — connector setup (Claude Desktop, local)
 
-For Codex instead of (or as well as) Claude Desktop, do steps 1-3 below, then follow docs/codex-setup.md.
+For Codex instead of (or as well as) Claude Desktop, do steps 1-3 below, then follow docs/codex-setup.md (Google Antigravity: docs/antigravity-setup.md).
 On Windows, `scripts\install.ps1` (docs/install-windows.md) already does steps 1 and 3 and the account part of step 2.
 
 RecallSpring's Mode A: you study in the official **Claude Desktop** app on your own Claude plan, and Claude uses the RecallSpring connector (a local MCP server) to read your plan, sources and notes and to record questions, answers and grades. RecallSpring never sees your Claude login, and the connector has no tools that delete anything or change settings.

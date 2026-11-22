@@ -23,8 +23,8 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
-AssistantKey = Literal["claude", "codex", "chatgpt"]
-AssistantChoice = Literal["claude", "codex", "chatgpt", "mix"]
+AssistantKey = Literal["claude", "codex", "chatgpt", "antigravity"]
+AssistantChoice = Literal["claude", "codex", "chatgpt", "antigravity", "mix"]
 
 
 class UserOut(_Out):
@@ -49,7 +49,7 @@ class ProfileIn(BaseModel):
 
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
     assistant: AssistantChoice | None = None
-    assistant_mix: list[AssistantKey] | None = Field(default=None, max_length=3)
+    assistant_mix: list[AssistantKey] | None = Field(default=None, max_length=4)
 
 
 class SessionOut(BaseModel):
@@ -614,8 +614,9 @@ class PlanOut(BaseModel):
 
 
 class ConnectorTokenIn(BaseModel):
-    client: Literal["claude", "codex"] = "claude"
-    label: str | None = Field(default=None, min_length=1, max_length=100)  # default: "Claude Desktop" / "Codex"
+    client: Literal["claude", "codex", "antigravity"] = "claude"
+    # default: "Claude Desktop" / "Codex" / "Antigravity"
+    label: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class ConnectorTokenOut(BaseModel):

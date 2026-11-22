@@ -3,7 +3,8 @@
 recallspring create-owner --username <name>      (password is prompted, never passed as an argument)
 recallspring seed-demo --username <name>         (adds a clearly labelled demo course)
 recallspring worker [--once]                     (processes source extraction jobs; no model calls)
-recallspring connector-token --username <name> [--client codex]   (writes a connector token to a private file)
+recallspring connector-token --username <name> [--client codex|antigravity]
+                                                 (writes a connector token to a private file)
 recallspring backup [--if-due]                   (database + uploaded files, checked by a test restore)
 recallspring backup-status                       (last backup, kept snapshots, location)
 recallspring backup-restore --database <new> [--snapshot <name>|latest] [--storage <empty folder>]
@@ -121,7 +122,7 @@ def seed_demo(username: str) -> int:
 
 
 def default_token_file(client: str = "claude") -> Path:
-    """Claude Desktop and Codex each get their own file, so revoking one never disconnects the other."""
+    """Claude Desktop, Codex and Antigravity each get their own file, so revoking one never disconnects another."""
     base = os.environ.get("LOCALAPPDATA")
     root = Path(base) / "RecallSpring" if base else Path.home() / ".config" / "recallspring"
     return root / ("connector-token" if client == "claude" else f"{client}-connector-token")
@@ -221,8 +222,10 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--timezone", help="IANA time zone, e.g. Europe/Ljubljana (default: RS_DEFAULT_TIMEZONE)")
     token = sub.add_parser("connector-token")
     token.add_argument("--username", required=True)
-    token.add_argument("--client", choices=["claude", "codex"], default="claude", help="which assistant uses it")
-    token.add_argument("--label", help='default "Claude Desktop" or "Codex"')
+    token.add_argument(
+        "--client", choices=["claude", "codex", "antigravity"], default="claude", help="which assistant uses it"
+    )
+    token.add_argument("--label", help='default "Claude Desktop", "Codex" or "Antigravity"')
     token.add_argument("--file", type=Path, help="where the token is written (default: one file per assistant)")
     worker = sub.add_parser("worker")
     worker.add_argument("--once", action="store_true", help="process queued jobs, then exit")

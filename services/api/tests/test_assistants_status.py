@@ -17,7 +17,7 @@ def by_key(s: dict) -> dict:
 
 def test_nothing_connected_uses_the_welcome_choice(owner_api: Api) -> None:
     s = status(owner_api)
-    assert [i["key"] for i in s["items"]] == ["claude", "codex", "chatgpt"]
+    assert [i["key"] for i in s["items"]] == ["claude", "codex", "antigravity", "chatgpt"]
     assert not any(i["connected"] for i in s["items"]) and s["in_use"] is None
     owner_api.client.put("/api/v1/settings/profile", json={"assistant": "codex"}, headers=owner_api.headers())
     s = status(owner_api)
@@ -58,7 +58,12 @@ def test_a_mix_of_assistants(owner_api: Api) -> None:
     assert r.json()["assistant"] == "mix" and r.json()["assistant_mix"] == ["claude", "chatgpt"]  # fixed order
     s = status(owner_api)
     assert s["chosen"] == "mix" and s["mix"] == ["claude", "chatgpt"] and s["in_use"] is None  # "your assistant"
-    assert [(i["key"], i["in_mix"]) for i in s["items"]] == [("claude", True), ("chatgpt", True), ("codex", False)]
+    assert [(i["key"], i["in_mix"]) for i in s["items"]] == [
+        ("claude", True),
+        ("chatgpt", True),
+        ("codex", False),
+        ("antigravity", False),
+    ]
 
     codex = owner_api.post("/settings/connector/tokens", {"client": "codex"}).json()
     assert status(owner_api)["in_use"] == "codex"  # what is really connected still wins
@@ -67,7 +72,13 @@ def test_a_mix_of_assistants(owner_api: Api) -> None:
     for bad in ({"assistant": "mix"}, {"assistant": "mix", "assistant_mix": ["codex", "codex"]}):
         r = put(bad)
         assert r.status_code == 422 and r.json()["code"] == "mix_too_small"
-    assert put({"assistant": "mix", "assistant_mix": ["claude", "codex", "chatgpt", "claude"]}).status_code == 422
+    assert (
+        put({"assistant": "mix", "assistant_mix": ["claude", "codex", "chatgpt", "antigravity", "claude"]}).status_code
+        == 422
+    )
+
+    r = put({"assistant": "mix", "assistant_mix": ["antigravity", "codex"]})
+    assert r.status_code == 200 and r.json()["assistant_mix"] == ["codex", "antigravity"]
 
     r = put({"assistant": "codex"})
     assert r.json()["assistant"] == "codex" and r.json()["assistant_mix"] == []  # leaving the mix clears the list

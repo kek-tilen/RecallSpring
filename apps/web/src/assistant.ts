@@ -8,7 +8,7 @@ import type { AssistantChoice, AssistantKey } from "./types";
  */
 export interface AssistantWords {
   key: AssistantKey | null;
-  /** "Claude", "Codex", "ChatGPT" or "your assistant" (mid-sentence). */
+  /** "Claude", "Codex", "Antigravity", "ChatGPT" or "your assistant" (mid-sentence). */
   name: string;
   /** The same at the start of a sentence: "Your assistant". */
   Name: string;
@@ -21,6 +21,7 @@ export interface AssistantWords {
 export const ASSISTANTS: { key: AssistantKey; label: string; app: string }[] = [
   { key: "claude", label: "Claude", app: "Claude Desktop" },
   { key: "codex", label: "Codex", app: "Codex" },
+  { key: "antigravity", label: "Antigravity", app: "Antigravity" },
   { key: "chatgpt", label: "ChatGPT", app: "RecallSpring's Chat" },
 ];
 
@@ -31,6 +32,8 @@ export function assistantWords(key: AssistantChoice | null | undefined): Assista
       return { key, name: "Claude", Name: "Claude", where: "in Claude", app: "Claude Desktop" };
     case "codex":
       return { key, name: "Codex", Name: "Codex", where: "in Codex", app: "Codex" };
+    case "antigravity":
+      return { key, name: "Antigravity", Name: "Antigravity", where: "in Antigravity", app: "Antigravity" };
     case "chatgpt":
       return { key, name: "ChatGPT", Name: "ChatGPT", where: "in Chat", app: "RecallSpring's Chat" };
     default:

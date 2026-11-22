@@ -92,7 +92,8 @@ class User(Base):
     # The learner's own words on how they like to study (e.g. brought over from ChatGPT's custom instructions);
     # Claude reads them as preferences, never as rules that override RecallSpring's.
     study_preferences: Mapped[str | None] = mapped_column(Text)
-    # Which assistant the learner studies with (migration 0018): "claude", "codex", "chatgpt", "mix" (0020) or
+    # Which assistant the learner studies with (migration 0018): "claude", "codex", "chatgpt", "antigravity" (0021),
+    # "mix" (0020) or
     # None = not chosen. With "mix", assistant_mix lists which (two or three). Only the web app's wording and setup
     # steps depend on it; every assistant keeps working.
     assistant: Mapped[str | None] = mapped_column(String(20))
@@ -101,7 +102,9 @@ class User(Base):
     updated_at: Mapped[datetime] = _updated()
 
     __table_args__ = (
-        CheckConstraint("assistant IS NULL OR assistant IN ('claude','codex','chatgpt','mix')", name="assistant"),
+        CheckConstraint(
+            "assistant IS NULL OR assistant IN ('claude','codex','chatgpt','antigravity','mix')", name="assistant"
+        ),
         CheckConstraint("connector_limit_percent BETWEEN 1 AND 100", name="connector_limit_percent"),
         CheckConstraint("maintenance_percent BETWEEN 0 AND 50", name="maintenance_percent"),
         CheckConstraint("style_percent BETWEEN 0 AND 100", name="style_percent"),
@@ -648,7 +651,7 @@ class ConnectorToken(Base):
 
     __table_args__ = (
         CheckConstraint("scope IN ('connector')", name="scope"),
-        CheckConstraint("client IN ('claude','codex')", name="client"),
+        CheckConstraint("client IN ('claude','codex','antigravity')", name="client"),
     )
 
 

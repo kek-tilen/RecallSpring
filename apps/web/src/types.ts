@@ -3,7 +3,7 @@
 export type StudyStatus = "not_studied" | "studied" | "known";
 export type Band = "not_started" | "emerging" | "developing" | "reliable";
 
-export type AssistantKey = "claude" | "codex" | "chatgpt";
+export type AssistantKey = "claude" | "codex" | "chatgpt" | "antigravity";
 /** The welcome page's choice: one assistant, or a mix of two or three (listed in `assistant_mix`). */
 export type AssistantChoice = AssistantKey | "mix";
 
@@ -668,13 +668,13 @@ export interface SearchHit {
   snippet: string;
 }
 
-/** Who graded: "Claude", "Codex", "RecallSpring (answer key)" or "You", and the model the assistant reported. */
+/** Who graded: "Claude", "Codex", "Antigravity", "RecallSpring (answer key)" or "You", and the model the assistant reported. */
 export interface Grader {
   name: string;
   model: string | null;
 }
 
-export type AssistantClient = "claude" | "codex";
+export type AssistantClient = "claude" | "codex" | "antigravity";
 
 export interface ConnectorToken {
   id: string;

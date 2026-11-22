@@ -119,3 +119,17 @@ def test_a_summary_written_in_the_web_app_marks_the_concepts_studied(owner_api: 
     assert detail["study_status"] == "studied" and detail["study_source"] == "session"
     notes = [n for n in owner_api.get("/notes").json() if n["title"] == "Lecture 3"]
     assert len(notes) == 1
+
+
+def test_an_antigravity_token_labels_its_grades(owner_api: Api, frozen: FrozenClock) -> None:
+    created = owner_api.post("/settings/connector/tokens", {"client": "antigravity"}).json()
+    assert created["client"] == "antigravity" and created["label"] == "Antigravity"
+    with TestClient(create_app()) as c:
+        ids, body = _grade(ConnectorApi(c, created["token"]), owner_api, "gemini-3-pro")
+    a = body["assessments"][0]
+    assert a["provider"] == "antigravity_app" and a["model"] == "gemini-3-pro"
+    concept = owner_api.get(f"/concepts/{ids['concept_id']}/detail").json()
+    graded = [h for h in concept["attempts"] if h["grade"] is not None]
+    assert graded[0]["grader"] == {"name": "Antigravity", "model": "gemini-3-pro"}
+    history = [h for h in owner_api.get("/history").json() if h["type"] == "assessment.recorded"]
+    assert history[0]["detail"] == "3/4 (final) by Antigravity (gemini-3-pro)"

@@ -101,6 +101,23 @@ describe("welcome", () => {
     expect(screen.getByText(/install-codex-connector\.ps1 -Username ana/)).toBeTruthy();
   });
 
+  it("offers Antigravity with its own installer", async () => {
+    const calls = mockApi({
+      "GET /auth/session": () => json(200, { user: USER, expires_at: "2026-12-01T00:00:00Z" }),
+      "PUT /settings/profile": (b) => json(200, { ...USER, ...(b as object) }),
+    });
+    renderAt("/welcome");
+    await screen.findByRole("heading", { name: "Choose your assistant" });
+    await waitFor(() => expect(calls.some((c) => c.url.includes("/auth/session"))).toBe(true));
+    fireEvent.click(screen.getByRole("radio", { name: /^Antigravity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("Next: set up Antigravity");
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ assistant: "antigravity" });
+    expect(screen.getByText(/install-antigravity-connector\.ps1 -Username ana/)).toBeTruthy();
+    expect(screen.getByText(/It connects Antigravity and makes a Planning folder/)).toBeTruthy();
+    expect(fill("Grades from {assistant} are estimates.", assistantWords("antigravity"))).toBe("Grades from Antigravity are estimates.");
+  });
+
   it("saves a mix of at least two assistants and shows the setup steps of each", async () => {
     const calls = mockApi({
       "GET /auth/session": () => json(200, { user: USER, expires_at: "2026-12-01T00:00:00Z" }),

@@ -90,12 +90,13 @@ function SetupCard({ a }: { a: AssistantWords }) {
     case "claude":
       return <ClaudeSetup />;
     case "codex":
+    case "antigravity":
       return (
-        <Card title="Set up Codex once">
+        <Card title={`Set up ${a.name} once`}>
           <div className="stack">
             <p className="small">
-              The Codex setup (<Link to="/welcome">setup steps</Link>) makes <span className="mono">Documents\RecallSpring Study</span>{" "}
-              with one folder per job. Open a folder in Codex and start a session there; all folders share the same RecallSpring
+              The {a.name} setup (<Link to="/welcome">setup steps</Link>) makes <span className="mono">Documents\RecallSpring Study</span>{" "}
+              with one folder per job. Open a folder in {a.name} and start a session there; all folders share the same RecallSpring
               records, so nothing is copied twice.
             </p>
             <div className="structure" aria-label="Example folder structure">
@@ -140,7 +141,7 @@ function SetupCard({ a }: { a: AssistantWords }) {
       return (
         <Card title="Choose your assistant first">
           <p className="small" style={{ margin: 0 }}>
-            The steps below work with Claude, Codex or ChatGPT in RecallSpring. <Link to="/welcome">Choose yours</Link> to see how
+            The steps below work with Claude, Codex, Antigravity or ChatGPT in RecallSpring. <Link to="/welcome">Choose yours</Link> to see how
             to set it up.
           </p>
         </Card>
