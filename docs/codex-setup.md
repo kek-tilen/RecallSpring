@@ -69,9 +69,14 @@ scripts\install-codex-connector.ps1 -Uninstall
 This removes only RecallSpring's block from `config.toml`. Revoke the Codex token in RecallSpring → Settings →
 Assistant connector. Study folders and the token file stay until you delete them.
 
+## Smoke test 2026-11-22 (owner, Codex in the ChatGPT desktop app)
+
+Passed: the connector loaded from `config.toml`; the summary and answer forms showed inside the chat (MCP Apps);
+the summary was saved as a note and its concepts marked studied; three Bloom-2 questions were created; the answer was
+saved verbatim from the form before grading; the grade was recorded as `codex_app` with the model Codex reported,
+and RecallSpring set the next review. The CLI and IDE extension may still lack forms; they get the link fallback.
+
 ## Not verified yet
 
-- Whether the Codex app shows MCP Apps forms (reports differ). RecallSpring decides from what Codex announces when it
-  connects, so the link fallback is used whenever Codex does not announce support.
 - Whether `view_page` / `view_image` images reach the model in Codex (an open Codex issue reports image blocks
   dropped when structured content is present). The tools return plain image content; check in the smoke test.

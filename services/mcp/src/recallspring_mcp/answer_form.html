@@ -47,7 +47,7 @@
   <h1 id="prompt">Loading the question…</h1>
   <label for="answer">Your answer</label>
   <textarea id="answer" aria-describedby="hint" disabled></textarea>
-  <p class="hint" id="hint">Answer from memory in your own words. Your exact text is saved in RecallSpring before Claude sees it.</p>
+  <p class="hint" id="hint">Answer from memory in your own words. Your exact text is saved in RecallSpring before your assistant sees it.</p>
   <fieldset>
     <legend>Answer mode</legend>
     <label><input type="radio" name="mode" value="closed_notes" checked> Closed notes</label>
@@ -103,7 +103,7 @@
     ui.eyebrow.textContent = "RecallSpring · Bloom level " + (q.bloom_level || "?");
     if (q.already_answered) {
       saved = true;
-      setStatus("You already answered this question. Ask Claude for feedback or a new question.");
+      setStatus("You already answered this question. Ask your assistant for feedback or a new question.");
     }
     setBusy(false);
     if (!saved) ui.answer.focus();
@@ -128,7 +128,7 @@
       if (result.isError || !data || !data.attempt_id) throw new Error((result.content && result.content[0] && result.content[0].text) || "Not saved.");
       saved = true;
       const when = new Date(data.saved_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      setStatus(kind === "skip" ? "Skipped at " + when + ". The review stays due." : "Answer saved at " + when + ". Claude will give feedback next.");
+      setStatus(kind === "skip" ? "Skipped at " + when + ". The review stays due." : "Answer saved at " + when + ". Your assistant gives feedback next.");
       setBusy(false);
       const label = kind === "answer" ? "I submitted my answer" : (kind === "dont_know" ? "I chose “I don't know”" : "I skipped this question");
       request("ui/message", { role: "user", content: { type: "text",

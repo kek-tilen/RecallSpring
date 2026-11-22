@@ -58,7 +58,7 @@
     <span class="meta"><span id="timer" class="timer" aria-live="off"></span></span>
   </header>
   <p class="meta" id="intro">Answer from memory. Your answers are saved in RecallSpring as drafts while you work and
-    stored exactly when you submit, before Claude sees them.</p>
+    stored exactly when you submit, before your assistant sees them.</p>
   <form id="quiz" novalidate></form>
   <p class="score" id="score" hidden></p>
   <div class="actions">
@@ -184,7 +184,7 @@
         cls += right ? " right" : " wrong";
         text = right ? `Correct (${r.earned} pt).` : `Correct answer: ${r.correct_option}).`;
       } else if (r.earned === null) {
-        text = "Saved. Waiting for Claude's grading.";
+        text = "Saved. Waiting for your assistant to grade it.";
       } else {
         text = `${r.earned} / ${r.points} pts${r.feedback ? " – " + r.feedback : ""}`;
       }
@@ -280,7 +280,7 @@
   request("ui/initialize", { protocolVersion: "2026-01-26",
     appInfo: { name: "recallspring-quiz", version: "1" }, appCapabilities: {} })
     .then((res) => { applyContext(res && res.hostContext); notify("ui/notifications/initialized"); })
-    .catch(() => setStatus("This chat could not open the simulation form. Ask Claude to ask the questions in chat.", true));
+    .catch(() => setStatus("This chat could not open the simulation form. Ask your assistant to ask the questions in chat.", true));
 })();
 </script>
 </body>
