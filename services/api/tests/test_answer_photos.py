@@ -96,3 +96,28 @@ def test_an_image_pasted_into_a_chat_message_is_sent_once_and_kept(owner_api: Ap
     earlier = fake.bodies()[1]["input"][0]["content"]
     assert [c["type"] for c in earlier] == ["input_text"]  # sent once; later turns only say it was there
     assert "1 image attached" in earlier[0]["text"]
+
+
+def test_photos_sent_with_the_form_message_are_not_sent_again(owner_api: Api, fake: ToolFake) -> None:  # noqa: F811
+    sign_in(owner_api, fake)
+    ids = owner_api.course_with_question()
+    pid = photo(owner_api, ids["course_id"])
+    answer(owner_api, ids["question_id"], "", [pid])
+    fake.rounds = [
+        calls(1, ("a1", "get_answer", {"question_id": ids["question_id"]})),
+        reply_events("Partly right.", 2),
+    ]
+    r = send(
+        owner_api,
+        f"I saved my answer to question {ids['question_id']} with a photo of my work (attached).",
+        course_id=ids["course_id"],
+        photo_ids=[pid],
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["messages"][0]["photo_ids"] == [pid]
+    first, second = fake.bodies()
+    assert [c["type"] for c in first["input"][-1]["content"]] == ["input_text", "input_image"]
+    images = [
+        c for i in second["input"] if i.get("type") == "message" for c in i["content"] if c["type"] == "input_image"
+    ]
+    assert len(images) == 1  # only the one sent with the message

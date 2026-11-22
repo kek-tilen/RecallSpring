@@ -1,4 +1,4 @@
-import { ANSWER_FOLDER, AnswerPhotos, usePhotos } from "../components/Photos";
+import { ANSWER_FOLDER, AnswerPhotos, SavedPhotos, usePhotos } from "../components/Photos";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
@@ -94,18 +94,23 @@ export function AnswerPage() {
 }
 
 /** In Chat: the answer form ChatGPT asked for. ``onSaved`` runs after the answer is saved (then ChatGPT is told). */
-export function ChatAnswerForm({ questionId, onSaved }: { questionId: string; onSaved: (kind: AnswerKind) => void }) {
+export function ChatAnswerForm({ questionId, onSaved }: { questionId: string; onSaved: (kind: AnswerKind, photoIds: string[]) => void }) {
   const question = useQuery({ queryKey: ["questions", questionId], queryFn: () => get<QuestionView>(`/questions/${questionId}`) });
   return <Async q={question}>{(q) => <AnswerForm q={q} sessionId={null} onSaved={onSaved} />}</Async>;
 }
 
 export type AnswerKind = "answer" | "dont_know";
 
-function AnswerForm({ q, sessionId, onSaved }: { q: QuestionView; sessionId: string | null; onSaved?: (kind: AnswerKind) => void }) {
+function AnswerForm({ q, sessionId, onSaved }: {
+  q: QuestionView;
+  sessionId: string | null;
+  onSaved?: (kind: AnswerKind, photoIds: string[]) => void;
+}) {
   const qc = useQueryClient();
   const [draft, setText, clearDraft] = useDraft(`rs-answer-draft:${q.id}`);
   const [openNotes, setOpenNotes] = useState(false);
   const [saved, setSaved] = useState<Saved | null>(null);
+  const [savedPhotos, setSavedPhotos] = useState<string[]>([]);
   const photos = usePhotos(q.course_id, ANSWER_FOLDER);
   const hasAnswer = !!draft.text.trim() || photos.ids.length > 0;
   const save = useMutation({
@@ -123,20 +128,25 @@ function AnswerForm({ q, sessionId, onSaved }: { q: QuestionView; sessionId: str
         },
       }),
     onSuccess: (s, kind) => {
+      const sentPhotos = kind === "answer" ? photos.ids : [];
       clearDraft();
       photos.clear();
+      setSavedPhotos(sentPhotos);
       setSaved(s);
       void qc.invalidateQueries({ queryKey: keys.dashboard });
       void qc.invalidateQueries({ queryKey: ["questions", q.id] });
-      onSaved?.(kind);
+      onSaved?.(kind, sentPhotos);
     },
   });
 
   if (saved && onSaved) {
     return (
-      <p className="notice small" role="status" style={{ margin: 0 }}>
-        Your answer was saved at {dateTime(saved.saved_at)} and ChatGPT was told.
-      </p>
+      <div className="stack" style={{ gap: 8 }}>
+        <p className="notice small" role="status" style={{ margin: 0 }}>
+          Your answer was saved at {dateTime(saved.saved_at)} and ChatGPT was told.
+        </p>
+        <SavedPhotos ids={savedPhotos.map((id) => ({ id }))} label="Photos saved with your answer" />
+      </div>
     );
   }
   if (saved) {
@@ -144,6 +154,7 @@ function AnswerForm({ q, sessionId, onSaved }: { q: QuestionView; sessionId: str
       <Card title="Saved">
         <div className="stack" style={{ gap: 12 }}>
           <BackToAssistant what={`Your answer was saved at ${dateTime(saved.saved_at)}.`} />
+          <SavedPhotos ids={savedPhotos.map((id) => ({ id }))} label="Photos saved with your answer" />
           <p className="small muted" style={{ margin: 0 }}>
             Your assistant gives feedback; you can see it later under the concept in <Link to={`/courses/${q.course_id}`}>the course</Link>.
           </p>

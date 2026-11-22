@@ -58,7 +58,9 @@ Components:
   optionally, "Solved it on paper? A photo of your work counts as your answer": `Add a photo`, Ctrl+V or drag and
   drop, up to 4, thumbnails with remove and Saving/Saved. Each photo is saved first as an image in the course
   Library, folder `Answer photos` (category notes), then linked to the answer; a photo alone is enough. Course →
-  Answers shows them with the answer. The Chat message box also takes pasted or dropped images (folder
+  Answers shows them with the answer. In Chat the photos stay visible after saving: the form message ("I saved my
+  answer … with a photo of my work") carries them as thumbnails; every thumbnail opens full size in a new tab, and
+  a picture that cannot be shown becomes an `Open photo N` link. ChatGPT gets each photo once. The Chat message box also takes pasted or dropped images (folder
   `Chat images`; a planning chat asks to choose a course first); ChatGPT sees them with that message. The forms
   that Claude and Codex show inline do not take photos yet: the RecallSpring link (answer page) does.
 - **Summary check** (owner 2026-11-22): after a summary is saved, the assistant reads it and says what is correct,

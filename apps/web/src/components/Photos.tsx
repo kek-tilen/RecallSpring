@@ -121,7 +121,9 @@ export function PhotoStrip({ photos, onRemove }: { photos: Photo[]; onRemove?: (
     <ul className="photo-strip" aria-label="Photos added">
       {photos.map((p, i) => (
         <li key={p.key} className={`photo-thumb is-${p.state}`}>
-          <img src={p.preview} alt={`Photo ${i + 1}: ${p.filename}`} />
+          <a href={p.id ? `${API}/sources/${p.id}/file` : p.preview} target="_blank" rel="noreferrer" title="Open full size in a new tab">
+            <img src={p.preview} alt={`Photo ${i + 1}: ${p.filename}`} />
+          </a>
           <span className="photo-state tiny" role={p.state === "failed" ? "alert" : undefined}>
             {p.state === "saving" ? "Saving…" : p.state === "failed" ? (p.error ?? "Not saved") : "Saved"}
           </span>
@@ -167,24 +169,41 @@ export function AnswerPhotos({ photos }: { photos: Photos }) {
   );
 }
 
-/** Saved photos (of an answer or a message), opened full size in a new tab. */
+/** Saved photos (of an answer or a message): thumbnails that open full size in a new tab, or a plain link when the
+ * picture cannot be shown here. */
 export function SavedPhotos({ ids, label }: { ids: { id: string; filename?: string | null; available?: boolean }[]; label: string }) {
   if (!ids.length) return null;
   return (
     <ul className="photo-strip" aria-label={label}>
-      {ids.map((p, i) =>
-        p.available === false ? (
-          <li key={p.id} className="photo-thumb is-failed">
-            <span className="tiny muted">Photo {i + 1} was deleted</span>
-          </li>
-        ) : (
-          <li key={p.id} className="photo-thumb">
-            <a href={`${API}/sources/${p.id}/file`} target="_blank" rel="noreferrer">
-              <img src={`${API}/sources/${p.id}/file`} alt={`Photo ${i + 1}${p.filename ? `: ${p.filename}` : ""}`} loading="lazy" />
-            </a>
-          </li>
-        ),
-      )}
+      {ids.map((p, i) => (
+        <SavedPhoto key={p.id} photo={p} n={i + 1} />
+      ))}
     </ul>
+  );
+}
+
+function SavedPhoto({ photo, n }: { photo: { id: string; filename?: string | null; available?: boolean }; n: number }) {
+  const [broken, setBroken] = useState(false);
+  const url = `${API}/sources/${photo.id}/file`;
+  const name = `Photo ${n}${photo.filename ? `: ${photo.filename}` : ""}`;
+  if (photo.available === false) {
+    return (
+      <li className="photo-thumb is-failed">
+        <span className="tiny muted">Photo {n} was deleted</span>
+      </li>
+    );
+  }
+  return (
+    <li className="photo-thumb">
+      {broken ? (
+        <a className="photo-link small" href={url} target="_blank" rel="noreferrer">
+          Open photo {n}
+        </a>
+      ) : (
+        <a href={url} target="_blank" rel="noreferrer" title="Open full size in a new tab">
+          <img src={url} alt={name} loading="lazy" onError={() => setBroken(true)} />
+        </a>
+      )}
+    </li>
   );
 }

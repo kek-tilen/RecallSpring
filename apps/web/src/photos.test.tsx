@@ -54,6 +54,12 @@ it("a pasted photo is saved in Answer photos and counts as the answer", async ()
   expect(screen.getByAltText(/Photo 1/)).toBeTruthy();
 
   fireEvent.click(save);
-  await waitFor(() => expect(onSaved).toHaveBeenCalledWith("answer"));
+  await waitFor(() => expect(onSaved).toHaveBeenCalledWith("answer", ["p1"]));
+  // After saving, the photo stays visible and opens full size in a new tab.
+  const link = screen.getByRole("link", { name: /Photo 1/ }) as HTMLAnchorElement;
+  expect(link.target).toBe("_blank");
+  expect(link.getAttribute("href")).toContain("/sources/p1/file");
+  fireEvent.error(screen.getByAltText(/Photo 1/));
+  expect(screen.getByRole("link", { name: "Open photo 1" })).toBeTruthy();
   expect((sent[1]!.body as { photo_ids: string[]; answer_text: string }).photo_ids).toEqual(["p1"]);
 });

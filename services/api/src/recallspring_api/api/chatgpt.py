@@ -80,7 +80,7 @@ def _api_error(exc: siwc.SiwcError, tools: bool = False) -> ApiError:
     return ApiError(status, f"chatgpt_{exc.code}", message, details or None)
 
 
-def _answer_photos(db: Session, ctx: WriteCtx, output: str) -> dict[str, Any] | None:
+def _answer_photos(db: Session, ctx: WriteCtx, output: str, sent: set[str] | None = None) -> dict[str, Any] | None:
     """Photos of the learner's work in an answer ChatGPT just read (get_answer): sent as images in a message right
     after the tool output, so it can grade what was solved on paper."""
     try:
@@ -90,7 +90,8 @@ def _answer_photos(db: Session, ctx: WriteCtx, output: str) -> dict[str, Any] | 
     if isinstance(value, dict) and isinstance(value.get("result"), dict):
         value = value["result"]  # chat_tools wraps a tool's result as {"ok": true, "result": ...}
     found = value.get("photos") if isinstance(value, dict) else None
-    ids = [p["id"] for p in found or [] if isinstance(p, dict) and p.get("available")]
+    skip = sent or set()
+    ids = [p["id"] for p in found or [] if isinstance(p, dict) and p.get("available") and p["id"] not in skip]
     if not ids:
         return None
     images, missing = photo_svc.image_inputs(db, ctx.user.id, ids)
@@ -144,7 +145,7 @@ def _tool_turn(
             question.tool_calls = list(steps)
             db.commit()  # each step is on record before the next request
             items.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
-            if shown := _answer_photos(db, ctx, output):
+            if shown := _answer_photos(db, ctx, output, {str(p) for p in question.photo_ids or []}):
                 items.append(shown)
     assert last is not None
     texts.append(STOPPED_NOTE)

@@ -305,7 +305,10 @@ function ToolSteps({ steps }: { steps: ToolStep[] }) {
 }
 
 const FORM_MESSAGES = {
-  answer: (id: string) => `[RecallSpring] I saved my answer to question ${id} in the form. Please give me feedback.`,
+  answer: (id: string, photos = 0) =>
+    `[RecallSpring] I saved my answer to question ${id} in the form${
+      photos ? ` with ${photos === 1 ? "a photo" : `${photos} photos`} of my work (attached)` : ""
+    }. Please give me feedback.`,
   dont_know: (id: string) => `[RecallSpring] I answered "I don't know" to question ${id} in the form.`,
   summary: (title: string) =>
     `[RecallSpring] I saved my summary of "${title}" in the form. Please check it against the material (what is right, wrong or missing), then continue.`,
@@ -318,7 +321,11 @@ function summaryLink(f: Extract<ToolForm, { kind: "summary" }>): string {
 }
 
 /** A form inside the chat. Only the newest turn's forms can be filled in here; older ones link to their page. */
-function ChatForm({ form, live, onSend }: { form: ToolForm; live: boolean; onSend: ((text: string) => void) | null }) {
+function ChatForm({ form, live, onSend }: {
+  form: ToolForm;
+  live: boolean;
+  onSend: ((text: string, photoIds?: string[]) => void) | null;
+}) {
   if (form.kind === "quiz") {
     return (
       <div className="chat-form-card row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
@@ -347,7 +354,14 @@ function ChatForm({ form, live, onSend }: { form: ToolForm; live: boolean; onSen
   return (
     <div className="chat-form-card">
       {form.kind === "answer" ? (
-        <ChatAnswerForm questionId={form.question_id} onSaved={(kind) => onSend(FORM_MESSAGES[kind](form.question_id))} />
+        <ChatAnswerForm
+          questionId={form.question_id}
+          onSaved={(kind, photoIds) =>
+            kind === "answer"
+              ? onSend(FORM_MESSAGES.answer(form.question_id, photoIds.length), photoIds)
+              : onSend(FORM_MESSAGES.dont_know(form.question_id))
+          }
+        />
       ) : (
         <ChatSummaryForm
           courseId={form.course_id}
@@ -383,7 +397,7 @@ function Thread({
   conv: Conversation | null;
   names: Map<string, string>;
   pending: string | null;
-  onFormSaved: ((text: string) => void) | null;
+  onFormSaved: ((text: string, photoIds?: string[]) => void) | null;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const count = conv?.messages.length ?? 0;
@@ -1100,7 +1114,7 @@ export function ChatPage() {
               conv={current}
               names={names}
               pending={send.isPending && send.variables !== undefined ? (typeof send.variables === "string" ? send.variables : send.variables.text) : null}
-              onFormSaved={canSend && chosen ? (text) => send.mutate(text) : null}
+              onFormSaved={canSend && chosen ? (text, photoIds) => send.mutate({ text, photoIds: photoIds ?? [] }) : null}
             />
           )}
           <div className="chat-foot">
