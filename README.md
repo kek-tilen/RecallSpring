@@ -45,10 +45,14 @@ worked out without any AI.
 
 - **Learn first, then practise.** The assistant teaches from your material in short chunks, with page citations. You
   summarise in your own words, and only then come the questions. Practice on material you have not studied is refused.
+- **Built on Bloom's taxonomy.** Reading and your own notes come first (remember, understand). Practice then climbs
+  from 3 Apply to 4 Analyze to 5 Evaluate as your answers become solid, steps back after a weak answer, and mixes the
+  levels once you reach the top. RecallSpring works out the next level from your grades, without a model call.
 - **Spaced review that schedules itself.** Grades from 0 to 4 on one shared scale set the next review. Unsure or
   provisional grades only bring a short follow-up, never a longer interval.
-- **Exams and kolokviji.** Set a target and its date, and add an old paper if you have one. RecallSpring tracks your
-  readiness per concept and builds simulations in the style of the real exam.
+- **Midterms and exams.** Set a target and its date, and add an old midterm or exam paper if you have one. Practice
+  and simulations then follow its style: its question types, topic weights and Bloom mix. RecallSpring tracks your
+  readiness per concept.
 - **Your material, searchable.** PDF, Office and ODF files, slides and photos go into the Library; extracted text is
   split into sections that the assistant cites by ID. Notes keep every revision.
 - **Answers on paper.** Attach photos of handwritten work to an answer; the grading assistant sees them.
