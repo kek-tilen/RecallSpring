@@ -4,7 +4,7 @@
  * `data-theme`; the swatches here only preview them in Settings.
  */
 
-export type ThemeId = "system" | "light" | "dark" | "solarized-light" | "snow-storm" | "nord" | "dracula" | "gruvbox";
+export type ThemeId = "system" | "light" | "dark" | "solarized-light" | "snow-storm" | "nord" | "dracula" | "gruvbox" | "oled";
 
 export interface ThemeInfo {
   id: Exclude<ThemeId, "system">;
@@ -23,6 +23,7 @@ export const THEMES: ThemeInfo[] = [
   { id: "nord", name: "Nord", note: "Cool arctic blue-grey, calm", dark: true, swatch: ["#2e3440", "#3b4252", "#eceff4", "#88c0d0", "#d2e6f3"] },
   { id: "dracula", name: "Dracula", note: "Vivid purple and pink, high contrast", dark: true, swatch: ["#282a36", "#383a4c", "#f8f8f2", "#bd93f9", "#ece0ff"] },
   { id: "gruvbox", name: "Gruvbox Dark", note: "Warm retro browns and greens", dark: true, swatch: ["#282828", "#3c3836", "#ebdbb2", "#8ec07c", "#d5ebc7"] },
+  { id: "oled", name: "OLED Dark", note: "True black for OLED screens, sage accents", dark: true, swatch: ["#000000", "#0d0d0d", "#e6ecea", "#5fc4b4", "#c3ede4"] },
 ];
 
 const KEY = "rs-theme";

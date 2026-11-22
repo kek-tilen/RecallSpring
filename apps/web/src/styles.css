@@ -82,6 +82,33 @@
   --shadow: none;
 }
 
+/* OLED Dark: true black (pixels off on OLED screens) with RecallSpring's sage accents. Surfaces stay just above
+   black so cards and fields remain visible; all text and controls meet WCAG AA on every surface. */
+:root[data-theme="oled"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #0d0d0d;
+  --surface-elevated: #141414;
+  --primary: #5fc4b4;
+  --primary-hover: #82d5c8;
+  --on-primary: #001a16;
+  --ink: #e6ecea;
+  --muted: #9fafa9;
+  --border: #2a302e;
+  --border-strong: #5a6661;
+  --warning: #e0a874;
+  --warning-bg: #1f160d;
+  --danger: #f2877d;
+  --danger-bg: #220f0d;
+  --focus: #82d5c8;
+  --ramp-0: #34514b;
+  --ramp-1: #4e9c8d;
+  --ramp-2: #7ccfc0;
+  --ramp-3: #c3ede4;
+  --gap: #000000;
+  --shadow: none;
+}
+
 /* Four popular open-source colour schemes, adapted to RecallSpring's tokens (MIT-licensed palettes: Solarized by
    Ethan Schoonover, Nord by Arctic Ice Studio, Dracula by Zeno Rocha, Gruvbox by Pavel Pertsev). Text, links and
    warnings use darker or lighter steps where the original tones miss WCAG AA (4.5:1); the progress ramp stays one
@@ -1586,7 +1613,8 @@ pre.template {
 :root[data-theme="dark"],
 :root[data-theme="nord"],
 :root[data-theme="dracula"],
-:root[data-theme="gruvbox"] {
+:root[data-theme="gruvbox"],
+:root[data-theme="oled"] {
   --brand-mark: #5fc4b4;
   --c-blue: #3987e5;
   --c-orange: #d95926;
