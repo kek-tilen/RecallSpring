@@ -5,7 +5,7 @@
 <h3 align="center">RecallSpring</h3>
 
 <p align="center">
-    The open-source study companion that remembers for you.
+    Open-source study app that plans your reviews and tracks what you have learned.
     <br />
     <br />
     <a href="#introduction"><strong>Introduction</strong></a> ·
