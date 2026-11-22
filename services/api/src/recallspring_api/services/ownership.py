@@ -31,7 +31,16 @@ def owned[T: (Course, Concept, Question, Attempt, StudySession, Source, SourceSe
     if for_update:
         stmt = stmt.with_for_update()
     row = db.scalar(stmt)
+    if row is not None and model is not Course and not course_alive(db, getattr(row, "course_id", None)):
+        row = None  # everything in a deleted course is hidden with it (services/course_delete.py)
     if row is None:
         # Same response for "missing" and "someone else's" so IDs cannot be probed.
         raise not_found(_LABELS[model])
     return row
+
+
+def course_alive(db: Session, course_id: uuid.UUID | None) -> bool:
+    """False when the row's course was deleted; rows without a course are always alive."""
+    if course_id is None:
+        return True
+    return db.scalar(select(Course.id).where(Course.id == course_id, Course.deleted_at.is_(None))) is not None

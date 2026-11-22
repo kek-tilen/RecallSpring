@@ -4,6 +4,7 @@ import { request } from "../api";
 import { addDays, dateLabel, todayIso } from "../format";
 import { ORGANISATION_KEYS, useGroups } from "../queries";
 import type { CourseColor, CourseInfo, Group } from "../types";
+import { DeleteCourseDialog } from "./CourseForms";
 import { ErrorNote, Modal } from "./ui";
 
 export const COLORS: { id: CourseColor; label: string }[] = [
@@ -124,6 +125,7 @@ export function CourseDialog({ course, open, onClose }: { course: CourseInfo; op
   const [archived, setArchived] = useState(course.status === "archived");
   const [kind, setKind] = useState<CourseInfo["kind"]>(course.kind);
   const [goal, setGoal] = useState(course.description ?? "");
+  const [deleting, setDeleting] = useState(false);
   const save = useMutation({
     mutationFn: () => {
       const body: Record<string, unknown> = {};
@@ -145,6 +147,7 @@ export function CourseDialog({ course, open, onClose }: { course: CourseInfo; op
     e.preventDefault();
     save.mutate();
   }
+  if (deleting) return <DeleteCourseDialog course={course} open={open} onClose={onClose} />;
   return (
     <Modal open={open} title={kind === "interest" ? "Edit interest" : "Edit course"} onClose={onClose}>
       <form className="stack" onSubmit={submit}>
@@ -195,6 +198,9 @@ export function CourseDialog({ course, open, onClose }: { course: CourseInfo; op
         </label>
         {save.error && <ErrorNote error={save.error} />}
         <div className="row" style={{ justifyContent: "flex-end" }}>
+          <button type="button" className="btn ghost danger-text" style={{ marginRight: "auto" }} onClick={() => setDeleting(true)}>
+            Delete {course.kind === "interest" ? "interest" : "course"}…
+          </button>
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>

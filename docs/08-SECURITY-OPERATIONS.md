@@ -125,6 +125,11 @@ hashes; no OAuth credential, `.env` file or password is copied. The page-render 
    `RS_STORAGE_DIR`) in `services/api/.env`, run `alembic upgrade head`, start again (`scripts/start-local.ps1`). Keep the old database until you
    are sure; switching back is the same edit.
 
+Restore drill, 2026-11-22 (owner's local install): the newest snapshot was restored into a throwaway database and
+folder: 36 tables, every row count equal to the manifest, Alembic revision matching, all 27 files with correct
+checksums, that day's answers and notes present, and the API started and answered `ready` on the copy. The throwaway
+database and folder were then removed.
+
 Still required before a VPS release: an encrypted copy **off the VPS** to an owner-approved destination (owner choice
 2 in docs/10) and a restore drill there; the local backups above do not replace it.
 

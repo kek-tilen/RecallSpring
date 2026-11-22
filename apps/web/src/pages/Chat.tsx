@@ -113,6 +113,7 @@ const LIST_KEY = [...STATUS_KEY, "conversations"] as const;
 const MODEL_STORE = "rs.chatgpt.model";
 const VISUALS_STORE = "rs.chatgpt.visuals";
 const TOOLS_STORE = "rs.chatgpt.recallspring";
+const FULL_STORE = "rs.chat.fullpage";
 
 const NOT_ANSWERED: Record<string, string> = {
   usage_limit: "your ChatGPT plan's usage limit was reached",
@@ -887,6 +888,21 @@ export function ChatPage() {
   const [studyCourse, setStudyCourse] = useState("");
   const courses = useQuery({ queryKey: keys.courses, queryFn: () => get<Course[]>("/courses"), enabled: tools && !currentId });
   const [sideOpen, setSideOpen] = useState(false);
+  // Full page: no menu and no list beside the thread; the conversations open as a drawer (owner 2026-11-22).
+  const [full, setFull] = useState(() => remembered(FULL_STORE) === "on");
+  function toggleFull() {
+    setFull(!full);
+    setSideOpen(false);
+    remember(full ? "off" : "on", FULL_STORE);
+  }
+  useEffect(() => {
+    if (!full || !sideOpen) return;
+    const close = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setSideOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [full, sideOpen]);
   const [picking, setPicking] = useState(false);
   const [attaching, setAttaching] = useState(false);
   // Files chosen before a new conversation's first message (an existing one keeps them on the server).
@@ -960,9 +976,18 @@ export function ChatPage() {
   const usage = list.data?.usage;
 
   return (
-    <div className="chat-page">
+    <div className={full ? "chat-page full" : "chat-page"}>
       <header className="chat-top">
-        <div style={{ minWidth: 0 }}>
+        <button
+          type="button"
+          className="btn ghost small chat-side-toggle"
+          aria-expanded={sideOpen}
+          aria-controls="chat-side"
+          onClick={() => setSideOpen(!sideOpen)}
+        >
+          {sideOpen ? "Hide conversations" : `Conversations (${list.data?.conversations.length ?? 0})`}
+        </button>
+        <div style={{ minWidth: 0 }} className="chat-top-text">
           <h1>Chat</h1>
           <p className="tiny muted" style={{ margin: 0 }}>
             ChatGPT on your own plan{s?.connected && s.email ? ` (${s.email})` : ""}. Conversations are saved here ·{" "}
@@ -974,6 +999,15 @@ export function ChatPage() {
             Last 24 h: {totalsLine(usage.last_24_hours)} · 30 days: {totalsLine(usage.last_30_days)}
           </span>
         )}
+        <button
+          type="button"
+          className="btn ghost small chat-full-toggle"
+          aria-pressed={full}
+          title={full ? "Show the menu and the conversation list again" : "Use the whole window for the conversation"}
+          onClick={toggleFull}
+        >
+          {full ? "Exit full page" : "Full page"}
+        </button>
       </header>
 
       {status.error && <ErrorNote error={status.error} />}
@@ -986,12 +1020,11 @@ export function ChatPage() {
         </div>
       )}
 
-      <button type="button" className="btn ghost chat-side-toggle" aria-expanded={sideOpen} onClick={() => setSideOpen(!sideOpen)}>
-        {sideOpen ? "Hide conversations" : `Conversations (${list.data?.conversations.length ?? 0})`}
-      </button>
-
       <div className="chat-layout">
-        <aside className={sideOpen ? "chat-side open" : "chat-side"} aria-label="Conversation list">
+        {full && sideOpen && (
+          <button type="button" className="chat-scrim" aria-label="Close the conversation list" onClick={() => setSideOpen(false)} />
+        )}
+        <aside id="chat-side" className={sideOpen ? "chat-side open" : "chat-side"} aria-label="Conversation list">
           {list.data ? (
             <ConversationSide
               list={list.data}

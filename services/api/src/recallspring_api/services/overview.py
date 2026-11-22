@@ -299,7 +299,8 @@ def attempts_list(db: Session, user: User, course_id: uuid.UUID | None, limit: i
     stmt = (
         select(Attempt, Question)
         .join(Question, Question.id == Attempt.question_id)
-        .where(Attempt.user_id == user.id)
+        .join(Course, Course.id == Question.course_id)
+        .where(Attempt.user_id == user.id, Course.deleted_at.is_(None))
         .order_by(Attempt.submitted_at.desc())
         .limit(limit)
     )

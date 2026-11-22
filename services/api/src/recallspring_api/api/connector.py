@@ -87,7 +87,7 @@ from ..services.courses import ensure_new_title
 from ..services.events import audit, learning_event
 from ..services.learning import effective_status, mark, require_studied, save_summary
 from ..services.note_refs import references as note_references
-from ..services.ownership import owned
+from ..services.ownership import course_alive, owned
 from ..services.planner import today_plan
 from ..services.reviews import concept_ids_for_question, recompute, review_queue
 from ..services.targets import study_context, target_view
@@ -889,7 +889,7 @@ def set_interest_goal(
 
 def _quiz(db: Session, ctx: Ctx, quiz_id: uuid.UUID, lock: bool = False) -> Quiz:
     quiz = db.get(Quiz, quiz_id, with_for_update=lock)
-    if quiz is None or quiz.user_id != ctx.user.id:
+    if quiz is None or quiz.user_id != ctx.user.id or not course_alive(db, quiz.course_id):
         raise ApiError(404, "not_found", "Simulation not found.")
     return quiz
 
@@ -1105,7 +1105,13 @@ def list_quizzes(
 ) -> list[dict[str, Any]]:
     """Recent simulations, newest first. needs_grading=true: submitted ones with open answers Claude has not graded
     (for example a simulation the learner answered in the RecallSpring web app)."""
-    stmt = select(Quiz).where(Quiz.user_id == ctx.user.id).order_by(Quiz.created_at.desc()).limit(30)
+    stmt = (
+        select(Quiz)
+        .join(Course, Course.id == Quiz.course_id)
+        .where(Quiz.user_id == ctx.user.id, Course.deleted_at.is_(None))
+        .order_by(Quiz.created_at.desc())
+        .limit(30)
+    )
     if course_id is not None:
         stmt = stmt.where(Quiz.course_id == course_id)
     rows = [overview.quiz_summary(db, q) for q in db.scalars(stmt)]

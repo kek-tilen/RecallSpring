@@ -26,6 +26,10 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | GET | `/connector/*` | Connector surface: **bearer connector token only**, read + append, see tool contract below |
 | GET/POST | `/courses` | List/create courses |
 | GET/PATCH | `/courses/{id}` | Course detail and goals |
+| GET | `/courses/{id}/contents` | `{title, counts, restorable_days: 30}`: what deleting the course hides (materials, folders, concepts, notes, exams, simulations, questions, answers, conversations, focus_blocks) |
+| DELETE | `/courses/{id}` | Body `{confirm_title}` must equal the title exactly, else 422 `confirm_title_mismatch`. Soft delete of the course and everything in it (its rows get the course's `deleted_at`; questions, quizzes, attempts and reviews follow the course); idempotent; audit and learning event `course.deleted` with the counts; returns `{deleted, restorable_days: 30}`. Everything in a deleted course is 404 and leaves every list and the connector |
+| GET | `/courses/deleted` | Courses deleted in the last 30 days, newest first, with `deleted_at` |
+| POST | `/courses/{id}/restore` | Within 30 days: clears exactly the course's stamp (things deleted on their own before stay deleted); 409 `course_exists` when another course took the name; audit `course.restored` |
 | GET/POST | `/courses/{id}/syllabus` | Syllabus objectives and coverage |
 | POST | `/sources` | Multipart upload; create extraction job |
 | GET | `/sources/{id}` | Status, metadata, sections |

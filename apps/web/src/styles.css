@@ -2136,6 +2136,112 @@ tr.selected td {
   align-self: flex-start;
 }
 
+.chat-top-text {
+  margin-right: auto;
+}
+
+/* Full page (Chat's "Full page" button, remembered): the conversation fills the window, without the menu or the
+   list beside it. The list opens as a drawer over the thread; Escape or a click beside it closes it. */
+@media (min-width: 861px) {
+  .shell:has(.chat-page.full) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell:has(.chat-page.full) .rail,
+  .shell:has(.chat-page.full) .rail-show {
+    display: none;
+  }
+
+  .main:has(> .chat-page.full) {
+    padding: 0;
+  }
+
+  .chat-page.full {
+    max-width: none;
+    height: 100dvh;
+    gap: 0;
+  }
+
+  .chat-page.full .chat-top {
+    align-items: center;
+    padding: 10px 20px;
+    background: var(--surface-elevated);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chat-page.full .chat-top h1 {
+    font-size: 1.1rem;
+  }
+
+  .chat-page.full > .notice {
+    margin: 10px 20px 0;
+  }
+
+  .chat-page.full .chat-side-toggle {
+    display: inline-flex;
+    align-self: center;
+  }
+
+  .chat-page.full .chat-layout {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .chat-page.full .chat-side {
+    display: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 6;
+    width: min(320px, 85vw);
+    box-shadow: var(--shadow);
+  }
+
+  .chat-page.full .chat-side.open {
+    display: flex;
+    animation: chat-drawer 0.16s ease-out;
+  }
+
+  .chat-page.full .chat-scroll > *,
+  .chat-page.full .chat-foot > * {
+    width: min(100%, 900px);
+  }
+}
+
+.chat-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border: 0;
+  padding: 0;
+  background: rgb(0 0 0 / 0.16);
+  cursor: default;
+}
+
+@keyframes chat-drawer {
+  from {
+    transform: translateX(-12px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-page.full .chat-side.open {
+    animation: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .chat-full-toggle,
+  .chat-scrim {
+    display: none;
+  }
+}
+
 .chat-convs {
   list-style: none;
   margin: 0;
@@ -3562,3 +3668,7 @@ a.cite:hover {
   margin-bottom: 6px;
   padding: 0;
 }
+
+/* Course delete: a quiet red text button in the edit dialog, the name to type set apart. */
+.btn.danger-text { color: var(--danger); }
+.course-name-to-type { font-family: var(--mono, ui-monospace, monospace); overflow-wrap: anywhere; }

@@ -21,7 +21,7 @@ from ..models import Concept, Course, Quiz
 from ..schemas import QuizDraftIn, QuizSubmitIn
 from ..services import calendar, overview, week
 from ..services import quizzes as quiz_svc
-from ..services.ownership import owned
+from ..services.ownership import course_alive, owned
 from ..services.planner import today_plan
 from ..services.quizzes import form_view, results_view
 
@@ -31,7 +31,7 @@ router = APIRouter(tags=["overview"])
 def _quiz(db: Session, quiz_id: uuid.UUID, user_id: uuid.UUID, *, lock: bool = False) -> Quiz:
     stmt = select(Quiz).where(Quiz.id == quiz_id, Quiz.user_id == user_id)
     quiz = db.scalar(stmt.with_for_update() if lock else stmt)
-    if quiz is None:
+    if quiz is None or not course_alive(db, quiz.course_id):
         raise not_found("Simulation")
     return quiz
 
@@ -79,7 +79,12 @@ def concept_detail(
 def list_quizzes(
     course_id: uuid.UUID | None = None, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
 ) -> list[dict[str, Any]]:
-    stmt = select(Quiz).where(Quiz.user_id == ctx.user.id).order_by(Quiz.created_at.desc())
+    stmt = (
+        select(Quiz)
+        .join(Course, Course.id == Quiz.course_id)
+        .where(Quiz.user_id == ctx.user.id, Course.deleted_at.is_(None))
+        .order_by(Quiz.created_at.desc())
+    )
     if course_id is not None:
         stmt = stmt.where(Quiz.course_id == course_id)
     return [overview.quiz_summary(db, q) for q in db.scalars(stmt)]

@@ -76,7 +76,5 @@ the summary was saved as a note and its concepts marked studied; three Bloom-2 q
 saved verbatim from the form before grading; the grade was recorded as `codex_app` with the model Codex reported,
 and RecallSpring set the next review. The CLI and IDE extension may still lack forms; they get the link fallback.
 
-## Not verified yet
-
-- Whether `view_page` / `view_image` images reach the model in Codex (an open Codex issue reports image blocks
-  dropped when structured content is present). The tools return plain image content; check in the smoke test.
+Images: verified by the owner on 2026-11-22 in the Codex desktop app: `view_page` returned a page of a PDF and Codex
+described the figure on it correctly.

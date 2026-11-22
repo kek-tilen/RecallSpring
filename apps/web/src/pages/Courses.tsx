@@ -12,6 +12,7 @@ import {
   isFocused,
   useInvalidateOrganisation,
 } from "../components/organise";
+import { NewCourseDialog, RecentlyDeletedCourses } from "../components/CourseForms";
 import { Async, Confirm, Empty, ErrorNote, PageHead, StudyMeter } from "../components/ui";
 import { dateLabel, plural } from "../format";
 import { useArchived, useCourseSummary, useGroups } from "../queries";
@@ -162,6 +163,7 @@ export function CoursesPage() {
   const archived = useArchived();
   const [creating, setCreating] = useState(false);
   const [addingInterest, setAddingInterest] = useState(false);
+  const [addingCourse, setAddingCourse] = useState(false);
   return (
     <div className="page">
       <PageHead
@@ -171,6 +173,9 @@ export function CoursesPage() {
         <a href="#archived" className="btn ghost">
           Archived{archived.data ? ` (${archived.data.groups.length + archived.data.courses.length})` : ""}
         </a>
+        <button type="button" className="btn primary" onClick={() => setAddingCourse(true)}>
+          New course
+        </button>
         <button type="button" className="btn" onClick={() => setCreating(true)}>
           New university, faculty or semester
         </button>
@@ -189,7 +194,7 @@ export function CoursesPage() {
           if (courses.length === 0 && all.length === 0) {
             return (
               <Empty title="No courses yet">
-                Plan your semester in a planning chat with your assistant (see the <Link to="/guide">Guide</Link>):
+                Add one with <strong>New course</strong>, or plan your semester in a planning chat with your assistant (see the <Link to="/guide">Guide</Link>):
                 it creates your courses and files them under your university, faculty and semester.
               </Empty>
             );
@@ -257,8 +262,10 @@ export function CoursesPage() {
           {(view) => <ArchivedCourses view={view} compact />}
         </Async>
       </section>
+      <RecentlyDeletedCourses />
       {creating && <GroupDialog open onClose={() => setCreating(false)} />}
       {addingInterest && <NewInterestDialog open onClose={() => setAddingInterest(false)} />}
+      {addingCourse && <NewCourseDialog open onClose={() => setAddingCourse(false)} />}
     </div>
   );
 }

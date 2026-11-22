@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,7 @@ from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_s
 from ..errors import not_found
 from ..models import Concept, ConceptSource, Course, SourceSection, SyllabusItem
 from ..schemas import ConceptIn, ConceptOut, CourseIn, CourseOut, SyllabusItemIn, SyllabusItemOut
+from ..services import course_delete
 from ..services.courses import ensure_new_title
 from ..services.events import learning_event
 from ..services.ownership import owned
@@ -50,6 +52,62 @@ def create_course(payload: CourseIn, ctx: WriteCtx = Depends(write_ctx), db: Ses
     db.flush()
     db.refresh(course)
     return commit_with_response(db, ctx, payload, 201, CourseOut.model_validate(course).model_dump(mode="json"))
+
+
+class CourseDeleteIn(BaseModel):
+    """The course name exactly as the learner typed it in the confirmation dialog."""
+
+    confirm_title: str = Field(min_length=1, max_length=200)
+
+
+def _deleted_view(c: Course) -> dict[str, Any]:
+    return {
+        **CourseOut.model_validate(c).model_dump(mode="json"),
+        "deleted_at": c.deleted_at.isoformat() if c.deleted_at else None,
+    }
+
+
+@router.get("/courses/deleted")
+def deleted_courses(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    """Courses deleted in the last 30 days, newest first, so they can be restored."""
+    return [_deleted_view(c) for c in course_delete.deleted_courses(db, ctx.user)]
+
+
+@router.get("/courses/{course_id}/contents")
+def course_contents(
+    course_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """What deleting this course would hide (counts for the confirmation dialog)."""
+    course = owned(db, Course, course_id, ctx.user.id)
+    return {
+        "title": course.title,
+        "counts": course_delete.contents(db, course),
+        "restorable_days": course_delete.RESTORE_DAYS,
+    }
+
+
+@router.delete("/courses/{course_id}")
+def delete_course(
+    course_id: uuid.UUID, payload: CourseDeleteIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Soft delete of the course and everything in it, only with its exact name; restorable for 30 days."""
+    key = {"delete": str(course_id), "confirm_title": payload.confirm_title}
+    if replay := replay_if_seen(db, ctx, key):
+        return replay
+    course = course_delete.delete_course(db, ctx.user, course_id, payload.confirm_title, ctx.request_id)
+    body = {"deleted": _deleted_view(course), "restorable_days": course_delete.RESTORE_DAYS}
+    return commit_with_response(db, ctx, key, 200, body)
+
+
+@router.post("/courses/{course_id}/restore", response_model=CourseOut)
+def restore_course(
+    course_id: uuid.UUID, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    key = {"restore": str(course_id)}
+    if replay := replay_if_seen(db, ctx, key):
+        return replay
+    course = course_delete.restore_course(db, ctx.user, course_id, ctx.request_id)
+    return commit_with_response(db, ctx, key, 200, CourseOut.model_validate(course).model_dump(mode="json"))
 
 
 @router.get("/courses/{course_id}", response_model=CourseOut)
