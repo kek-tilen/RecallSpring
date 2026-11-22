@@ -19,6 +19,7 @@ export function minutesText(m: number): string {
 
 const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" });
 const WEEKDAY_LONG = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "UTC" });
+const DAY_TIP = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 const dayOf = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
 function isTyping(target: EventTarget | null): boolean {
@@ -137,7 +138,15 @@ export function FocusTime({ s, compact = false }: { s: FocusSummary; compact?: b
       </div>
       <ul className="focus-days" aria-label="Focus time on each of the last 7 days">
         {s.days.map((d) => (
-          <li key={d.date}>
+          // Hover, or focus with Tab, shows the day's time; screen readers get the same from the hidden text.
+          <li key={d.date} tabIndex={0}>
+            <span className="focus-tip" aria-hidden="true">
+              <strong>{d.date === s.today.date ? "Today" : DAY_TIP.format(dayOf(d.date))}</strong>
+              <span>
+                {minutesText(d.minutes)}
+                {d.sessions > 0 && ` · ${d.sessions} ${d.sessions === 1 ? "block" : "blocks"}`}
+              </span>
+            </span>
             <span className="bar" style={{ height: `${Math.max(2, Math.round((d.minutes / max) * 64))}px` }} aria-hidden="true" />
             <span className="tiny muted" aria-hidden="true">
               {WEEKDAY.format(dayOf(d.date))}
@@ -172,8 +181,9 @@ function blockLine(b: FocusBlock): string {
 }
 
 /** The latest blocks. A wrongly timed one can be removed after confirming, and restored for 30 days. */
-function Recent({ s }: { s: FocusSummary }) {
+export function Recent({ s }: { s: FocusSummary }) {
   const qc = useQueryClient();
+  const courses = useCourses();
   const [asked, setAsked] = useState<FocusBlock | null>(null);
   const done = (next: FocusSummary) => {
     qc.setQueryData(keys.focusSummary, next);
@@ -186,6 +196,11 @@ function Recent({ s }: { s: FocusSummary }) {
       done(next);
       setAsked(null);
     },
+  });
+  const setCourse = useMutation({
+    mutationFn: ({ id, courseId }: { id: string; courseId: string | null }) =>
+      request<FocusSummary>(`/focus-sessions/${id}`, { method: "PATCH", json: { course_id: courseId } }),
+    onSuccess: done,
   });
   const restore = useMutation({
     mutationFn: (id: string) => request<FocusSummary>(`/focus-sessions/${id}/restore`, { method: "POST" }),
@@ -205,7 +220,25 @@ function Recent({ s }: { s: FocusSummary }) {
               <span>
                 <strong>{minutesText(b.minutes)}</strong>
                 {!b.completed && <span className="chip warn" style={{ marginLeft: 8 }}>Stopped early</span>}
-                <span className="small muted"> · {b.course_title ?? "No course"}</span>
+                <span className="small muted"> · </span>
+                <select
+                  className="focus-course small"
+                  value={b.course_id ?? ""}
+                  disabled={setCourse.isPending || !courses.data}
+                  aria-label={`Course for the block: ${blockLine(b)}`}
+                  title="Change the course this block counts for"
+                  onChange={(e) => setCourse.mutate({ id: b.id, courseId: e.target.value || null })}
+                >
+                  <option value="">No course</option>
+                  {b.course_id && !courses.data?.some((c) => c.id === b.course_id) && (
+                    <option value={b.course_id}>{b.course_title ?? "Course"}</option>
+                  )}
+                  {(courses.data ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                    </option>
+                  ))}
+                </select>
                 <span className="tiny muted" style={{ display: "block" }}>
                   {dayHeading(b.ended_at)}, {timeOnly(b.ended_at)}
                 </span>
@@ -226,6 +259,7 @@ function Recent({ s }: { s: FocusSummary }) {
         </ul>
       )}
 
+      {setCourse.error && <ErrorNote error={setCourse.error} />}
       {s.removed.length > 0 && (
         <div className="stack" style={{ gap: 6 }}>
           <h3 className="small" style={{ margin: 0 }}>

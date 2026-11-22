@@ -98,6 +98,7 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | GET | `/focus/summary` | Focus time today, the last 7 days by day (learner's time zone) and by course, the latest 8 blocks, `removed` (blocks removed in the last `restore_days` = 30 days) |
 | DELETE | `/focus-sessions/{id}` | Remove a wrongly timed block after the learner confirmed it (owner session + CSRF): soft delete, no longer counted anywhere (summary, Claude's `focus_time`); audited `focus.deleted`; returns the summary. Removing again changes nothing |
 | POST | `/learning` | The learner's summary of a learning chunk written on the web `/summary` page (owner session + CSRF; same body and effect as the connector's `/learning`: saved exactly as a note, concepts marked studied) |
+| PATCH | `/focus-sessions/{id}` | `{course_id: uuid or null}` (required): the course the block counts for, set afterwards; own blocks and courses only (404 otherwise); audited `focus.course_changed` with from/to; returns the summary |
 | POST | `/focus-sessions/{id}/restore` | Count a removed block again within 30 days (`409 restore_period_over` after); audited `focus.restored`; returns the summary |
 | GET | `/health/live` | Liveness, no secrets |
 | GET | `/health/ready` | DB and storage checks, restricted if exposed |

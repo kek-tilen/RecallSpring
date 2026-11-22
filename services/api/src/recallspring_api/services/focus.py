@@ -17,6 +17,7 @@ from .. import clock
 from ..errors import ApiError, not_found
 from ..models import Course, FocusSession, User
 from .events import audit
+from .ownership import owned
 
 DAYS = 7
 RESTORE_DAYS = 30
@@ -148,3 +149,34 @@ def course_focus(db: Session, user: User, course_id: uuid.UUID, now: datetime) -
         "how_to_use": "Pomodoro focus time the learner timed for this course in RecallSpring. It shows effort and "
         "pacing only, never what they learned; do not treat it as evidence of mastery.",
     }
+
+
+def set_course(
+    db: Session, user: User, session_id: uuid.UUID, course_id: uuid.UUID | None, request_id: str | None
+) -> None:
+    """Count a block for another course (or none), e.g. when the timer ran without one. Own blocks and courses
+    only; audited with the old and new course."""
+    s = db.scalar(
+        select(FocusSession).where(FocusSession.id == session_id, FocusSession.user_id == user.id).with_for_update()
+    )
+    if s is None:
+        raise not_found("Focus block")
+    if course_id is not None:
+        owned(db, Course, course_id, user.id)
+    if s.course_id == course_id:
+        return
+    old = s.course_id
+    s.course_id = course_id
+    audit(
+        db,
+        actor_id=user.id,
+        action="focus.course_changed",
+        target_type="focus_session",
+        target_id=s.id,
+        details={
+            "minutes": _minutes(s.focused_seconds),
+            "from_course_id": str(old) if old else None,
+            "to_course_id": str(course_id) if course_id else None,
+        },
+        request_id=request_id,
+    )

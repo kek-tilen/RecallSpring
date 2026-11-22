@@ -858,6 +858,12 @@ class KnownConceptsIn(BaseModel):
 # ---------------------------------------------------------------- Pomodoro focus time
 
 
+class FocusSessionPatch(BaseModel):
+    """The course a focus block counted for, set afterwards (null = no course)."""
+
+    course_id: uuid.UUID | None
+
+
 class FocusSessionIn(BaseModel):
     client_session_id: uuid.UUID
     course_id: uuid.UUID | None = None

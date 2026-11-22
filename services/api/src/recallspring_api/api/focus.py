@@ -17,7 +17,7 @@ from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, csrf_ctx, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
 from ..models import Course, FocusSession
-from ..schemas import FocusSessionIn
+from ..schemas import FocusSessionIn, FocusSessionPatch
 from ..services import focus
 from ..services.events import learning_event
 from ..services.ownership import owned
@@ -109,6 +109,16 @@ def remove_focus_session(
     """Remove a wrongly timed block after the learner confirmed it: it no longer counts as focus time and can be
     restored for 30 days (soft delete, audited). Returns the updated summary."""
     focus.set_removed(db, ctx.user, session_id, True, ctx.request_id)
+    db.commit()
+    return focus.summary(db, ctx.user, clock.now())
+
+
+@router.patch("/focus-sessions/{session_id}")
+def update_focus_session(
+    session_id: uuid.UUID, payload: FocusSessionPatch, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Set the course a block counts for afterwards (audited). Returns the updated summary."""
+    focus.set_course(db, ctx.user, session_id, payload.course_id, ctx.request_id)
     db.commit()
     return focus.summary(db, ctx.user, clock.now())
 

@@ -144,3 +144,24 @@ def test_a_wrong_block_can_be_removed_and_restored(owner_api: Api, conn: Connect
 def test_only_your_own_blocks_can_be_removed(owner_api: Api, frozen: FrozenClock) -> None:
     r = owner_api.client.delete(f"/api/v1/focus-sessions/{uuid.uuid4()}", headers=owner_api.headers())
     assert r.status_code == 404
+
+
+def test_the_course_of_a_block_can_be_set_afterwards(owner_api: Api, frozen: FrozenClock) -> None:
+    stats = course(owner_api)
+    saved = owner_api.post("/focus-sessions", block()).json()
+    assert saved["course_id"] is None
+    patch = lambda body: owner_api.client.patch(  # noqa: E731
+        f"/api/v1/focus-sessions/{saved['id']}", json=body, headers=owner_api.headers()
+    )
+    r = patch({"course_id": stats})
+    assert r.status_code == 200
+    s = r.json()
+    assert s["recent"][0]["course_id"] == stats and s["recent"][0]["course_title"] == "Statistika"
+    assert [(c["course_title"], c["minutes"]) for c in s["by_course"]] == [("Statistika", 45)]
+    assert patch({"course_id": None}).json()["recent"][0]["course_id"] is None
+    assert patch({"course_id": str(uuid.uuid4())}).status_code == 404  # not your course
+    other = owner_api.client.patch(
+        f"/api/v1/focus-sessions/{uuid.uuid4()}", json={"course_id": None}, headers=owner_api.headers()
+    )
+    assert other.status_code == 404
+    assert patch({}).status_code == 422  # course_id must be sent (null for none)
