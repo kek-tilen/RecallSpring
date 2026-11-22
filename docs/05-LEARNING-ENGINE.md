@@ -17,6 +17,8 @@
 
 Default on new topics: gently ramp levels 3->4->5 **when evidence of foundation exists**. Default on revisions: mix levels 1–5 and topics, progressively increasing transfer. Make level selector flexible; not every topic admits a meaningful level-5 prompt.
 
+Practice ramp (2026-11-22): reading and notes are phases 1–2; practice then follows each concept's `practice.next_level` in `get_course_outline`, worked out by RecallSpring without a model call (`services/bloom.py`). A level counts as reached with a final grade of 3 or 4 from an assistant or the learner's correction (provisional and self-assessed grades never move it up). It ramps 3 Apply → 4 Analyze → 5 Evaluate, steps back one level (never below 3) after a 0–1 answer, and once 5 is reached suggests the level among 3–5 practised least recently (mixed). An exam profile's Bloom mix takes precedence; quizzes mix concepts and levels.
+
 ## Learning lifecycle
 
 `Unseen -> Reading -> Practicing -> Review queued -> Due -> Reviewed -> Maintained` is a UX model, not a strict mastery ladder. Concepts can return to `Needs attention` after an error. Self-ratings are distinct from evidenced results.

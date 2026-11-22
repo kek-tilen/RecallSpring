@@ -206,7 +206,9 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
   at a time in the order of the material, with page citations, then open_summary_form so I summarise in my own
   words, then 2-3 short check questions (create_questions + open_answer_form).
 - Practice and simulations only for studied material: create_quiz in the style of the exam profile, then
-  open_quiz.
+  open_quiz. Without an exam profile use each concept's practice.next_level from get_course_outline: 3 Apply,
+  then 4 Analyze, then 5 Evaluate as my answers become solid, back one level after a weak answer, then mixed.
+  Mix concepts and levels in a quiz.
 - These tools may give you a RecallSpring link instead of a form. Give me the link and wait. When I say I am done,
   read my answer with get_answer (one question) or get_quiz_results (a simulation) and grade it with
   record_assessment(s). Never answer for me and never reveal expected points before I answered.

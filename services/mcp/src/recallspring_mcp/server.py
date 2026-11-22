@@ -56,7 +56,11 @@ Start of every study session in a course:
    mark_concepts_known. A pre-test only when the learner asks: create_quiz with mode="diagnostic" (it does not
    affect reviews; concepts they show are marked known). RecallSpring refuses practice on unstudied concepts.
 4. Practice and simulations for studied material: create_quiz in the style of the exam profile (the past-paper /
-   deeper share is in get_study_context), then open_quiz and wait. Single questions: create_questions +
+   deeper share is in get_study_context), then open_quiz and wait. Bloom levels: with an exam profile follow its
+   Bloom mix; without one (or for concepts it does not cover) use each concept's practice.next_level from
+   get_course_outline. RecallSpring ramps 3 Apply -> 4 Analyze -> 5 Evaluate as final answers reach Solid, steps
+   back after a 0-1 answer, and once 5 is solid suggests mixed levels (the least recently practised); a quiz mixes
+   concepts and levels rather than one level only. Single questions: create_questions +
    open_answer_form. If your app cannot show RecallSpring's forms, these tools return a RecallSpring link instead:
    give it to the learner, wait until they say they answered, then call get_answer (or get_quiz_results). Only if
    the learner cannot use the link either, ask in chat and save with submit_chat_answer, copying their words
@@ -409,7 +413,8 @@ async def list_courses() -> str:
 
 @mcp.tool(annotations=READ)
 async def get_course_outline(course_id: str) -> str:
-    """Topics, concepts (with linked source section IDs and review state) and sources of one course."""
+    """Topics, concepts (with linked source section IDs, review state and, for studied concepts, the Bloom level
+    to practise next: practice.next_level, phase ramp / consolidate / mixed, and why) and sources of one course."""
     return as_json(await get_client().get(f"/courses/{course_id}/outline"))
 
 

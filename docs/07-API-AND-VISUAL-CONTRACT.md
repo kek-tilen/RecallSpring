@@ -123,7 +123,7 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | Tool | Kind | Contract |
 |---|---|---|
 | `get_study_plan` | read | Today's ranked plan with `why_selected` |
-| `list_courses`, `get_course_outline` | read | Courses, syllabus topics, concepts and coverage |
+| `list_courses`, `get_course_outline` | read | Courses, syllabus topics, concepts and coverage; each studied concept has `practice` (`next_level` 3–5, `phase` ramp/consolidate/mixed, `highest_solid`, `why`) |
 | `search_sources`, `get_source_section` | read | Section text wrapped as untrusted document content, with section ID and citation label; IDs are remembered for the session |
 | `get_notes` | read | Learner notes for a topic (read-only; the tutor may comment in chat but never rewrites notes), each with the Library files it links (`files` / `references`: name, kind, `source_id`, or deleted) so the assistant can open them with `view_image`, `view_page` or `get_source_section` |
 | `get_due_reviews` | read | Due concepts with due reason and last evidence |

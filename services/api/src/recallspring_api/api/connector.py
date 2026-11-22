@@ -77,7 +77,7 @@ from ..schemas import (
     TargetProfileIn,
     TargetUpdateIn,
 )
-from ..services import assistants, focus, overview, readiness, week
+from ..services import assistants, bloom, focus, overview, readiness, week
 from ..services import attempts as attempt_svc
 from ..services import folders as folder_svc
 from ..services import interests as interest_svc
@@ -191,16 +191,22 @@ def outline(course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session
         .order_by(SyllabusItem.position)
     )
     concepts = []
-    for c in db.scalars(
-        select(Concept).where(Concept.course_id == course_id, Concept.deleted_at.is_(None)).order_by(Concept.term)
-    ):
+    rows = list(
+        db.scalars(
+            select(Concept).where(Concept.course_id == course_id, Concept.deleted_at.is_(None)).order_by(Concept.term)
+        )
+    )
+    # The next practice level per concept (3 → 4 → 5, then mixed; services/bloom.py), only for studied concepts.
+    levels = bloom.suggestions(db, ctx.user.id, [c.id for c in rows])
+    for c in rows:
         state = db.get(ReviewState, (ctx.user.id, c.id))
+        status = effective_status(c, state is not None)
         links = [str(s) for s in db.scalars(select(ConceptSource.section_id).where(ConceptSource.concept_id == c.id))]
         concepts.append(
             {
                 "id": str(c.id),
                 "term": c.term,
-                "study_status": effective_status(c, state is not None),
+                "study_status": status,
                 "definition_draft": c.definition_draft,
                 "topic_id": str(c.syllabus_item_id) if c.syllabus_item_id else None,
                 "source_section_ids": links,
@@ -213,6 +219,7 @@ def outline(course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session
                     "reason": state.due_reason.get("message"),
                     "evidence_count": state.evidence_count,
                 },
+                "practice": None if status == "not_studied" else levels[c.id],
             }
         )
     folder_tree = folder_svc.tree(db, ctx.user.id)
