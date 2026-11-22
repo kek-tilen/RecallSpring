@@ -2,6 +2,7 @@ import { Fragment, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { API } from "../api";
 import type { NoteRef } from "../types";
+import { Formula } from "./Math";
 import { Visual, type VisualResult } from "./Visual";
 
 /**
@@ -9,6 +10,9 @@ import { Visual, type VisualResult } from "./Visual";
  * inline bold/italic/code/links. Nothing is ever inserted as HTML, so HTML, scripts or styles in a reply are shown
  * as text and never run (AGENTS.md: no model-generated HTML/JS/CSS). A fence tagged `recallspring-visual` is drawn
  * from the server's checked copy (`visuals`, in the same order), never from the raw text.
+ *
+ * Formulas in LaTeX (`\( … \)`, `$ … $`; on their own lines `\[ … \]`, `$$ … $$`) are drawn as MathML by
+ * `Formula`, also from React elements only.
  *
  * In a note (`refs` given) `[name](source:<id>)` links a Library file and `![name](source:<id>)` shows a picture,
  * always through RecallSpring's own owner-checked file address; elsewhere such text stays plain.
@@ -38,6 +42,7 @@ type Block =
   | { kind: "list"; ordered: boolean; start: number; items: { text: string; depth: number }[] }
   | { kind: "quote"; lines: string[] }
   | { kind: "table"; head: string[]; rows: string[][] }
+  | { kind: "math"; tex: string; delims: [string, string] }
   | { kind: "hr" };
 
 const FENCE = /^\s*(```|~~~)\s*([\w+#.-]*)\s*$/;
@@ -45,6 +50,8 @@ const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const BULLET = /^(\s*)[-*+]\s+(.*)$/;
 const NUMBERED = /^(\s*)(\d{1,9})[.)]\s+(.*)$/;
 const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
+/** A display formula starting a line: `\[` or `$$`. */
+const MATH_OPEN = /^\s*(\\\[|\$\$)/;
 const TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
 
 function cells(line: string): string[] {
@@ -72,6 +79,39 @@ export function parseBlocks(source: string): Block[] {
       i++;
       blocks.push({ kind: "code", lang: fence[2] ?? "", text: body.join("\n") });
       continue;
+    }
+    const open = MATH_OPEN.exec(line);
+    if (open) {
+      const close = open[1] === "$$" ? "$$" : "\\]";
+      const first = line.slice(open.index + open[0].length);
+      const body: string[] = [];
+      let rest = first;
+      let j = i;
+      // Up to the closing delimiter; text after it on that line stays a paragraph line.
+      for (;;) {
+        const end = rest.indexOf(close);
+        if (end >= 0) {
+          body.push(rest.slice(0, end));
+          rest = rest.slice(end + close.length);
+          break;
+        }
+        body.push(rest);
+        j++;
+        if (j >= lines.length) {
+          rest = "";
+          j = -1;
+          break;
+        }
+        rest = lines[j]!;
+      }
+      if (j >= 0) {
+        blocks.push({ kind: "math", tex: body.join("\n"), delims: [open[1]!, close] });
+        if (rest.trim()) lines[j] = rest;
+        else j++;
+        i = j;
+        continue;
+      }
+      // Never closed: an ordinary line.
     }
     const heading = HEADING.exec(line);
     if (heading) {
@@ -128,6 +168,7 @@ export function parseBlocks(source: string): Block[] {
       !HEADING.test(lines[i]!) &&
       !BULLET.test(lines[i]!) &&
       !NUMBERED.test(lines[i]!) &&
+      !MATH_OPEN.test(lines[i]!) &&
       !lines[i]!.trimStart().startsWith(">")
     ) {
       para.push(lines[i++]!);
@@ -142,10 +183,14 @@ const INLINE = new RegExp(
   [
     /(`[^`\n]+`)/.source,
     /(\*\*[^*\n]+\*\*|__[^_\n]+__)/.source,
-    /(\*[^*\s][^*\n]*\*|_[^_\s][^_\n]*_)/.source,
+    /(\*[^*\s][^*\n]*\*|_[^_\s\\$][^_\n\\$]*_)/.source, // no backslash or $ in _italic_: they belong to formulas
     /(\[[^\]\n]+\]\((https?:\/\/[^\s)]+)\))/.source,
     /\[(S\d{1,4})\]/.source,
     `((!?)\\[([^\\]\\n]*)\\]\\(source:(${UUID})\\))`,
+    /\\\((.+?)\\\)/.source, // \( inline formula \)
+    /\\\[(.+?)\\\]/.source, // \[ display formula \] within a line
+    /\$\$(.+?)\$\$/.source,
+    /\$(?=[^\s$])([^$\n]*?[^\s$\\])\$(?![\d$])/.source, // $x$, not "costs $5 and $10"
   ].join("|"),
 );
 
@@ -217,6 +262,10 @@ export function inline(text: string, key = "i", cites?: Cites, refs?: Refs): Rea
     const token = m[0];
     const k = `${key}-${n++}`;
     if (m[1]) out.push(<code key={k}>{token.slice(1, -1)}</code>);
+    else if (m[11] !== undefined) out.push(<Formula key={k} tex={m[11]} />);
+    else if (m[12] !== undefined) out.push(<Formula key={k} tex={m[12]} display />);
+    else if (m[13] !== undefined) out.push(<Formula key={k} tex={m[13]} display delims={["$$", "$$"]} />);
+    else if (m[14] !== undefined) out.push(<Formula key={k} tex={m[14]} delims={["$", "$"]} />);
     else if (m[2]) out.push(<strong key={k}>{inline(token.slice(2, -2), k, cites, refs)}</strong>);
     else if (m[3]) out.push(<em key={k}>{inline(token.slice(1, -1), k, cites, refs)}</em>);
     else if (m[6]) out.push(cites ? <Citation key={k} id={m[6]} cite={cites[m[6]]} /> : token);
@@ -328,6 +377,8 @@ export function Markdown({
             );
           case "hr":
             return <hr key={i} />;
+          case "math":
+            return <Formula key={i} tex={b.tex} display delims={b.delims} />;
           default:
             return (
               <p key={i}>

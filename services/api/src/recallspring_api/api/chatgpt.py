@@ -41,6 +41,10 @@ TOOL_INSTRUCTIONS = (
     "You are ChatGPT, used as a tutor from RecallSpring, a study app the learner runs on their own computer. Answer "
     "clearly, in the language the learner writes in."
 )
+MATH_HINT = (
+    r"Write formulas in LaTeX: \( ... \) inside a sentence and \[ ... \] on lines of their own (RecallSpring "
+    "shows them as math); never put them in code blocks."
+)
 STOPPED_NOTE = (
     "(RecallSpring stopped here: ChatGPT used the maximum number of RecallSpring steps for one message. Write "
     '"continue" to go on.)'
@@ -265,7 +269,7 @@ def send_message(
         turns[-1] = {"role": "user", "text": payload.message + note, "images": images}
     db.commit()  # what is sent is recorded before the request; no transaction stays open while waiting
     use_tools = payload.recallspring
-    parts = [TOOL_INSTRUCTIONS if use_tools else INSTRUCTIONS]
+    parts = [TOOL_INSTRUCTIONS if use_tools else INSTRUCTIONS, MATH_HINT]
     if use_tools:
         parts.append(chat_tools.instructions(db, conv))
     if payload.visuals:

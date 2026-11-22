@@ -3930,3 +3930,62 @@ dialog.photo-viewer::backdrop {
   border-radius: var(--radius-control);
   background: var(--surface);
 }
+
+/* Formulas (MathML drawn by the browser; components/Math.tsx). */
+math {
+  font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", math;
+}
+
+math.math-inline {
+  font-size: 1.08em;
+}
+
+.md math.math-block {
+  margin: 10px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  padding: 2px 0;
+}
+
+math .m-bold {
+  font-weight: 700;
+}
+
+/* \overline (e.g. Boolean NOT over a whole term) and \underline: a rule over or under the group. */
+math .m-overline {
+  border-top: 0.06em solid currentcolor;
+  padding-top: 0.1em;
+}
+
+math .m-underline {
+  border-bottom: 0.06em solid currentcolor;
+  padding-bottom: 0.1em;
+}
+
+math .m-boxed {
+  border: 1px solid currentcolor;
+  padding: 2px 4px;
+}
+
+math mtable.m-cases mtd,
+math mtable.m-align mtd:nth-child(even) {
+  text-align: left;
+}
+
+math mtable.m-align mtd:nth-child(odd) {
+  text-align: right;
+}
+
+math mtable mtd {
+  padding: 2px 6px;
+}
+
+.math-raw {
+  overflow-wrap: anywhere;
+}
+
+.math-raw-block {
+  display: block;
+  margin: 8px 0;
+}
