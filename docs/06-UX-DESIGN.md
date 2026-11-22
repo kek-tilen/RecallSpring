@@ -129,15 +129,18 @@ Implemented (2026-11-21, ADR-008):
 - **First run and Welcome (Phase 3 of docs/plan-without-claude.md):** while an install has no account, the sign-in page is
   *Welcome to RecallSpring*: username, password and repeat (at least 12 characters, no e-mail reset), time zone (from
   the browser, a list of IANA zones). Only on the computer RecallSpring runs on; elsewhere the page says where to do
-  it. Then **/welcome** (*Choose your assistant*): Claude (Claude Desktop), Codex, ChatGPT in RecallSpring or Decide
-  later, each with what it needs; after saving, the next steps for that assistant with copyable commands. Home shows a
+  it. Then **/welcome** (*Choose your assistant*): Claude (Claude Desktop), Codex, ChatGPT in RecallSpring, **Mix** or Decide
+  later, each with what it needs; after saving, the next steps for that assistant with copyable commands. Mix (owner
+  2026-11-22) shows checkboxes for the three; Save needs at least two ("Choose at least two."), and the next steps
+  come for each one chosen. Home shows a
   short nudge while none is chosen.
 - **Settings → Profile:** username, session end and editable time zone. Saving a new time zone reloads every view,
   because "today" depends on it.
 - **Settings → Assistants** (owner 2026-11-22, replaces the assistant picker in Profile): Claude, Codex and ChatGPT,
   each `Connected` / `Not connected` from RecallSpring's own records (an active connector token; the ChatGPT
   sign-in), where it is used and when it was last used, with the next step: `Manage` (the token below), `Set up`
-  (/welcome), `Sign in` (the ChatGPT card) or `Open Chat`. A line says which name the tips use.
+  (opens the setup steps under that row), `Sign in` (the ChatGPT card) or `Open Chat`. With a mix, its assistants are
+  listed first with `In your mix`. A line says which name the tips use; `Change your choice` goes to /welcome.
 - **Assistant wording:** pages name the assistant in use (the only connected one; "your assistant" when several are; the welcome choice while none is) where it helps (Home's start and continue hints, Review,
   waiting-for-grade notices, the Guide); otherwise "your assistant". The Guide's setup card follows the choice (Claude
   Projects, Codex study folders, or Chat's planning and course conversations) and shows Claude's + menu shortcuts

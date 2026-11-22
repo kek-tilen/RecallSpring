@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
-import { TimeZoneSelect, useSaveProfile } from "./Welcome";
+import { AssistantNextSteps, TimeZoneSelect, useSaveProfile } from "./Welcome";
 import { ASSISTANTS } from "../assistant";
 import { request } from "../api";
 import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
@@ -399,15 +399,19 @@ const STUDY_IN: Record<AssistantKey, string> = {
 export function AssistantsPanel({ s }: { s: AssistantsStatus }) {
   const label = (key: AssistantKey) => ASSISTANTS.find((a) => a.key === key)?.label ?? key;
   const connected = s.items.filter((i) => i.connected);
+  const username = useSession().data?.user.username ?? "";
+  const [steps, setSteps] = useState<AssistantKey | null>(null);
+  const mix = s.mix ?? [];
   return (
     <div className="stack" style={{ gap: 12 }}>
       <ul className="list assistants-list">
         {s.items.map((i) => (
           <li key={i.key} className="row" style={{ justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
             <div style={{ minWidth: 0 }}>
-              <div className="row" style={{ gap: 8 }}>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
                 <strong>{label(i.key)}</strong>
                 <span className={i.connected ? "chip good" : "chip"}>{i.connected ? "Connected" : "Not connected"}</span>
+                {i.in_mix && <span className="chip">In your mix</span>}
               </div>
               <div className="small muted">
                 {STUDY_IN[i.key]}
@@ -431,11 +435,22 @@ export function AssistantsPanel({ s }: { s: AssistantsStatus }) {
                   Manage
                 </a>
               ) : (
-                <Link className="btn small" to="/welcome" aria-label={`Set up ${label(i.key)}`}>
-                  Set up
-                </Link>
+                <button
+                  type="button"
+                  className="btn small"
+                  aria-expanded={steps === i.key}
+                  aria-label={`Set up ${label(i.key)}`}
+                  onClick={() => setSteps(steps === i.key ? null : i.key)}
+                >
+                  {steps === i.key ? "Hide steps" : "Set up"}
+                </button>
               )}
             </div>
+            {steps === i.key && !i.connected && i.key !== "chatgpt" && (
+              <div className="assistant-steps">
+                <AssistantNextSteps assistant={i.key} username={username} />
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -444,11 +459,13 @@ export function AssistantsPanel({ s }: { s: AssistantsStatus }) {
           ? `${connected.map((i) => label(i.key)).join(" and ")} are connected, so RecallSpring says “your assistant”. `
           : connected.length === 1
             ? `RecallSpring names ${label(connected[0]!.key)} in its tips. `
-            : s.chosen
-              ? `Nothing is connected yet; tips follow your choice on the welcome page (${label(s.chosen)}). `
-              : "Nothing is connected yet. "}
+            : s.chosen === "mix"
+              ? `Nothing is connected yet; your mix is ${mix.map(label).join(" and ")}, so tips say “your assistant”. `
+              : s.chosen
+                ? `Nothing is connected yet; tips follow your choice on the welcome page (${label(s.chosen)}). `
+                : "Nothing is connected yet. "}
         Every connected assistant works at the same time, and grades are labelled with the one that gave them.{" "}
-        <Link to="/welcome">Setup steps</Link>
+        <Link to="/welcome">Change your choice</Link>
       </p>
     </div>
   );

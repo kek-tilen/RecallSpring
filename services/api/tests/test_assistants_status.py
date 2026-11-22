@@ -49,3 +49,27 @@ def test_last_use_comes_from_the_connector(owner_api: Api, token: str) -> None:
     with TestClient(create_app()) as c:
         assert c.get("/api/v1/connector/courses", headers={"Authorization": f"Bearer {token}"}).status_code == 200
     assert by_key(status(owner_api))["claude"]["last_used_at"] is not None
+
+
+def test_a_mix_of_assistants(owner_api: Api) -> None:
+    put = lambda body: owner_api.client.put("/api/v1/settings/profile", json=body, headers=owner_api.headers())  # noqa: E731
+    r = put({"assistant": "mix", "assistant_mix": ["chatgpt", "claude"]})
+    assert r.status_code == 200
+    assert r.json()["assistant"] == "mix" and r.json()["assistant_mix"] == ["claude", "chatgpt"]  # fixed order
+    s = status(owner_api)
+    assert s["chosen"] == "mix" and s["mix"] == ["claude", "chatgpt"] and s["in_use"] is None  # "your assistant"
+    assert [(i["key"], i["in_mix"]) for i in s["items"]] == [("claude", True), ("chatgpt", True), ("codex", False)]
+
+    codex = owner_api.post("/settings/connector/tokens", {"client": "codex"}).json()
+    assert status(owner_api)["in_use"] == "codex"  # what is really connected still wins
+    owner_api.post(f"/settings/connector/tokens/{codex['id']}/revoke", {})
+
+    for bad in ({"assistant": "mix"}, {"assistant": "mix", "assistant_mix": ["codex", "codex"]}):
+        r = put(bad)
+        assert r.status_code == 422 and r.json()["code"] == "mix_too_small"
+    assert put({"assistant": "mix", "assistant_mix": ["claude", "codex", "chatgpt", "claude"]}).status_code == 422
+
+    r = put({"assistant": "codex"})
+    assert r.json()["assistant"] == "codex" and r.json()["assistant_mix"] == []  # leaving the mix clears the list
+    assert status(owner_api)["mix"] == []
+    assert put({"assistant": None}).json()["assistant"] is None

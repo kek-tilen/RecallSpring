@@ -23,7 +23,8 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
-AssistantChoice = Literal["claude", "codex", "chatgpt"]
+AssistantKey = Literal["claude", "codex", "chatgpt"]
+AssistantChoice = Literal["claude", "codex", "chatgpt", "mix"]
 
 
 class UserOut(_Out):
@@ -31,6 +32,7 @@ class UserOut(_Out):
     username: str
     timezone: str
     assistant: AssistantChoice | None = None
+    assistant_mix: list[AssistantKey] = []
 
 
 class FirstRunIn(BaseModel):
@@ -42,10 +44,12 @@ class FirstRunIn(BaseModel):
 
 
 class ProfileIn(BaseModel):
-    """Only the fields sent change; ``assistant: null`` means "decide later"."""
+    """Only the fields sent change; ``assistant: null`` means "decide later". ``assistant: "mix"`` needs
+    ``assistant_mix``: two or three different assistants."""
 
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
     assistant: AssistantChoice | None = None
+    assistant_mix: list[AssistantKey] | None = Field(default=None, max_length=3)
 
 
 class SessionOut(BaseModel):

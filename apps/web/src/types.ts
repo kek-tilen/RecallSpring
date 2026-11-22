@@ -4,20 +4,25 @@ export type StudyStatus = "not_studied" | "studied" | "known";
 export type Band = "not_started" | "emerging" | "developing" | "reliable";
 
 export type AssistantKey = "claude" | "codex" | "chatgpt";
+/** The welcome page's choice: one assistant, or a mix of two or three (listed in `assistant_mix`). */
+export type AssistantChoice = AssistantKey | "mix";
 
 /** Settings → Assistants: what RecallSpring's own records say is connected (GET /settings/assistants). */
 export interface AssistantsStatus {
-  items: { key: AssistantKey; connected: boolean; tokens: number; last_used_at: string | null }[];
+  /** `in_mix`: one of the learner's mix (listed first). */
+  items: { key: AssistantKey; connected: boolean; tokens: number; last_used_at: string | null; in_mix?: boolean }[];
   /** The assistant the wording names: the only connected one, the welcome choice while none is, null when several are. */
   in_use: AssistantKey | null;
-  chosen: AssistantKey | null;
+  chosen: AssistantChoice | null;
+  mix?: AssistantKey[];
 }
 
 export interface User {
   id: string;
   username: string;
   timezone: string;
-  assistant: AssistantKey | null;
+  assistant: AssistantChoice | null;
+  assistant_mix?: AssistantKey[];
 }
 
 export interface SessionInfo {

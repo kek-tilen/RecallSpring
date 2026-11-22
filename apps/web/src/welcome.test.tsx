@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { assistantWords } from "./assistant";
@@ -99,6 +99,31 @@ describe("welcome", () => {
     await screen.findByText("Next: set up Codex");
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ assistant: "codex" });
     expect(screen.getByText(/install-codex-connector\.ps1 -Username ana/)).toBeTruthy();
+  });
+
+  it("saves a mix of at least two assistants and shows the setup steps of each", async () => {
+    const calls = mockApi({
+      "GET /auth/session": () => json(200, { user: USER, expires_at: "2026-12-01T00:00:00Z" }),
+      "PUT /settings/profile": (b) => json(200, { ...USER, ...(b as object) }),
+    });
+    renderAt("/welcome");
+    await screen.findByRole("heading", { name: "Choose your assistant" });
+    await waitFor(() => expect(calls.some((c) => c.url.includes("/auth/session"))).toBe(true));
+    fireEvent.click(screen.getByRole("radio", { name: /^Mix/ }));
+    const save = screen.getByRole("button", { name: "Save" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(screen.getByText("Choose at least two.")).toBeTruthy();
+    const group = screen.getByRole("group", { name: "Assistants in your mix" });
+    fireEvent.click(within(group).getByRole("checkbox", { name: "ChatGPT" }));
+    expect(save.disabled).toBe(true);
+    fireEvent.click(within(group).getByRole("checkbox", { name: "Claude" }));
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    await screen.findByText("Next: set up your assistants");
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ assistant: "mix", assistant_mix: ["claude", "chatgpt"] });
+    expect(screen.getByRole("region", { name: "Set up Claude" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Set up ChatGPT" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Set up Codex" })).toBeNull();
   });
 });
 

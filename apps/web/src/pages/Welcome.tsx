@@ -7,7 +7,7 @@ import { ASSISTANTS } from "../assistant";
 import { CopyButton } from "../components/Copy";
 import { Card, ErrorNote, PageHead } from "../components/ui";
 import { keys, useSession } from "../queries";
-import type { AssistantKey, SessionInfo, User } from "../types";
+import type { AssistantChoice, AssistantKey, SessionInfo, User } from "../types";
 
 /**
  * A new install (plan-without-claude.md, Phase 3): the first visit creates the account (FirstRunForm, shown on the
@@ -187,19 +187,27 @@ export function AssistantNextSteps({ assistant, username }: { assistant: Assista
   );
 }
 
-export function AssistantPicker({ value, onChange, name = "assistant", compact = false }: {
-  value: AssistantKey | null;
-  onChange: (a: AssistantKey | null) => void;
+export const MIX_SUMMARY =
+  "You study with more than one: for example ChatGPT in Chat for one course and Claude for another. Choose which; " +
+  "RecallSpring says \u201cyour assistant\u201d and shows the setup steps for each.";
+
+export function AssistantPicker({ value, mix, onChange, name = "assistant", compact = false }: {
+  value: AssistantChoice | null;
+  /** The assistants of a mix (used when value is "mix"). */
+  mix: AssistantKey[];
+  onChange: (a: AssistantChoice | null, mix: AssistantKey[]) => void;
   name?: string;
   /** Settings: a visible legend and no descriptions. */
   compact?: boolean;
 }) {
+  const toggle = (key: AssistantKey, on: boolean) =>
+    onChange("mix", ASSISTANTS.map((a) => a.key).filter((k) => (k === key ? on : mix.includes(k))));
   return (
     <fieldset className="assistant-pick">
       <legend className={compact ? "assistant-legend" : "sr-only"}>Assistant</legend>
       {ASSISTANTS.map((a) => (
         <label key={a.key} className={value === a.key ? "assistant-option chosen" : "assistant-option"}>
-          <input type="radio" name={name} value={a.key} checked={value === a.key} onChange={() => onChange(a.key)} />
+          <input type="radio" name={name} value={a.key} checked={value === a.key} onChange={() => onChange(a.key, mix)} />
           <span className="stack" style={{ gap: 2 }}>
             <strong>{a.label}</strong>
             {!compact && <span className="small">{ABOUT[a.key].summary}</span>}
@@ -207,8 +215,39 @@ export function AssistantPicker({ value, onChange, name = "assistant", compact =
           </span>
         </label>
       ))}
+      <div className={value === "mix" ? "assistant-option chosen" : "assistant-option"}>
+        <input
+          id={`${name}-mix`}
+          type="radio"
+          name={name}
+          value="mix"
+          checked={value === "mix"}
+          onChange={() => onChange("mix", mix)}
+        />
+        <span className="stack" style={{ gap: 6 }}>
+          <label htmlFor={`${name}-mix`} className="stack" style={{ gap: 2 }}>
+            <strong>Mix</strong>
+            {!compact && <span className="small">{MIX_SUMMARY}</span>}
+          </label>
+          {value === "mix" && (
+            <span className="row assistant-mix" role="group" aria-label="Assistants in your mix">
+              {ASSISTANTS.map((a) => (
+                <label key={a.key} className="row small" style={{ gap: 6 }}>
+                  <input type="checkbox" checked={mix.includes(a.key)} onChange={(e) => toggle(a.key, e.target.checked)} />
+                  {a.label}
+                </label>
+              ))}
+            </span>
+          )}
+          {value === "mix" && mix.length < 2 && (
+            <span className="tiny muted" role="status">
+              Choose at least two.
+            </span>
+          )}
+        </span>
+      </div>
       <label className={value === null ? "assistant-option chosen" : "assistant-option"}>
-        <input type="radio" name={name} value="" checked={value === null} onChange={() => onChange(null)} />
+        <input type="radio" name={name} value="" checked={value === null} onChange={() => onChange(null, mix)} />
         <span className="stack" style={{ gap: 2 }}>
           <strong>{compact ? "Not chosen" : "Decide later"}</strong>
           {!compact && <span className="small">RecallSpring works without an assistant: material, notes, reviews and plans.</span>}
@@ -221,7 +260,8 @@ export function AssistantPicker({ value, onChange, name = "assistant", compact =
 export function useSaveProfile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { assistant?: AssistantKey | null; timezone?: string }) => request<User>("/settings/profile", { method: "PUT", json: body }),
+    mutationFn: (body: { assistant?: AssistantChoice | null; assistant_mix?: AssistantKey[]; timezone?: string }) =>
+      request<User>("/settings/profile", { method: "PUT", json: body }),
     onSuccess: (user) => {
       qc.setQueryData<SessionInfo>(keys.session, (s) => (s ? { ...s, user } : s));
     },
@@ -231,7 +271,9 @@ export function useSaveProfile() {
 export function WelcomePage() {
   const session = useSession();
   const user = session.data?.user;
-  const [choice, setChoice] = useState<AssistantKey | null>(user?.assistant ?? null);
+  const [choice, setChoice] = useState<AssistantChoice | null>(user?.assistant ?? null);
+  const [mix, setMix] = useState<AssistantKey[]>(user?.assistant_mix ?? []);
+  const mixTooSmall = choice === "mix" && mix.length < 2;
   const [saved, setSaved] = useState(false);
   const save = useSaveProfile();
   return (
@@ -246,22 +288,53 @@ export function WelcomePage() {
           style={{ gap: 12 }}
           onSubmit={(e) => {
             e.preventDefault();
-            save.mutate({ assistant: choice }, { onSuccess: () => setSaved(true) });
+            if (mixTooSmall) return;
+            save.mutate(choice === "mix" ? { assistant: choice, assistant_mix: mix } : { assistant: choice }, {
+              onSuccess: () => setSaved(true),
+            });
           }}
         >
-          <AssistantPicker value={choice} onChange={(a) => { setChoice(a); setSaved(false); }} />
+          <AssistantPicker
+            value={choice}
+            mix={mix}
+            onChange={(a, m) => {
+              setChoice(a);
+              setMix(m);
+              setSaved(false);
+            }}
+          />
           {save.error && <ErrorNote error={save.error} />}
           <div>
-            <button type="submit" className="btn primary" disabled={save.isPending}>
+            <button type="submit" className="btn primary" disabled={save.isPending || mixTooSmall}>
               {save.isPending ? "Saving…" : "Save"}
             </button>
           </div>
         </form>
       </Card>
       {saved && user && (
-        <Card title={choice ? `Next: set up ${ASSISTANTS.find((a) => a.key === choice)!.label}` : "Next"}>
+        <Card
+          title={
+            choice === "mix"
+              ? "Next: set up your assistants"
+              : choice
+                ? `Next: set up ${ASSISTANTS.find((a) => a.key === choice)!.label}`
+                : "Next"
+          }
+        >
           <div className="stack" style={{ gap: 12 }} role="status">
-            {choice ? (
+            {choice === "mix" ? (
+              <>
+                {ASSISTANTS.filter((a) => mix.includes(a.key)).map((a) => (
+                  <section key={a.key} className="stack" style={{ gap: 6 }} aria-label={`Set up ${a.label}`}>
+                    <h3 className="assistant-step-title">{a.label}</h3>
+                    <AssistantNextSteps assistant={a.key} username={user.username} />
+                  </section>
+                ))}
+                <p className="small muted" style={{ margin: 0 }}>
+                  Set up one now and the others when you need them; Settings → Assistants shows which are connected.
+                </p>
+              </>
+            ) : choice ? (
               <AssistantNextSteps assistant={choice} username={user.username} />
             ) : (
               <p className="small" style={{ margin: 0 }}>

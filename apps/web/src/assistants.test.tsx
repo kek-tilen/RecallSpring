@@ -44,7 +44,25 @@ describe("Settings → Assistants", () => {
     const s: AssistantsStatus = { items: [item("claude", false), item("codex", true), item("chatgpt", false)], in_use: "codex", chosen: "claude" };
     wrap(<AssistantsPanel s={s} />);
     expect(screen.getByText(/RecallSpring names Codex in its tips/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Set up Claude" }).getAttribute("href")).toBe("/welcome");
+    // Setup steps open in place, under the assistant.
+    const setUp = screen.getByRole("button", { name: "Set up Claude" });
+    fireEvent.click(setUp);
+    expect(setUp.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText(/install-claude-desktop-connector\.ps1/)).toBeTruthy();
+    fireEvent.click(setUp);
+    expect(screen.queryByText(/install-claude-desktop-connector\.ps1/)).toBeNull();
+  });
+
+  it("marks the assistants of a mix", () => {
+    const s: AssistantsStatus = {
+      items: [{ ...item("claude", false), in_mix: true }, { ...item("chatgpt", false), in_mix: true }, item("codex", false)],
+      in_use: null,
+      chosen: "mix",
+      mix: ["claude", "chatgpt"],
+    };
+    wrap(<AssistantsPanel s={s} />);
+    expect(screen.getAllByText("In your mix")).toHaveLength(2);
+    expect(screen.getByText(/your mix is Claude and ChatGPT/)).toBeTruthy();
   });
 });
 

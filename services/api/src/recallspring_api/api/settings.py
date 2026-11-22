@@ -142,9 +142,18 @@ def update_profile(
     if payload.timezone is not None and payload.timezone != user.timezone:
         changes["timezone"] = {"from": user.timezone, "to": timezones.check(payload.timezone)}
         user.timezone = payload.timezone
-    if "assistant" in payload.model_fields_set and payload.assistant != user.assistant:
-        changes["assistant"] = {"from": user.assistant, "to": payload.assistant}
-        user.assistant = payload.assistant
+    if "assistant" in payload.model_fields_set:
+        mix: list[str] = []
+        if payload.assistant == "mix":
+            mix = [k for k in ("claude", "codex", "chatgpt") if k in (payload.assistant_mix or [])]
+            if len(mix) < 2:
+                raise ApiError(422, "mix_too_small", "A mix needs at least two assistants.")
+        if payload.assistant != user.assistant or mix != list(user.assistant_mix or []):
+            changes["assistant"] = {"from": user.assistant, "to": payload.assistant}
+            if mix or user.assistant_mix:
+                changes["assistant_mix"] = {"from": list(user.assistant_mix or []), "to": mix}
+            user.assistant = payload.assistant
+            user.assistant_mix = mix
     if changes:
         audit(db, actor_id=user.id, action="profile.changed", details=changes, request_id=ctx.request_id)
     db.flush()
@@ -177,8 +186,15 @@ def assistants_status(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get
     for item in items:
         item["last_used_at"] = item["last_used_at"].isoformat() if item["last_used_at"] else None
     connected = [i["key"] for i in items if i["connected"]]
-    in_use = connected[0] if len(connected) == 1 else (ctx.user.assistant if not connected else None)
-    return {"items": items, "in_use": in_use, "chosen": ctx.user.assistant}
+    chosen = ctx.user.assistant
+    mix = list(ctx.user.assistant_mix or []) if chosen == "mix" else []
+    for item in items:
+        item["in_mix"] = item["key"] in mix
+    if mix:  # a mix: show the chosen assistants first
+        items.sort(key=lambda i: not i["in_mix"])
+    fallback = chosen if chosen != "mix" else None  # a mix is "your assistant" until exactly one is connected
+    in_use = connected[0] if len(connected) == 1 else (fallback if not connected else None)
+    return {"items": items, "in_use": in_use, "chosen": chosen, "mix": mix}
 
 
 @router.put("/settings/study")

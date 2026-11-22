@@ -3907,3 +3907,26 @@ dialog.photo-viewer::backdrop {
     transform: none;
   }
 }
+
+/* Mix: which assistants, inside the Mix option. */
+.assistant-mix {
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.assistant-step-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+/* Settings → Assistants: setup steps shown under the assistant's row. */
+.assistants-list li:has(> .assistant-steps) {
+  flex-wrap: wrap;
+}
+
+.assistant-steps {
+  flex-basis: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}

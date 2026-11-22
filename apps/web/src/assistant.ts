@@ -1,5 +1,5 @@
 import { useAssistants, useSession } from "./queries";
-import type { AssistantKey } from "./types";
+import type { AssistantChoice, AssistantKey } from "./types";
 
 /**
  * How the app names the assistant the learner studies with. It follows what is really connected (Settings →
@@ -24,7 +24,8 @@ export const ASSISTANTS: { key: AssistantKey; label: string; app: string }[] = [
   { key: "chatgpt", label: "ChatGPT", app: "RecallSpring's Chat" },
 ];
 
-export function assistantWords(key: AssistantKey | null | undefined): AssistantWords {
+/** A mix (or nothing chosen) is named neutrally: "your assistant". */
+export function assistantWords(key: AssistantChoice | null | undefined): AssistantWords {
   switch (key) {
     case "claude":
       return { key, name: "Claude", Name: "Claude", where: "in Claude", app: "Claude Desktop" };
