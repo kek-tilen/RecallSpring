@@ -119,6 +119,12 @@ def test_grading_context_includes_rubric_and_cited_sources(owner_api: Api, conn:
     ctx = conn.get(f"/attempts/{attempt_id}").json()
     assert ctx["question"]["rubric"]["expected_points"]
     assert {s["section_id"] for s in ctx["sources"]} == set(ids["section_ids"][:2])
+    # One scale for every assistant (Claude, Codex, Antigravity, ChatGPT in Chat): it comes with the answer.
+    from recallspring_api.ai.tasks import EVALUATION_INSTRUCTIONS
+    from recallspring_api.learning.grading import GRADING_SCALE
+
+    assert ctx["grading_scale"] == GRADING_SCALE and GRADING_SCALE in EVALUATION_INSTRUCTIONS
+    assert "true/false" in GRADING_SCALE and "between 3 and 4, give 3" in GRADING_SCALE
 
 
 def test_claude_assessment_is_validated_scheduled_and_not_duplicated(

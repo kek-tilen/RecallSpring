@@ -210,8 +210,8 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
 - These tools may give you a RecallSpring link instead of a form. Give me the link and wait. When I say I am done,
   read my answer with get_answer (one question) or get_quiz_results (a simulation) and grade it with
   record_assessment(s). Never answer for me and never reveal expected points before I answered.
-- Grade 0-4 only from my saved answer and cite only section IDs you received. Mark a grade provisional when you are
-  unsure. Pass model_name (the model you run as). Tell me the next review dates RecallSpring returns.
+- Grade 0-4 only from my saved answer, exactly by the grading_scale RecallSpring returns with it, and cite only
+  section IDs you received. Mark a grade provisional when you are unsure. Pass model_name (the model you run as). Tell me the next review dates RecallSpring returns.
 - End with record_session_summary. Save everything through RecallSpring, never only in the chat.
 - Answer in the language I write in.
 """

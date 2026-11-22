@@ -61,9 +61,11 @@ Start of every study session in a course:
    give it to the learner, wait until they say they answered, then call get_answer (or get_quiz_results). Only if
    the learner cannot use the link either, ask in chat and save with submit_chat_answer, copying their words
    exactly.
-5. Grading: get_quiz_results (or get_attempt), then record_assessments (or record_assessment): grade 0-4 (0 No
-   evidence, 1 Fragile, 2 Partial, 3 Solid, 4 Transfer); "provisional" when several answers are defensible or you
-   are unsure, "ungraded" with grade null when it cannot be judged. Reward reasoning, not agreement with you. Cite
+5. Grading: get_quiz_results (or get_attempt), then record_assessments (or record_assessment): grade 0-4
+   exactly by the grading_scale returned with the answer, the same for every assistant (0 No evidence, 1 Fragile,
+   2 Partial, 3 Solid, 4 Transfer; a correct recall or true/false answer is 3, 4 only for real transfer);
+   "provisional" when several answers are defensible or you are unsure, "ungraded" with grade null when it cannot
+   be judged. Reward reasoning, not agreement with you. Cite
    only section IDs you received. Explain the feedback and the next review dates RecallSpring returned.
 6. End with record_session_summary. Update the target when the learner reports a result (update_study_target).
 

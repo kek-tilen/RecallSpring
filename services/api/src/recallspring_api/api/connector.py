@@ -25,6 +25,7 @@ from ..deps import Ctx, WriteCtx, commit_with_response, replay_if_seen
 from ..errors import ApiError
 from ..ingest import renderer, visuals
 from ..ingest.storage import blob_path
+from ..learning.grading import GRADING_SCALE
 from ..models import (
     Assessment,
     Attempt,
@@ -461,6 +462,7 @@ def get_attempt(
     )
     return {
         **attempt_svc.attempt_view(db, attempt),
+        "grading_scale": GRADING_SCALE,
         "question": question_view(db, question, ctx.user.id),
         "sources": [
             {
@@ -967,8 +969,9 @@ def submit_quiz(
 def quiz_results(
     quiz_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    """Grading view for Claude: answers, keys, rubrics and which open answers still need a grade."""
-    return quiz_svc.results_view(db, _quiz(db, ctx, quiz_id))
+    """Grading view for the assistant: answers, keys, rubrics, which open answers still need a grade and the
+    grading scale."""
+    return {**quiz_svc.results_view(db, _quiz(db, ctx, quiz_id)), "grading_scale": GRADING_SCALE}
 
 
 @router.post("/assessments/batch")

@@ -276,6 +276,7 @@ def test_simulation_flow_persists_answers_grades_mcq_and_awaits_claude(
     assert conn.post(f"/quizzes/{qid}/draft", {"answers": []}).status_code == 409
 
     grading = conn.get(f"/quizzes/{qid}/results").json()
+    assert grading["grading_scale"].startswith("RecallSpring grading scale (scale-v1)")
     open_item = next(i for i in grading["items"] if i["position"] == 3)
     assert open_item["expected_points"] == ["no reply from open and filtered ports"]
     attempt = owner_api.get(f"/attempts/{open_item['attempt_id']}").json()

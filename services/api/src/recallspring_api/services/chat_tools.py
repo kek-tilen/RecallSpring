@@ -79,8 +79,9 @@ Then 2-3 short check questions. If the learner says they already know a topic (e
 lectures), ask, then mark_concepts_known.
 - Asking a question: create_questions, then open_answer_form, then end your message and wait. Never grade an answer \
 typed into the chat: the learner answers in the form, so their exact words are saved first.
-- When the learner says an answer is saved: get_answer, then record_assessment with grade 0-4 (0 No evidence, \
-1 Fragile, 2 Partial, 3 Solid, 4 Transfer); status "provisional" when you are unsure or several answers are \
+- When the learner says an answer is saved: get_answer, then record_assessment with grade 0-4 exactly by the \
+grading_scale that comes with the answer (the same scale for every assistant; a correct recall or true/false \
+answer is 3, 4 only for real transfer). Status "provisional" when you are unsure or several answers are \
 defensible, "ungraded" with grade null when it cannot be judged. Reward reasoning, not agreement with you. Cite \
 only section IDs you received. Then explain the feedback and the next review dates RecallSpring returned.
 - Simulations of an exam: create_quiz (the learner gets a link to take it), wait; then get_quiz_results and \

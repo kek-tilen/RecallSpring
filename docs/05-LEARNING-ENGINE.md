@@ -51,6 +51,8 @@ Default on new topics: gently ramp levels 3->4->5 **when evidence of foundation 
 | 3 | Solid | Correct and justified within task requirements |
 | 4 | Transfer | Correct, well supported, handles novel implication or counterexample |
 
+**One scale for every assistant (scale-v1, 2026-11-22).** The exact wording every grader uses is `GRADING_SCALE` in `services/api/src/recallspring_api/learning/grading.py`. It is returned as `grading_scale` with every answer an assistant grades (connector `GET /attempts/{id}`, so also `get_answer` and ChatGPT in Chat, and simulation results) and is part of the in-app evaluation instructions (`eval-v2`). It adds anchors so models agree: a fully correct recall, true/false or standard-procedure answer is 3; 4 only for real transfer, and between 3 and 4 the grade is 3; a missing required step (e.g. normalisation) is 2; feedback names the expected points met and missed. Grades given before scale-v1 keep their value.
+
 Grade NULL with `ungraded` is mandatory when question cannot be judged on available evidence. Include `why`, specific missing steps, citations, uncertainty and suggested next step. Expose `Challenge evaluation` and teacher correction. A well-grounded critical response may have multiple acceptable positions; the rubric must reward reasoning rather than conformity to model opinion.
 
 ## Scheduling: deterministic v1 algorithm
