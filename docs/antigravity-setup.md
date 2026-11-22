@@ -44,7 +44,9 @@ Then quit and reopen Antigravity.
 ## 3. Study
 
 1. Open a course folder (or `Planning`) as the workspace.
-2. In the agent panel, `…` → **MCP Servers** should list `recallspring` with its tools.
+2. Check that `recallspring` is connected: **Customizations** in the sidebar lists MCP servers (older versions: the
+   agent panel's `…` → **MCP Servers**). Antigravity also keeps the tool list it loaded in
+   `~/.gemini/antigravity/mcp/recallspring/`; files there mean it started the connector.
 3. Write “Start studying”. Antigravity asks before each RecallSpring tool until you allow it; keep asking on for the
    tools that save something (grades, questions) if you want to see each one.
 
