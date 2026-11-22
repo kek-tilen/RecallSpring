@@ -7,11 +7,12 @@ afterEach(() => {
 });
 
 describe("Themes", () => {
-  it("offers six named themes, the RecallSpring pair first", () => {
+  it("offers seven named themes, the RecallSpring pair first", () => {
     expect(THEMES.map((t) => t.name)).toEqual([
       "RecallSpring White",
       "RecallSpring Dark",
       "Solarized Light",
+      "Snow Storm",
       "Nord",
       "Dracula",
       "Gruvbox Dark",

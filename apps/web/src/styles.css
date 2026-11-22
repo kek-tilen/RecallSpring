@@ -111,6 +111,32 @@
   --shadow: 0 1px 2px rgb(7 54 66 / 8%);
 }
 
+:root[data-theme="snow-storm"] {
+  /* Nord's Snow Storm: Nord 4-6 surfaces, Polar Night ink; the Frost blue is darkened (#4a6a93) for 4.5:1 text. */
+  color-scheme: light;
+  --bg: #eceff4;
+  --surface: #e5e9f0;
+  --surface-elevated: #ffffff;
+  --primary: #4a6a93;
+  --primary-hover: #3f5c80;
+  --on-primary: #ffffff;
+  --ink: #2e3440;
+  --muted: #4c566a;
+  --border: #d8dee9;
+  --border-strong: #a9b4c6;
+  --warning: #96591f;
+  --warning-bg: #f5ece0;
+  --danger: #a3434d;
+  --danger-bg: #f6e3e5;
+  --focus: #5e81ac;
+  --ramp-0: #d8dee9;
+  --ramp-1: #88c0d0;
+  --ramp-2: #5e81ac;
+  --ramp-3: #3b4f6b;
+  --gap: #eceff4;
+  --shadow: 0 1px 2px rgb(46 52 64 / 6%);
+}
+
 :root[data-theme="nord"] {
   color-scheme: dark;
   --bg: #2e3440;
@@ -1228,6 +1254,21 @@ tbody tr:hover td {
   padding: 8px 14px;
   background: var(--bg);
   border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+
+.row-toggle {
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.detail-row > td {
+  background: var(--surface-elevated);
+}
+
+.answer-detail ul {
+  margin: 4px 0 0;
+  padding-left: 1.2em;
 }
 
 .feedback {

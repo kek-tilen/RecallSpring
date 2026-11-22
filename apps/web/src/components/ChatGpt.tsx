@@ -78,6 +78,7 @@ export function ChatGptPanel() {
     mutationFn: () => request<ChatGptStatus & { revoked: boolean }>("/ai/chatgpt/disconnect", { method: "POST" }),
     onSuccess: (s) => {
       qc.setQueryData(STATUS_KEY, s);
+      void qc.invalidateQueries({ queryKey: ["settings", "connector", "assistants"] });
       setConfirming(false);
     },
   });

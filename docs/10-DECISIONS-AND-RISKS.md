@@ -66,6 +66,7 @@
 | ChatGPT in Chat sets up courses: `create_course`, `organise_courses`, `create_concepts`, `set_study_target`, `update_study_target`, `record_exam_profile` (a planning conversation; the target and concept tools also in a study conversation, for its own course) | Approved 2026-11-21 (owner in chat) |
 | Phase 0 + Phase 1 (Codex) of `docs/plan-without-claude.md`: a connector token per assistant, grades labelled with the assistant, RecallSpring answer and summary pages when an app cannot show forms, the Codex installer and study folders | Approved 2026-11-21 (owner in chat); the owner's Codex smoke test is still open |
 | Notes link Library files: `[name](source:<id>)` in the note text, pictures as `![name](source:<id>)` and shown in Preview; `Insert file` picks from the Library (the note's course first) or uploads a new file into it; assistants (Claude, Codex, ChatGPT in Chat) get the linked files' names and IDs with `get_notes`; a note can be deleted after confirming (soft delete, audited, restorable for 30 days under Notes → Recently deleted) | Approved 2026-11-21 (owner in chat) |
+| Settings → Assistants shows what is really connected (tokens, ChatGPT sign-in, last use) instead of a picker in Profile; wording names the only connected assistant, else "your assistant". Course → Answers opens the exact answer and the grade explanation. A light Nord theme, Snow Storm | Approved 2026-11-22 (owner in chat; answers and Snow Storm asked by the owner) |
 
 ## Working assumptions (do not mistake for owner approval)
 

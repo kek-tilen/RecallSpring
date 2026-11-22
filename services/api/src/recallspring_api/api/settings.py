@@ -7,16 +7,17 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import backup, clock
+from ..ai import siwc
 from ..config import get_settings
 from ..connector_auth import daily_limit, new_token, used_today
 from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
-from ..models import ConnectorToken, User
+from ..models import AiConversation, ConnectorToken, User
 from ..schemas import (
     ConnectorSettingsIn,
     ConnectorSettingsOut,
@@ -148,6 +149,36 @@ def update_profile(
         audit(db, actor_id=user.id, action="profile.changed", details=changes, request_id=ctx.request_id)
     db.flush()
     return commit_with_response(db, ctx, payload, 200, UserOut.model_validate(user).model_dump(mode="json"))
+
+
+@router.get("/settings/assistants")
+def assistants_status(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Which assistants are connected now, from RecallSpring's own records: Claude Desktop and Codex by an active
+    connector token, ChatGPT in Chat by its sign-in. ``in_use`` is the one the app names in its wording: the only
+    connected one; the welcome page's choice while none is connected yet; none ("your assistant") when several are."""
+    tokens = db.scalars(
+        select(ConnectorToken).where(ConnectorToken.user_id == ctx.user.id, ConnectorToken.revoked_at.is_(None))
+    ).all()
+    items: list[dict[str, Any]] = []
+    for client in ("claude", "codex"):
+        mine = [t for t in tokens if t.client == client]
+        used = max((t.last_used_at for t in mine if t.last_used_at), default=None)
+        items.append({"key": client, "connected": bool(mine), "tokens": len(mine), "last_used_at": used})
+    last_chat = db.scalar(
+        select(func.max(AiConversation.updated_at)).where(
+            AiConversation.user_id == ctx.user.id,
+            AiConversation.provider == "chatgpt",
+            AiConversation.deleted_at.is_(None),
+        )
+    )
+    items.append(
+        {"key": "chatgpt", "connected": siwc.status(ctx.user.id)["connected"], "tokens": 0, "last_used_at": last_chat}
+    )
+    for item in items:
+        item["last_used_at"] = item["last_used_at"].isoformat() if item["last_used_at"] else None
+    connected = [i["key"] for i in items if i["connected"]]
+    in_use = connected[0] if len(connected) == 1 else (ctx.user.assistant if not connected else None)
+    return {"items": items, "in_use": in_use, "chosen": ctx.user.assistant}
 
 
 @router.put("/settings/study")

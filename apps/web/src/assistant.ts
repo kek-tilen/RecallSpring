@@ -1,9 +1,10 @@
-import { useSession } from "./queries";
+import { useAssistants, useSession } from "./queries";
 import type { AssistantKey } from "./types";
 
 /**
- * How the app names the assistant the learner studies with (Settings → Profile, or the welcome page; migration
- * 0018). Only wording depends on it: every assistant keeps working whichever is chosen.
+ * How the app names the assistant the learner studies with. It follows what is really connected (Settings →
+ * Assistants): the only connected assistant by name, "your assistant" when several are, and the welcome page's
+ * choice (migration 0018) while none is connected yet. Only wording depends on it.
  */
 export interface AssistantWords {
   key: AssistantKey | null;
@@ -37,5 +38,7 @@ export function assistantWords(key: AssistantKey | null | undefined): AssistantW
 }
 
 export function useAssistant(): AssistantWords {
-  return assistantWords(useSession().data?.user.assistant);
+  const status = useAssistants();
+  const chosen = useSession().data?.user.assistant;
+  return assistantWords(status.data ? status.data.in_use : chosen);
 }

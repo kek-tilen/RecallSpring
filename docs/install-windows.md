@@ -63,8 +63,8 @@ With ChatGPT in RecallSpring, a new Chat conversation with **Planning (all cours
 courses, their concepts, kolokvij and exam dates; a conversation with one course picked is for learning it. Your
 material goes in through Library.
 
-You can change the assistant and the time zone any time in **Settings → Profile**. Only wording and setup tips follow
-the choice; every assistant keeps working.
+**Settings → Assistants** shows which assistants are connected and when each was last used; you can use several at
+once. The time zone is in **Settings → Profile**.
 
 ## 4. Every day
 

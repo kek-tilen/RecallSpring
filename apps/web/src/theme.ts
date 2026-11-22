@@ -4,7 +4,7 @@
  * `data-theme`; the swatches here only preview them in Settings.
  */
 
-export type ThemeId = "system" | "light" | "dark" | "solarized-light" | "nord" | "dracula" | "gruvbox";
+export type ThemeId = "system" | "light" | "dark" | "solarized-light" | "snow-storm" | "nord" | "dracula" | "gruvbox";
 
 export interface ThemeInfo {
   id: Exclude<ThemeId, "system">;
@@ -19,6 +19,7 @@ export const THEMES: ThemeInfo[] = [
   { id: "light", name: "RecallSpring White", note: "Light sage, the default", dark: false, swatch: ["#ffffff", "#edf7f4", "#24332f", "#0f766e", "#0b4a44"] },
   { id: "dark", name: "RecallSpring Dark", note: "Dark sage", dark: true, swatch: ["#111916", "#18231f", "#e4eeea", "#5fc4b4", "#c3ede4"] },
   { id: "solarized-light", name: "Solarized Light", note: "Warm cream, low glare", dark: false, swatch: ["#fdf6e3", "#eee8d5", "#073642", "#1f6a9e", "#0d4f4a"] },
+  { id: "snow-storm", name: "Snow Storm", note: "Nord light: cool arctic white and blue", dark: false, swatch: ["#eceff4", "#e5e9f0", "#2e3440", "#4a6a93", "#3b4f6b"] },
   { id: "nord", name: "Nord", note: "Cool arctic blue-grey, calm", dark: true, swatch: ["#2e3440", "#3b4252", "#eceff4", "#88c0d0", "#d2e6f3"] },
   { id: "dracula", name: "Dracula", note: "Vivid purple and pink, high contrast", dark: true, swatch: ["#282a36", "#383a4c", "#f8f8f2", "#bd93f9", "#ece0ff"] },
   { id: "gruvbox", name: "Gruvbox Dark", note: "Warm retro browns and greens", dark: true, swatch: ["#282828", "#3c3836", "#ebdbb2", "#8ec07c", "#d5ebc7"] },

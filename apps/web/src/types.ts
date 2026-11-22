@@ -5,6 +5,14 @@ export type Band = "not_started" | "emerging" | "developing" | "reliable";
 
 export type AssistantKey = "claude" | "codex" | "chatgpt";
 
+/** Settings → Assistants: what RecallSpring's own records say is connected (GET /settings/assistants). */
+export interface AssistantsStatus {
+  items: { key: AssistantKey; connected: boolean; tokens: number; last_used_at: string | null }[];
+  /** The assistant the wording names: the only connected one, the welcome choice while none is, null when several are. */
+  in_use: AssistantKey | null;
+  chosen: AssistantKey | null;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -241,6 +249,37 @@ export interface ConceptDetail {
   sections: SectionRef[];
   attempts: AttemptHistory[];
   note: string;
+}
+
+/** One grade of an answer (GET /attempts/{id}); the newest one that counts is `effective_assessment_id`. */
+export interface AssessmentDetail {
+  id: string;
+  evaluator_kind: string;
+  provider: string | null;
+  model: string | null;
+  status: string; // final | provisional | ungraded | superseded ...
+  grade: number | null;
+  confidence: string;
+  feedback: string;
+  evidence_refs: unknown[];
+  strengths: unknown[];
+  gaps: unknown[];
+  remediation: string | null;
+  factuality_flags: unknown[];
+  created_at: string;
+}
+
+export interface AttemptDetail {
+  id: string;
+  question_id: string;
+  kind: string;
+  answer_text: string;
+  answer_mode: string;
+  captured_via: string;
+  status: string;
+  submitted_at: string;
+  assessments: AssessmentDetail[];
+  effective_assessment_id: string | null;
 }
 
 export interface AttemptRow {

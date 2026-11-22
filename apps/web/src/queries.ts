@@ -1,33 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { get } from "./api";
-import type {
-  ConceptDetail,
-  ConnectorSettings,
-  Course,
-  CourseOverview,
-  CourseSummary,
-  Dashboard,
-  DeletedTarget,
-  Group,
-  HistoryRow,
-  Note,
-  QuizSummary,
-  QuizView,
-  SessionInfo,
-  Source,
-  StudySettings,
-  TimelineTarget,
-  UploadLimits,
-  BackupStatus,
-  ExamReadiness,
-  WeekReview,
-  Folder,
-  ArchivedView,
-  ChatImport,
-  ChatImportSummary,
-  StudyPreferences,
-  FocusSummary,
-} from "./types";
+import type { ArchivedView, AssistantsStatus, BackupStatus, ChatImport, ChatImportSummary, ConceptDetail, ConnectorSettings, Course, CourseOverview, CourseSummary, Dashboard, DeletedTarget, ExamReadiness, FocusSummary, Folder, Group, HistoryRow, Note, QuizSummary, QuizView, SessionInfo, Source, StudyPreferences, StudySettings, TimelineTarget, UploadLimits, WeekReview } from "./types";
 
 export const keys = {
   session: ["session"] as const,
@@ -48,6 +21,8 @@ export const keys = {
   reviews: ["reviews"] as const,
   studySettings: ["settings", "study"] as const,
   connector: ["settings", "connector"] as const,
+  // Under connector, so creating or revoking a token refreshes it too.
+  assistants: ["settings", "connector", "assistants"] as const,
   backup: ["settings", "backup"] as const,
   readiness: (id: string) => ["targets", id, "readiness"] as const,
   week: (weeksAgo: number) => ["week", weeksAgo] as const,
@@ -98,6 +73,8 @@ export const useWeek = (weeksAgo: number) =>
   useQuery({ queryKey: keys.week(weeksAgo), queryFn: () => get<WeekReview>("/overview/week", { weeks_ago: weeksAgo }) });
 export const useBackup = () => useQuery({ queryKey: keys.backup, queryFn: () => get<BackupStatus>("/settings/backup") });
 export const useConnector = () => useQuery({ queryKey: keys.connector, queryFn: () => get<ConnectorSettings>("/settings/connector") });
+export const useAssistants = () =>
+  useQuery({ queryKey: keys.assistants, queryFn: () => get<AssistantsStatus>("/settings/assistants"), staleTime: 60_000 });
 
 export const useFolders = (courseId?: string) =>
   useQuery({ queryKey: keys.folders(courseId), queryFn: () => get<Folder[]>("/folders", { course_id: courseId }) });

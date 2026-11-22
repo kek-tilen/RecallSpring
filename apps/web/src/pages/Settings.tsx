@@ -1,15 +1,16 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
-import { AssistantPicker, TimeZoneSelect, useSaveProfile } from "./Welcome";
+import { TimeZoneSelect, useSaveProfile } from "./Welcome";
+import { ASSISTANTS } from "../assistant";
 import { request } from "../api";
 import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
 import { Link } from "react-router";
 import { bytes, dateLabel, dateTime, plural } from "../format";
-import { keys, useBackup, useConnector, useSession, useStudySettings } from "../queries";
+import { keys, useAssistants, useBackup, useConnector, useSession, useStudySettings } from "../queries";
 import { PreferencesEditor } from "./Import";
 import { ChatGptPanel } from "../components/ChatGpt";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
-import type { AssistantClient, AssistantKey, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
+import type { AssistantClient, AssistantKey, AssistantsStatus, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -388,27 +389,90 @@ function ThemePicker() {
   );
 }
 
-/** Username, time zone and the assistant the learner studies with (only wording and setup tips depend on it). */
+const STUDY_IN: Record<AssistantKey, string> = {
+  claude: "Claude Desktop, through the connector",
+  codex: "Codex (app, CLI or IDE extension), through the connector",
+  chatgpt: "RecallSpring's Chat, signed in with ChatGPT (preview)",
+};
+
+/** Which assistants are connected, from RecallSpring's own records (tokens, ChatGPT sign-in), with the next step. */
+export function AssistantsPanel({ s }: { s: AssistantsStatus }) {
+  const label = (key: AssistantKey) => ASSISTANTS.find((a) => a.key === key)?.label ?? key;
+  const connected = s.items.filter((i) => i.connected);
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      <ul className="list assistants-list">
+        {s.items.map((i) => (
+          <li key={i.key} className="row" style={{ justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+            <div style={{ minWidth: 0 }}>
+              <div className="row" style={{ gap: 8 }}>
+                <strong>{label(i.key)}</strong>
+                <span className={i.connected ? "chip good" : "chip"}>{i.connected ? "Connected" : "Not connected"}</span>
+              </div>
+              <div className="small muted">
+                {STUDY_IN[i.key]}
+                {i.last_used_at ? ` · last used ${dateTime(i.last_used_at)}` : i.connected ? " · not used yet" : ""}
+                {i.tokens > 1 ? ` · ${i.tokens} tokens` : ""}
+              </div>
+            </div>
+            <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+              {i.key === "chatgpt" ? (
+                i.connected ? (
+                  <Link className="btn small" to="/chat">
+                    Open Chat
+                  </Link>
+                ) : (
+                  <a className="btn small" href="#chatgpt">
+                    Sign in
+                  </a>
+                )
+              ) : i.connected ? (
+                <a className="btn small" href="#connector" aria-label={`Manage the ${label(i.key)} token`}>
+                  Manage
+                </a>
+              ) : (
+                <Link className="btn small" to="/welcome" aria-label={`Set up ${label(i.key)}`}>
+                  Set up
+                </Link>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="hint small muted" style={{ margin: 0 }}>
+        {connected.length > 1
+          ? `${connected.map((i) => label(i.key)).join(" and ")} are connected, so RecallSpring says “your assistant”. `
+          : connected.length === 1
+            ? `RecallSpring names ${label(connected[0]!.key)} in its tips. `
+            : s.chosen
+              ? `Nothing is connected yet; tips follow your choice on the welcome page (${label(s.chosen)}). `
+              : "Nothing is connected yet. "}
+        Every connected assistant works at the same time, and grades are labelled with the one that gave them.{" "}
+        <Link to="/welcome">Setup steps</Link>
+      </p>
+    </div>
+  );
+}
+
+/** Username, session and time zone. */
 function ProfileForm() {
   const qc = useQueryClient();
   const session = useSession();
   const user = session.data?.user;
   const [timezone, setTimezone] = useState(user?.timezone ?? "UTC");
-  const [assistant, setAssistant] = useState<AssistantKey | null>(user?.assistant ?? null);
   const [saved, setSaved] = useState(false);
   const save = useSaveProfile();
   if (!user) return null;
-  const zoneChanged = timezone !== user.timezone;
-  const changed = zoneChanged || assistant !== (user.assistant ?? null);
+  const changed = timezone !== user.timezone;
   function submit(e: FormEvent) {
     e.preventDefault();
     save.mutate(
-      { timezone, assistant },
+      { timezone },
       {
         onSuccess: () => {
           setSaved(true);
           // "Today", plans and due dates are computed in the time zone.
-          if (zoneChanged) void qc.invalidateQueries();
+          void qc.invalidateQueries();
         },
       },
     );
@@ -432,18 +496,6 @@ function ProfileForm() {
         />
         <span className="hint">“Today”, plans, reviews and dates use it.</span>
       </label>
-      <AssistantPicker
-        compact
-        name="profile-assistant"
-        value={assistant}
-        onChange={(a) => {
-          setAssistant(a);
-          setSaved(false);
-        }}
-      />
-      <p className="hint small muted" style={{ margin: 0 }}>
-        Only the wording and setup tips follow this choice; every assistant keeps working. <Link to="/welcome">Setup steps</Link>
-      </p>
       {save.error && <ErrorNote error={save.error} />}
       <div className="row">
         <button type="submit" className="btn primary" disabled={!changed || save.isPending}>
@@ -462,6 +514,7 @@ function ProfileForm() {
 export function SettingsPage() {
   const study = useStudySettings();
   const connector = useConnector();
+  const assistants = useAssistants();
   const backup = useBackup();
   useEffect(() => {
     // Links like /settings#chatgpt (Welcome page) open at that card.
@@ -470,7 +523,7 @@ export function SettingsPage() {
   }, []);
   return (
     <div className="page">
-      <PageHead title="Settings" sub="Your profile, study time, the assistant connector (Claude Desktop, Codex), ChatGPT, backups and how RecallSpring looks. Every change is recorded in History." />
+      <PageHead title="Settings" sub="Your profile, study time, your assistants (Claude Desktop, Codex, ChatGPT), backups and how RecallSpring looks. Every change is recorded in History." />
       <div className="grid cols-2" style={{ alignItems: "start" }}>
         <div className="stack" style={{ gap: 16 }}>
           <Card title="Study time">
@@ -487,7 +540,10 @@ export function SettingsPage() {
           </Card>
         </div>
         <div className="stack" style={{ gap: 16 }}>
-          <Card title="Assistant connector">
+          <Card title="Assistants" id="assistants">
+            <Async q={assistants}>{(s) => <AssistantsPanel s={s} />}</Async>
+          </Card>
+          <Card title="Assistant connector" id="connector">
             <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
           </Card>
           <Card title="ChatGPT (preview)" id="chatgpt">

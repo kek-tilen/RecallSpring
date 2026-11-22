@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { get } from "../api";
 import { Async, BandChip, BandMeter, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip, StudyMeter } from "../components/ui";
 import { CourseDialog, CourseDot, FocusControl, groupPath } from "../components/organise";
 import { TargetDialog } from "../components/TargetDialog";
-import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, plural, relativeDay } from "../format";
+import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, gradedBy, plural, relativeDay } from "../format";
 import { useCourseOverview, useGroups } from "../queries";
-import type { AttemptRow, ConceptRow, CourseOverview, StudyStatus, Target, TargetProfile } from "../types";
+import type { AttemptDetail, AttemptRow, ConceptRow, CourseOverview, StudyStatus, Target, TargetProfile } from "../types";
 import { NewNoteButton, NoteList } from "./Notes";
 import { FolderBrowser } from "./Library";
 import { QuizTable } from "./Simulations";
@@ -408,7 +408,102 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
   );
 }
 
-function AnswersTab({ courseId }: { courseId: string }) {
+/** A strength or gap as the grader stored it: usually text, sometimes {text} / {point}. */
+function itemText(x: unknown): string {
+  if (typeof x === "string") return x;
+  if (x && typeof x === "object") {
+    const o = x as Record<string, unknown>;
+    for (const k of ["text", "point", "description", "label"]) if (typeof o[k] === "string") return o[k] as string;
+  }
+  return "";
+}
+
+const CONFIDENCE: Record<string, string> = { high: "high", medium: "medium", low: "low" };
+
+/** The learner's exact answer and the explanation of its grade, opened from the Answers tab. */
+function AnswerDetail({ row }: { row: AttemptRow }) {
+  const q = useQuery({ queryKey: ["attempt", row.attempt_id], queryFn: () => get<AttemptDetail>(`/attempts/${row.attempt_id}`) });
+  return (
+    <Async q={q} lines={3}>
+      {(a) => {
+        const current = a.assessments.find((s) => s.id === a.effective_assessment_id) ?? a.assessments.at(-1);
+        const strengths = (current?.strengths ?? []).map(itemText).filter(Boolean);
+        const gaps = (current?.gaps ?? []).map(itemText).filter(Boolean);
+        const earlier = a.assessments.filter((s) => s.id !== current?.id);
+        return (
+          <div className="stack answer-detail" style={{ gap: 10 }}>
+            <div>
+              <div className="tiny muted">
+                Your answer · {a.answer_mode === "open_notes" ? "with notes or material" : "from memory"} · {dateTime(a.submitted_at)}
+              </div>
+              <div className="answer pre">{a.kind === "answer" ? a.answer_text : ATTEMPT_KIND[a.kind] ?? a.kind}</div>
+            </div>
+            {!current ? (
+              <p className="small muted" style={{ margin: 0 }}>
+                {a.status === "saved_awaiting_evaluation" ? "Not graded yet: ask your assistant for feedback." : "No grade recorded."}
+              </p>
+            ) : (
+              <div className="feedback stack" style={{ gap: 8 }}>
+                <div className="row" style={{ gap: 8 }}>
+                  <GradeChip grade={current.grade} status={current.status} />
+                  <span className="tiny muted">
+                    {gradedBy(current.evaluator_kind, row.grader)} · confidence {CONFIDENCE[current.confidence] ?? current.confidence}
+                    {current.status === "provisional" && " · provisional"}
+                    {current.evidence_refs.length > 0 && ` · based on ${plural(current.evidence_refs.length, "passage")} of your material`}
+                  </span>
+                </div>
+                {current.feedback && <div className="pre small">{current.feedback}</div>}
+                {strengths.length > 0 && (
+                  <div className="small">
+                    <strong>What was good</strong>
+                    <ul>
+                      {strengths.map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {gaps.length > 0 && (
+                  <div className="small">
+                    <strong>What was missing</strong>
+                    <ul>
+                      {gaps.map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {current.remediation && (
+                  <div className="small">
+                    <strong>Next step</strong>
+                    <div className="pre">{current.remediation}</div>
+                  </div>
+                )}
+                <div className="tiny muted">AI grades are study feedback, not a validated score.</div>
+              </div>
+            )}
+            {earlier.length > 0 && (
+              <details className="small">
+                <summary style={{ cursor: "pointer" }}>Earlier grades ({earlier.length})</summary>
+                <ul>
+                  {earlier.map((s) => (
+                    <li key={s.id}>
+                      {dateTime(s.created_at)} · {s.grade ?? "ungraded"}/4 · {s.status}
+                      {s.feedback && <div className="pre muted">{s.feedback}</div>}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        );
+      }}
+    </Async>
+  );
+}
+
+export function AnswersTab({ courseId }: { courseId: string }) {
+  const [open, setOpen] = useState<string | null>(null);
   const q = useQuery({
     queryKey: ["attempts", courseId],
     queryFn: () => get<AttemptRow[]>("/attempts", { course_id: courseId, limit: 200 }),
@@ -432,12 +527,23 @@ function AnswersTab({ courseId }: { courseId: string }) {
               </thead>
               <tbody>
                 {rows.map((a) => (
-                  <tr key={a.attempt_id}>
+                  <Fragment key={a.attempt_id}>
+                  <tr className={open === a.attempt_id ? "row-open" : undefined}>
                     <td className="small nowrap" title={dateTime(a.submitted_at)}>
                       {relativeDay(a.submitted_at)}
                     </td>
                     <td>
-                      {a.question}
+                      <button
+                        type="button"
+                        className="linklike row-toggle"
+                        aria-expanded={open === a.attempt_id}
+                        aria-controls={`answer-${a.attempt_id}`}
+                        onClick={() => setOpen(open === a.attempt_id ? null : a.attempt_id)}
+                        title="Show your answer and the grade explanation"
+                      >
+                        <span aria-hidden="true">{open === a.attempt_id ? "▾ " : "▸ "}</span>
+                        {a.question}
+                      </button>
                       {a.quiz_id && (
                         <div className="tiny">
                           <Link to={`/simulations/${a.quiz_id}`}>From a simulation</Link>
@@ -454,6 +560,14 @@ function AnswersTab({ courseId }: { courseId: string }) {
                     </td>
                     <td className="small muted">{CAPTURED_VIA[a.captured_via] ?? a.captured_via}</td>
                   </tr>
+                  {open === a.attempt_id && (
+                    <tr id={`answer-${a.attempt_id}`} className="detail-row">
+                      <td colSpan={5}>
+                        <AnswerDetail row={a} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

@@ -28,7 +28,7 @@
 
 All text/action contrast must meet WCAG 2.2 AA; change tones as needed.
 
-**Themes** (owner decision 2026-11-21; Settings → Appearance, saved on the device in `rs-theme`, `theme.ts`): **RecallSpring White** (the tokens above, default) and **RecallSpring Dark**, plus four popular open-source schemes chosen to differ from each other: **Solarized Light** (warm cream, low glare), **Nord** (cool blue-grey, calm), **Dracula** (vivid purple, high contrast) and **Gruvbox Dark** (warm retro). "Match my computer" follows the system with White or Dark. Each theme is only a set of the same tokens under `:root[data-theme=…]`, so every page and every visual follows it. Text, muted text, links, buttons, warnings and errors meet 4.5:1 on their backgrounds in every theme (checked when the palettes were made; original Solarized tones were darkened for this); the progress ramp stays one hue from light to dark; course colours use the light or dark validated set. Use readable system font fallback, 16px base, generous line height, limited measure on reading view. Keyboard focus visible, labels on all controls, reduced-motion support, touch targets >=44 CSS px where practical.
+**Themes** (owner decision 2026-11-21; Settings → Appearance, saved on the device in `rs-theme`, `theme.ts`): **RecallSpring White** (the tokens above, default) and **RecallSpring Dark**, plus popular open-source schemes chosen to differ from each other: **Solarized Light** (warm cream, low glare), **Snow Storm** (Nord's light palette, added 2026-11-22 at the owner's request; Nord's Frost blue darkened to #4a6a93 for 4.5:1), **Nord** (cool blue-grey, calm), **Dracula** (vivid purple, high contrast) and **Gruvbox Dark** (warm retro). "Match my computer" follows the system with White or Dark. Each theme is only a set of the same tokens under `:root[data-theme=…]`, so every page and every visual follows it. Text, muted text, links, buttons, warnings and errors meet 4.5:1 on their backgrounds in every theme (checked when the palettes were made; original Solarized tones were darkened for this); the progress ramp stays one hue from light to dark; course colours use the light or dark validated set. Use readable system font fallback, 16px base, generous line height, limited measure on reading view. Keyboard focus visible, labels on all controls, reduced-motion support, touch targets >=44 CSS px where practical.
 
 ## Navigation hierarchy
 
@@ -50,6 +50,10 @@ Desktop split view: readable source/notes at left, tutor conversation at right; 
 Components:
 - Note editor with autosave and revision history; copy/quote source anchors.
 - **Files in notes** (owner 2026-11-21): `Write` / `Preview` above the text and `Insert file`. The dialog has `From Library` (search by name or folder; the note's course first, other courses marked) and `Upload new` (the usual upload, saved in the Library under the note's course). The link goes in at the cursor: a picture as `![name](source:<id>)` on its own line, any other file as `[name](source:<id>)`. Preview shows pictures (a picture that cannot be loaded becomes a link saying so) and links other files to their Library page; a deleted file shows `name (missing file)`. `Linked files:` under the text lists them. The note list shows file names instead of the raw links.
+- **Course → Answers** (owner 2026-11-22): the question opens a row with the learner's exact answer (from memory or
+  with notes), the grade that counts with who gave it, confidence and how many passages of the material it rests on,
+  the feedback, *What was good*, *What was missing*, *Next step*, earlier grades, and the reminder that AI grades
+  are study feedback, not a validated score.
 - **Deleting a note** (owner 2026-11-21): `Delete note` on the note; a dialog names the note and says it can be restored for 30 days and that linked files stay in the Library; only `Delete note` in the dialog deletes it. Notes → `Recently deleted` lists them with `Restore`.
 - Topic context card linking to syllabus, sources and last practiced date.
 - Tutor controls: `Explain`, `Give an example`, `Show a visual`, `Quiz me`, `Check my reasoning`, `Next question`.
@@ -94,9 +98,13 @@ Implemented (2026-11-21, ADR-008):
   it. Then **/welcome** (*Choose your assistant*): Claude (Claude Desktop), Codex, ChatGPT in RecallSpring or Decide
   later, each with what it needs; after saving, the next steps for that assistant with copyable commands. Home shows a
   short nudge while none is chosen.
-- **Settings → Profile:** username, session end, editable time zone and assistant (compact picker; *Setup steps* links
-  to /welcome). Saving a new time zone reloads every view, because "today" depends on it.
-- **Assistant wording:** pages name the chosen assistant where it helps (Home's start and continue hints, Review,
+- **Settings → Profile:** username, session end and editable time zone. Saving a new time zone reloads every view,
+  because "today" depends on it.
+- **Settings → Assistants** (owner 2026-11-22, replaces the assistant picker in Profile): Claude, Codex and ChatGPT,
+  each `Connected` / `Not connected` from RecallSpring's own records (an active connector token; the ChatGPT
+  sign-in), where it is used and when it was last used, with the next step: `Manage` (the token below), `Set up`
+  (/welcome), `Sign in` (the ChatGPT card) or `Open Chat`. A line says which name the tips use.
+- **Assistant wording:** pages name the assistant in use (the only connected one; "your assistant" when several are; the welcome choice while none is) where it helps (Home's start and continue hints, Review,
   waiting-for-grade notices, the Guide); otherwise "your assistant". The Guide's setup card follows the choice (Claude
   Projects, Codex study folders, or Chat's planning and course conversations) and shows Claude's + menu shortcuts
   only to Claude users. Chat's Study picker offers **Planning (all courses)** (default) or one course. Factual connector text (Claude Desktop, Codex tokens) stays.
