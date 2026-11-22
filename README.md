@@ -24,6 +24,10 @@
 
 <br/>
 
+<p align="center">
+  <img src="assets/screenshots/home.png" alt="RecallSpring's Today page: what to learn next, concepts due for review and today's plan" width="100%" />
+</p>
+
 ## Introduction
 
 RecallSpring is a self-hosted study app built on **Hybrid Learning**. You lead the new learning: your material,
@@ -53,6 +57,21 @@ worked out without any AI.
 - **Focus timer and history.** Pomodoro sessions per course, and a full, audited history of everything that changed.
 - **Private by default.** Runs on `127.0.0.1`, with daily backups checked by a test restore. Deletions are
   soft-deletes you can undo, and the app is fully in English while your material can be in any language.
+
+<table>
+  <tr>
+    <td width="33%"><img src="assets/screenshots/courses.png" alt="Courses by university, faculty and semester, each with its next kolokvij and progress" /></td>
+    <td width="33%"><img src="assets/screenshots/exams.png" alt="Exams on one timeline, with readiness for each" /></td>
+    <td width="33%"><img src="assets/screenshots/review.png" alt="Reviews scheduled from graded answers, with the reason for each date" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Courses and progress</sub></td>
+    <td align="center"><sub>Exams on one timeline</sub></td>
+    <td align="center"><sub>Reviews that schedule themselves</sub></td>
+  </tr>
+</table>
+
+<sub>Screenshots from demo data, in the Snow Storm theme (one of seven in Settings → Appearance).</sub>
 
 ## Assistants
 
