@@ -4,6 +4,14 @@
 
 **English-only interface.** Calm, airy, legible, professional but warm. Learning is the center, not configuration. No overstimulating gamification, gradients, giant cards, or decorative visuals. Light mode first; user chose **Sage Study** over blue and warm-paper alternatives.
 
+## Brand symbol
+
+The RecallSpring symbol (owner's pack, 2026-11-22) lives in `assets/brand/` (favicon.ico/svg, PNGs 16-512,
+apple-touch-icon, PWA 192/512, a 1024 master; see its README). The web app uses it for the favicon, the web
+manifest and next to the name in the menu, sign-in and welcome pages (`BrandMark`, inline SVG). Light themes show
+the brand teal `#087465`; dark themes a lighter teal `#5fc4b4` for contrast (`--brand-mark`). Future Claude and
+Codex plugins/extensions take their icons from `assets/brand/`, not new artwork.
+
 ## Design tokens (starting point; validate contrast)
 
 ```css

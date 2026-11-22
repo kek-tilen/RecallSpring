@@ -124,7 +124,7 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
       if (s.sound) chime(t.from === "focus" ? "rest" : "focus");
       if (s.notify && typeof Notification !== "undefined" && Notification.permission === "granted") {
         try {
-          new Notification(msg.title, { body: msg.body, tag: "recallspring-focus", icon: "/favicon.svg" });
+          new Notification(msg.title, { body: msg.body, tag: "recallspring-focus", icon: "/favicon-192x192.png" });
         } catch {
           /* notifications unavailable here */
         }

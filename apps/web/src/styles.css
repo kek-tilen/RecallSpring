@@ -399,9 +399,16 @@ a:hover {
   padding-left: max(clamp(16px, 4vw, 48px), 64px);
 }
 
-.brand img {
+.brand img,
+.brand .brand-mark {
   width: 28px;
   height: 28px;
+}
+
+/* The RecallSpring symbol: the brand teal on light themes, a lighter teal on dark ones (contrast). */
+.brand-mark {
+  flex: none;
+  color: var(--brand-mark);
 }
 
 .rail nav {
@@ -1559,10 +1566,12 @@ pre.template {
   --c-green: #008300;
   --c-violet: #6250d6;
   --c-red: #e34948;
+  --brand-mark: #087465;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
+    --brand-mark: #5fc4b4;
     --c-blue: #3987e5;
     --c-orange: #d95926;
     --c-aqua: #199e70;
@@ -1578,6 +1587,7 @@ pre.template {
 :root[data-theme="nord"],
 :root[data-theme="dracula"],
 :root[data-theme="gruvbox"] {
+  --brand-mark: #5fc4b4;
   --c-blue: #3987e5;
   --c-orange: #d95926;
   --c-aqua: #199e70;

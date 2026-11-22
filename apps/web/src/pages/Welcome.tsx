@@ -1,3 +1,4 @@
+import { BrandMark } from "../components/BrandMark";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
@@ -63,7 +64,7 @@ export function FirstRunForm() {
   return (
     <form className="card" onSubmit={submit} aria-labelledby="setup-title">
       <div className="row" style={{ gap: 12 }}>
-        <img src="/favicon.svg" alt="" width={36} height={36} />
+        <BrandMark size={36} />
         <div>
           <h1 id="setup-title" style={{ fontSize: "1.3rem" }}>
             Welcome to RecallSpring

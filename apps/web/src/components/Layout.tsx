@@ -1,3 +1,4 @@
+import { BrandMark } from "./BrandMark";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
@@ -107,7 +108,7 @@ export function Layout() {
         <aside className="rail" id="rail">
           <div className="rail-top">
             <NavLink to="/" className="brand" aria-label="RecallSpring home">
-              <img src="/favicon.svg" alt="" />
+              <BrandMark />
               RecallSpring
             </NavLink>
             <button

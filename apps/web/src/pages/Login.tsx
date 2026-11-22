@@ -1,3 +1,4 @@
+import { BrandMark } from "../components/BrandMark";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -74,7 +75,7 @@ function SignIn() {
     <main className="login">
       <form className="card" onSubmit={submit} aria-labelledby="login-title">
         <div className="row" style={{ gap: 12 }}>
-          <img src="/favicon.svg" alt="" width={36} height={36} />
+          <BrandMark size={36} />
           <div>
             <h1 id="login-title" style={{ fontSize: "1.3rem" }}>
               RecallSpring
