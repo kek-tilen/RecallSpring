@@ -6,6 +6,15 @@ import { ChatAnswerForm } from "./pages/Answer";
 
 beforeAll(() => {
   Object.assign(URL, { createObjectURL: () => "blob:preview", revokeObjectURL: () => {} });
+  // jsdom has no <dialog> methods.
+  Object.assign(HTMLDialogElement.prototype, {
+    showModal(this: HTMLDialogElement) {
+      this.setAttribute("open", "");
+    },
+    close(this: HTMLDialogElement) {
+      this.removeAttribute("open");
+    },
+  });
 });
 
 afterEach(() => {
@@ -55,11 +64,20 @@ it("a pasted photo is saved in Answer photos and counts as the answer", async ()
 
   fireEvent.click(save);
   await waitFor(() => expect(onSaved).toHaveBeenCalledWith("answer", ["p1"]), { timeout: 5000 });
-  // After saving, the photo stays visible and opens full size in a new tab.
-  const link = screen.getByRole("link", { name: /Photo 1/ }) as HTMLAnchorElement;
-  expect(link.target).toBe("_blank");
-  expect(link.getAttribute("href")).toContain("/sources/p1/file");
+  // After saving, the photo stays visible; a click shows it large in this page (no new tab, no download).
+  expect(screen.queryByRole("link", { name: /Photo 1/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /Photo 1/ }));
+  const viewer = screen.getByRole("dialog", { name: "Photo viewer" });
+  const big = viewer.querySelector("img") as HTMLImageElement;
+  expect(big.getAttribute("src")).toContain("/sources/p1/file");
+  fireEvent.click(screen.getByRole("button", { name: "Actual size" }));
+  expect(screen.getByRole("button", { name: "Fit to screen" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByRole("link", { name: "Download" }).getAttribute("href")).toContain("/sources/p1/file");
+  expect(screen.queryByRole("button", { name: "Next photo" })).toBeNull(); // one photo: no previous/next
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  expect(screen.queryByRole("dialog", { name: "Photo viewer" })).toBeNull();
+  // A thumbnail that cannot be shown becomes a download link.
   fireEvent.error(screen.getByAltText(/Photo 1/));
-  expect(screen.getByRole("link", { name: "Open photo 1" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Download photo 1" })).toBeTruthy();
   expect((sent[1]!.body as { photo_ids: string[]; answer_text: string }).photo_ids).toEqual(["p1"]);
 });

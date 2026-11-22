@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { API, request } from "../api";
 import { LIBRARY_KEYS } from "../queries";
+import { PhotoViewer } from "./PhotoViewer";
 import { shrinkImage } from "./Upload";
 
 /** Photos of the learner's own work: saved first in the course Library, then linked to an answer or message. */
@@ -114,27 +115,38 @@ export function usePhotos(courseId: string | null, folderPath: string | null) {
 
 export type Photos = ReturnType<typeof usePhotos>;
 
-/** Thumbnails of the photos added so far, each with a remove button. */
+/** Thumbnails of the photos added so far, each with a remove button; a click shows it large. */
 export function PhotoStrip({ photos, onRemove }: { photos: Photo[]; onRemove?: (key: string) => void }) {
+  const [open, setOpen] = useState<number | null>(null);
   if (!photos.length) return null;
   return (
-    <ul className="photo-strip" aria-label="Photos added">
-      {photos.map((p, i) => (
-        <li key={p.key} className={`photo-thumb is-${p.state}`}>
-          <a href={p.id ? `${API}/sources/${p.id}/file` : p.preview} target="_blank" rel="noreferrer" title="Open full size in a new tab">
-            <img src={p.preview} alt={`Photo ${i + 1}: ${p.filename}`} />
-          </a>
-          <span className="photo-state tiny" role={p.state === "failed" ? "alert" : undefined}>
-            {p.state === "saving" ? "Saving…" : p.state === "failed" ? (p.error ?? "Not saved") : "Saved"}
-          </span>
-          {onRemove && (
-            <button type="button" className="photo-remove" aria-label={`Remove photo ${i + 1}`} onClick={() => onRemove(p.key)}>
-              ×
+    <>
+      <ul className="photo-strip" aria-label="Photos added">
+        {photos.map((p, i) => (
+          <li key={p.key} className={`photo-thumb is-${p.state}`}>
+            <button type="button" className="photo-open" title="View larger" onClick={() => setOpen(i)}>
+              <img src={p.preview} alt={`Photo ${i + 1}: ${p.filename}`} />
             </button>
-          )}
-        </li>
-      ))}
-    </ul>
+            <span className="photo-state tiny" role={p.state === "failed" ? "alert" : undefined}>
+              {p.state === "saving" ? "Saving…" : p.state === "failed" ? (p.error ?? "Not saved") : "Saved"}
+            </span>
+            {onRemove && (
+              <button type="button" className="photo-remove" aria-label={`Remove photo ${i + 1}`} onClick={() => onRemove(p.key)}>
+                ×
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {open !== null && (
+        <PhotoViewer
+          photos={photos.map((p) => ({ src: p.preview, name: p.filename }))}
+          index={Math.min(open, photos.length - 1)}
+          onIndex={setOpen}
+          onClose={() => setOpen(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -169,20 +181,38 @@ export function AnswerPhotos({ photos }: { photos: Photos }) {
   );
 }
 
-/** Saved photos (of an answer or a message): thumbnails that open full size in a new tab, or a plain link when the
- * picture cannot be shown here. */
-export function SavedPhotos({ ids, label }: { ids: { id: string; filename?: string | null; available?: boolean }[]; label: string }) {
+type SavedPhotoRef = { id: string; filename?: string | null; available?: boolean };
+
+/** Saved photos (of an answer or a message): thumbnails that open a large view in this page (previous/next when
+ * there are several), or a download link when the picture cannot be shown here. */
+export function SavedPhotos({ ids, label }: { ids: SavedPhotoRef[]; label: string }) {
+  const [open, setOpen] = useState<number | null>(null);
   if (!ids.length) return null;
+  const shown = ids.filter((p) => p.available !== false);
   return (
-    <ul className="photo-strip" aria-label={label}>
-      {ids.map((p, i) => (
-        <SavedPhoto key={p.id} photo={p} n={i + 1} />
-      ))}
-    </ul>
+    <>
+      <ul className="photo-strip" aria-label={label}>
+        {ids.map((p, i) => (
+          <SavedPhoto key={p.id} photo={p} n={i + 1} onOpen={() => setOpen(shown.indexOf(p))} />
+        ))}
+      </ul>
+      {open !== null && (
+        <PhotoViewer
+          photos={shown.map((p) => {
+            const n = ids.indexOf(p) + 1;
+            const url = `${API}/sources/${p.id}/file`;
+            return { src: url, download: url, name: p.filename ?? `photo-${n}` };
+          })}
+          index={open}
+          onIndex={setOpen}
+          onClose={() => setOpen(null)}
+        />
+      )}
+    </>
   );
 }
 
-function SavedPhoto({ photo, n }: { photo: { id: string; filename?: string | null; available?: boolean }; n: number }) {
+function SavedPhoto({ photo, n, onOpen }: { photo: SavedPhotoRef; n: number; onOpen: () => void }) {
   const [broken, setBroken] = useState(false);
   const url = `${API}/sources/${photo.id}/file`;
   const name = `Photo ${n}${photo.filename ? `: ${photo.filename}` : ""}`;
@@ -196,13 +226,13 @@ function SavedPhoto({ photo, n }: { photo: { id: string; filename?: string | nul
   return (
     <li className="photo-thumb">
       {broken ? (
-        <a className="photo-link small" href={url} target="_blank" rel="noreferrer">
-          Open photo {n}
+        <a className="photo-link small" href={url} download={photo.filename ?? `photo-${n}`}>
+          Download photo {n}
         </a>
       ) : (
-        <a href={url} target="_blank" rel="noreferrer" title="Open full size in a new tab">
+        <button type="button" className="photo-open" title="View larger" onClick={onOpen}>
           <img src={url} alt={name} loading="lazy" onError={() => setBroken(true)} />
-        </a>
+        </button>
       )}
     </li>
   );
