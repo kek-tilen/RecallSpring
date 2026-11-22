@@ -20,7 +20,7 @@ from typing import Any
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from .. import backup, clock
+from .. import backup, clock, runtime
 from ..config import get_settings
 from ..db import new_session
 from ..models import Job, Source, SourceSection
@@ -204,13 +204,16 @@ BACKUP_CHECK_SECONDS = 600
 
 
 def run_worker(poll_seconds: float = 2.0, should_stop: Callable[[], bool] = lambda: False) -> None:
-    """Process jobs; every 10 minutes also make a backup when one is due (backup.py) and remove staged imports
-    past their retention (chatgpt_import.py); neither raises."""
+    """Process jobs and write a heartbeat every 30 seconds (runtime.py); every 10 minutes also make a backup when
+    one is due (backup.py) and remove staged imports past their retention (chatgpt_import.py); neither raises."""
     from ..services import chatgpt_import
 
     log.info("worker started")
-    next_backup_check = 0.0
+    next_backup_check = next_heartbeat = 0.0
     while not should_stop():
+        if time.monotonic() >= next_heartbeat:
+            runtime.write_heartbeat()  # Settings shows whether the worker runs (runtime.worker_status)
+            next_heartbeat = time.monotonic() + runtime.HEARTBEAT_SECONDS
         if time.monotonic() >= next_backup_check:
             backup.run_if_due()
             chatgpt_import.expire_all()

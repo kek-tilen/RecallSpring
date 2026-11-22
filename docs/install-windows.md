@@ -68,11 +68,27 @@ once. The time zone is in **Settings → Profile**.
 
 ## 4. Every day
 
-- After a restart of the computer: start Docker Desktop, then `scripts\start-local.ps1`. It opens two windows,
-  "RecallSpring API" and "RecallSpring worker"; keep them open while you study.
+- After a restart of the computer: start Docker Desktop, then `scripts\start-local.ps1`. The API and the worker run
+  in the background without a window; Settings → Running in the background shows whether both run.
 - The worker backs up the database and your files once a day into `local-data\backups` (Settings → Backups). That is
   on the same disk: set `RS_BACKUP_DIR` in `services\api\.env` to another disk or a synced folder for real
   protection. Restore steps: docs/08 → Backups.
+
+### Running in the background
+
+| Command | What it does |
+| --- | --- |
+| `scripts\start-local.ps1` | starts the database, API and worker (anything already running is left alone) |
+| `scripts\start-local.ps1 -Status` | shows whether the API and the worker run, the API's health and the worker's heartbeat |
+| `scripts\start-local.ps1 -Restart` | stops the API and the worker and starts them again (e.g. after an update) |
+| `scripts\start-local.ps1 -Stop` | stops them; the database keeps running in Docker |
+| `scripts\logs.ps1` | the last 40 lines of the API log, then new lines until Ctrl+C (`-Worker`, `-Lines 200`, `-NoFollow`) |
+
+The logs are `local-data\logs\api.log` and `worker.log`, rotated at 5 MB with three old files kept (about 20 MB at
+most each). They stay on this computer, like everything in `local-data`. The worker writes a heartbeat every 30
+seconds to `local-data\run`; after two minutes without one, Settings shows it as stopped (imports and automatic
+backups then wait). Docker for the API and worker is planned for the home server, where the ChatGPT sign-in is kept in
+a 0600 file; on Windows it stays protected with DPAPI by running as your user.
 
 ## 5. Updating
 
@@ -81,7 +97,7 @@ git pull
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-The installer closes the two RecallSpring windows first (Windows does not let running programs be replaced), backs up
+The installer stops the RecallSpring API and worker first (Windows does not let running programs be replaced), backs up
 your data before changing the database, and starts RecallSpring again. With Claude Desktop, quit and reopen it
 afterwards so it loads the new connector; with Codex, start a new session.
 
@@ -92,7 +108,7 @@ afterwards so it loads the new connector; with Codex, start a new session.
 | *Python 3.12 or newer is needed* / *Node.js 22* | install it (table above), open a new PowerShell window, run the installer again |
 | *Docker Desktop is installed but not running* | start it, wait for *Engine running*, run the installer again |
 | *The database did not become ready* | Docker Desktop → Containers → `recallspring-dev` → logs |
-| *RecallSpring did not start* | read the error in the "RecallSpring API" window |
+| *RecallSpring did not start* | `scripts\logs.ps1 -NoFollow` shows the error at the end of the API log |
 | Port 4318 or 55432 is in use | another program uses it; stop that program (RecallSpring does not change ports by itself) |
 | *For safety, the first account can only be created on the computer RecallSpring runs on* | open `http://127.0.0.1:4318/` on that computer |
 

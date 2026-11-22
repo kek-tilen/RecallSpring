@@ -98,6 +98,8 @@ class Settings(BaseSettings):
     chatgpt_auth_base: str = "https://auth.openai.com"
     chatgpt_api_base: str = "https://api.openai.com/v1"
     secrets_dir: Path = _REPO_ROOT / "local-data" / "secrets"
+    # Small runtime files, e.g. the worker heartbeat the API reads (runtime.py); never learner data.
+    run_dir: Path = _REPO_ROOT / "local-data" / "run"
     ai_evaluation_lease_seconds: int = 180
     mock_ai_behavior: Literal["normal", "timeout", "error", "invalid"] = "normal"
 

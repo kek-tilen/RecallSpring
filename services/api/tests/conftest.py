@@ -42,6 +42,7 @@ os.environ.update(
         "RS_OFFICE_RENDERER": "off",  # results must not depend on LibreOffice being installed; tests fake it
         "RS_BACKUP_ENABLED": "false",  # test_backup.py turns it on with its own folder
         "RS_BACKUP_DIR": tempfile.mkdtemp(prefix="recallspring-test-backups-"),
+        "RS_RUN_DIR": tempfile.mkdtemp(prefix="recallspring-test-run-"),  # the worker heartbeat (runtime.py)
     }
 )
 

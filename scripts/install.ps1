@@ -76,8 +76,8 @@ if (-not $healthy) { throw "The database did not become ready within 2 minutes. 
 Write-Host "Database ready."
 
 # ---------------------------------------------------------------- 4. Python packages (hashed lock files)
-# A running RecallSpring keeps its programs open, so Windows would not let them be replaced: close its two windows
-# first (only those; the database keeps running). Step 7 starts them again.
+# A running RecallSpring keeps its programs open, so Windows would not let them be replaced: stop its API and
+# worker first (only those; the database keeps running). Step 7 starts them again.
 & (Join-Path $PSScriptRoot "start-local.ps1") -Stop
 foreach ($svc in @($api, $mcp)) {
     $name = Split-Path -Leaf $svc
@@ -131,7 +131,7 @@ for ($i = 0; $i -lt 40; $i++) {
         $ready = $true; break
     } catch { Start-Sleep -Seconds 2 }
 }
-if (-not $ready) { throw "RecallSpring did not start. Look at the 'RecallSpring API' window for the error." }
+if (-not $ready) { throw "RecallSpring did not start. Its log shows why: scripts\logs.ps1 -NoFollow" }
 Start-Process "http://127.0.0.1:4318/"
 Write-Host ""
 Write-Host "RecallSpring runs at http://127.0.0.1:4318/ (this computer only)."

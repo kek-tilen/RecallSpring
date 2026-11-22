@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from .. import runtime
 from ..config import get_settings
 from ..db import new_session
 
@@ -25,4 +26,6 @@ def ready() -> JSONResponse:
     except Exception:  # noqa: BLE001 - readiness must report, not raise
         checks["database"] = False
     ok = all(checks.values())
-    return JSONResponse({"status": "ready" if ok else "not_ready", "checks": checks}, status_code=200 if ok else 503)
+    # The worker is reported, not checked: the API works without it (imports then wait in the queue).
+    body = {"status": "ready" if ok else "not_ready", "checks": checks, "worker": runtime.worker_status()}
+    return JSONResponse(body, status_code=200 if ok else 503)

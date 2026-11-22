@@ -7,7 +7,7 @@
 | Project name **RecallSpring** | Accepted |
 | UI and system messages in English | Required |
 | **Sage Study**, white/light-first theme | Required |
-| Open-source code acceptable | Accepted; license TBD |
+| Open-source code acceptable | Accepted: **AGPL-3.0-only** (`LICENSE`), inserted as the first commit of the history before the first push so every commit carries it (approved 2026-11-22, owner in chat) |
 | **Hybrid Learning** | Required: new-learning user-led, follow-up/reviews AI-administered |
 | Full process: sources -> notes -> tutor -> Bloom 3–5 -> reviews -> insights | Required |
 | Meaningful visual explanations | Required, own safe renderer acceptable |
@@ -76,6 +76,7 @@
 | Google Antigravity is a fourth assistant, connected like Codex: its own connector token (`client = antigravity`, migration 0021), one entry in `~/.gemini/config/mcp_config.json` written by `scripts/install-antigravity-connector.ps1`, the shared study folders with `AGENTS.md`; grades labelled "Antigravity"; also selectable in Mix. No Gemini API key | Approved 2026-11-22 (owner in chat). Owner's live test 2026-11-22 passed: study context and exam profile read, summary saved and checked, the answer form shown inline in Antigravity (MCP Apps), grade saved and labelled "Antigravity · gemini-3.8-flash" |
 | One grading scale for every assistant (scale-v1): a single text sent with each answer to grade and used by the in-app evaluator, with anchors (correct recall or true/false = 3; 4 only for real transfer; between 3 and 4 give 3; a missing required step = 2). Guidance only: RecallSpring does not change a grade an assistant gives | Approved 2026-11-22 (owner in chat), after Antigravity (Gemini Flash) gave 4/4 Transfer for a true/false answer. Self-assessment: see the next row |
 | Self-assessment when no assistant is available: after saving, the learner marks each expected point met / partly / missed; RecallSpring suggests a grade (all met 3, at least half 2, some 1, none 0; 4 only with a reason) and the learner may choose another. Stored as a `self` assessment (migration 0022), always provisional (a short follow-up, never a longer interval, so never Reliable), labelled "Self-assessed · to be checked" everywhere. Assistants see `self_assessments_to_check` (and the oldest ten in the study context) and check them; their grade replaces the learner's in the schedule, theirs stays in the history, and a difference of 2 or more is shown. Questions and open simulation items from assistants now require expected points | Approved 2026-11-22 (owner in chat; the owner asked for a clear self-assessed label and a later check by an agent) |
+| On Windows the API and the worker run in the background without a window (hidden processes started through WMI by `scripts/start-local.ps1`), logging to rotating files in `local-data/logs` (`scripts/logs.ps1`, `-Status`); the worker's heartbeat file lets Settings show whether it runs. Not Docker yet: on Windows the ChatGPT sign-in stays DPAPI-protected and needs no new sign-in; Docker comes with the move to the home server. Autostart at Windows sign-in is offered, not set up | Approved 2026-11-22 (owner in chat) |
 
 Risk (2026-11-22): images cost far more tokens than text; Chat sends an image once, with its message, and grading sends only the photos of the answer being graded. Handwriting may be misread: the grade rules (provisional when unsure, never invent) apply to photos too.
 
@@ -105,7 +106,7 @@ Risk (2026-11-22): images cost far more tokens than text; Chat sends an image on
 
 1. FQDN and DNS access (e.g. `study.example.com`) + certificate method (also unlocks the remote Claude connector).
 2. Preferred off-VPS encrypted backup location and retention policy.
-3. Final open-source license (Apache-2.0 vs AGPL-3.0).
+3. ~~Final open-source license~~ decided 2026-11-22: AGPL-3.0-only; copyright notice "Copyright (C) 2026 Kek Tilen", public contact kektilen@proton.me (README).
 4. Before enabling SIWC on a remotely hosted instance: clearance from OpenAI (its docs scope the open-source path to open-source and locally hosted apps; remote/paid apps → interest form).
 5. Whether to add an Anthropic API key (Mode B with Claude) and its monthly USD limit.
 6. Initial upload/storage quota and anticipated annual source volume.

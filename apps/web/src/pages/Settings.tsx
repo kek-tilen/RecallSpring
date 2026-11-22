@@ -9,6 +9,7 @@ import { bytes, dateLabel, dateTime, plural } from "../format";
 import { keys, useAssistants, useBackup, useConnector, useSession, useStudySettings } from "../queries";
 import { PreferencesEditor } from "./Import";
 import { ChatGptPanel } from "../components/ChatGpt";
+import { ServiceStatus } from "../components/ServiceStatus";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
 import type { AssistantClient, AssistantKey, AssistantsStatus, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
 
@@ -560,6 +561,9 @@ export function SettingsPage() {
           </Card>
           <Card title="Profile" id="profile">
             <ProfileForm />
+          </Card>
+          <Card title="Running in the background" id="service">
+            <ServiceStatus />
           </Card>
         </div>
         <div className="stack" style={{ gap: 16 }}>

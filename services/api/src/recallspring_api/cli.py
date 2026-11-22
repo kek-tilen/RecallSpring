@@ -212,6 +212,21 @@ def backup_restore(snapshot: str, database: str, storage: Path | None) -> int:
     return 0
 
 
+def serve_api(host: str, port: int, log_file: Path | None) -> int:
+    """scripts/start-local.ps1 runs this without a window, logging to local-data/logs/api.log."""
+    import uvicorn
+
+    from . import runtime
+
+    if log_file is None:
+        uvicorn.run("recallspring_api.main:app", host=host, port=port)
+    else:
+        runtime.log_to_file(log_file)
+        # log_config=None keeps uvicorn from installing console handlers; its loggers reach the file.
+        uvicorn.run("recallspring_api.main:app", host=host, port=port, log_config=None)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="recallspring")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -229,6 +244,11 @@ def main(argv: list[str] | None = None) -> int:
     token.add_argument("--file", type=Path, help="where the token is written (default: one file per assistant)")
     worker = sub.add_parser("worker")
     worker.add_argument("--once", action="store_true", help="process queued jobs, then exit")
+    worker.add_argument("--log-file", type=Path, help="log to this rotating file instead of the console")
+    serve = sub.add_parser("serve", help="run the API (and the built web app) on 127.0.0.1")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=4318)
+    serve.add_argument("--log-file", type=Path, help="log to this rotating file instead of the console")
     bk = sub.add_parser("backup", help="back up the database and uploaded files now")
     bk.add_argument("--if-due", action="store_true", help="only when the last good backup is older than the interval")
     sub.add_parser("backup-status", help="show the last backup and the kept snapshots")
@@ -250,12 +270,18 @@ def main(argv: list[str] | None = None) -> int:
         return create_owner(args.username, args.timezone)
     if args.command == "connector-token":
         return connector_token(args.username, args.label, args.file or default_token_file(args.client), args.client)
+    if args.command == "serve":
+        return serve_api(args.host, args.port, args.log_file)
     if args.command == "worker":
         import logging
 
+        from . import runtime
         from .ingest.jobs import run_pending, run_worker
 
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+        if args.log_file:
+            runtime.log_to_file(args.log_file)
+        else:
+            logging.basicConfig(level=logging.INFO, format=runtime.LOG_FORMAT)
         if args.once:
             print(f"Processed {run_pending()} job(s).")
         else:

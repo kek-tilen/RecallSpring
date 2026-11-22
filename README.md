@@ -16,7 +16,9 @@ packages/contracts/       Shared JSON schemas (assessment, visual blocks)
 services/api/             FastAPI backend, migrations, tests, AI provider adapters
 services/mcp/             Claude connector (MCP server) for Claude Desktop — see docs/connector-setup.md
 scripts/install.ps1       Install or update RecallSpring on Windows — see docs/install-windows.md
-scripts/start-local.ps1   Start the local database, API (serves the web app) and worker; -Restart / -Stop
+scripts/start-local.ps1   Start the local database, API (serves the web app) and worker in the background;
+                          -Status / -Restart / -Stop
+scripts/logs.ps1          Show the API log (-Worker: the worker log) from local-data/logs
 infra/compose.dev.yml     Local development database (loopback only)
 ```
 
@@ -54,8 +56,9 @@ npm ci
 npm run build
 ```
 
-On Windows `scripts/start-local.ps1` starts the database, API and worker; run it with `-Restart` after updating the
-code. Then open `http://127.0.0.1:4318/`: on a new install the first visit creates the account (this computer only),
+On Windows `scripts/start-local.ps1` starts the database, API and worker; the API and worker run in the background
+without a window and log to `local-data/logs` (`scripts/logs.ps1`, `-Status`). Run it with `-Restart` after updating
+the code. Then open `http://127.0.0.1:4318/`: on a new install the first visit creates the account (this computer only),
 afterwards it is the sign-in.
 
 While the worker runs it backs up the database and your uploaded files once a day into `local-data/backups` (checked
@@ -75,4 +78,9 @@ Only official integration routes are used; no consumer credentials are ever stor
 
 ## License
 
-To be decided by the owner (Apache-2.0 or AGPL-3.0 under consideration). Until then, all rights reserved.
+Copyright (C) 2026 Kek Tilen. Questions: kektilen@proton.me
+
+RecallSpring is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only).
+You may use, study, change and share it; if you change it and let others use it over a network (for example as a
+hosted study service), you must offer them the source code of your version under the same license. The license is
+the first commit of the repository, so it applies to every commit.
