@@ -49,6 +49,8 @@ Desktop split view: readable source/notes at left, tutor conversation at right; 
 
 Components:
 - Note editor with autosave and revision history; copy/quote source anchors.
+- **Files in notes** (owner 2026-11-21): `Write` / `Preview` above the text and `Insert file`. The dialog has `From Library` (search by name or folder; the note's course first, other courses marked) and `Upload new` (the usual upload, saved in the Library under the note's course). The link goes in at the cursor: a picture as `![name](source:<id>)` on its own line, any other file as `[name](source:<id>)`. Preview shows pictures (a picture that cannot be loaded becomes a link saying so) and links other files to their Library page; a deleted file shows `name (missing file)`. `Linked files:` under the text lists them. The note list shows file names instead of the raw links.
+- **Deleting a note** (owner 2026-11-21): `Delete note` on the note; a dialog names the note and says it can be restored for 30 days and that linked files stay in the Library; only `Delete note` in the dialog deletes it. Notes → `Recently deleted` lists them with `Restore`.
 - Topic context card linking to syllabus, sources and last practiced date.
 - Tutor controls: `Explain`, `Give an example`, `Show a visual`, `Quiz me`, `Check my reasoning`, `Next question`.
 - Question bar: `Bloom level 3–5`, `Mixed / Progressive`, `Closed notes / Open notes`, optional `Hint`.

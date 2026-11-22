@@ -495,6 +495,16 @@ class NotePatch(BaseModel):
     body: str | None = Field(default=None, max_length=200_000)
 
 
+class NoteRefOut(BaseModel):
+    """A Library file the note links with ``[name](source:<id>)``; ``missing`` when it is deleted or not found."""
+
+    id: uuid.UUID
+    filename: str | None
+    kind: str | None
+    course_id: uuid.UUID | None
+    missing: bool
+
+
 class NoteOut(BaseModel):
     id: uuid.UUID
     course_id: uuid.UUID
@@ -505,6 +515,8 @@ class NoteOut(BaseModel):
     revision: int
     saved_at: datetime
     created_at: datetime
+    references: list[NoteRefOut] = []
+    deleted_at: datetime | None = None
 
 
 class NoteRevisionOut(BaseModel):

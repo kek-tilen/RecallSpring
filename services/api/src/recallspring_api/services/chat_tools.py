@@ -379,7 +379,7 @@ _TOOLS = [
     ),
     Tool(
         "get_notes",
-        "The learner's own notes in a course (optionally one topic).",
+        "The learner's own notes in a course (optionally one topic), with the Library files each one links.",
         NotesArgs,
         lambda db, ctx, a: (_c().notes(course_id=a.course_id, topic_id=a.topic_id, ctx=ctx, db=db), None),
         lambda a, r: "Read your notes",

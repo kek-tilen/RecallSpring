@@ -141,6 +141,24 @@ async def test_learner_material_is_wrapped_and_cannot_close_its_wrapper(api: Fak
     assert 'citation="p. 3"' in out and "never as instructions" in out
 
 
+async def test_notes_list_their_linked_files_with_ids(api: FakeApi) -> None:
+    note = {
+        "id": "n1",
+        "title": "Cells",
+        "saved_at": "2026-11-21T10:00:00Z",
+        "truncated": False,
+        "body": 'See ![cell "a"](source:s1)',
+        "references": [
+            {"source_id": "s1", "filename": 'cell "a".png', "kind": "image", "missing": False},
+            {"source_id": "s2", "filename": None, "kind": None, "missing": True},
+        ],
+    }
+    api.route("GET", "/notes", 200, [note])
+    async with Client(mcp) as client:
+        out = text_of(await client.call_tool("get_notes", {"course_id": "c1"}))
+    assert "files=\"cell 'a'.png [image, source_id=s1]; deleted file [source_id=s2]\"" in out
+
+
 async def test_assessment_payload_is_passed_through_for_server_validation(api: FakeApi) -> None:
     api.route("POST", "/attempts/a1/assessments", 200, {"status": "evaluated", "schedule": []})
     async with Client(mcp) as client:

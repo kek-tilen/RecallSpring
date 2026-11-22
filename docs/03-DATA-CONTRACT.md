@@ -31,7 +31,7 @@
 | `concepts` | `id`, course, canonical term, definition draft, syllabus item link, state (`new/learning/learned/...`), `source_confidence` |
 | `concept_sources` | concept-to-source_section link with evidence excerpt span, inference flag |
 | `concept_relations` | from, to, relation enum (`prerequisite/part_of/related_to/contrasts_with`), origin and confidence |
-| `notes` | `id`, author, course, topic, `client_note_id` (offline idempotency), raw Markdown/plaintext, revision, deleted_at, saved_at |
+| `notes` | `id`, author, course, topic, `client_note_id` (offline idempotency), raw Markdown/plaintext, revision, deleted_at (soft delete, restorable 30 days), saved_at. Library files are linked in the text as `[name](source:<source id>)` (pictures `![name](source:<id>)`); no extra table: the server resolves the IDs on read, owner-scoped, and reports deleted or foreign IDs only as `missing` |
 | `note_revisions` | note, kind (`autosave` snapshot coalesced per editing burst, or `conflict` = a rejected stale draft kept until resolved), revision, base revision, body, saved_at |
 | `study_sessions` | `id`, owner, course/topic, mode (`new_learning/review`), timestamps, checkpoint |
 | `messages` | `id`, session, role, content, source refs, visual block IDs, status; separately from attempts |

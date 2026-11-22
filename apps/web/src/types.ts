@@ -562,6 +562,15 @@ export interface Course {
   group_id: string | null;
 }
 
+/** A Library file a note links with [name](source:<id>) or shows with ![name](source:<id>). */
+export interface NoteRef {
+  id: string;
+  filename: string | null;
+  kind: string | null;
+  course_id: string | null;
+  missing: boolean; // deleted, or not one of the learner's files
+}
+
 export interface Note {
   id: string;
   course_id: string;
@@ -570,6 +579,8 @@ export interface Note {
   revision: number;
   saved_at: string;
   created_at: string;
+  references?: NoteRef[];
+  deleted_at?: string | null;
 }
 
 export interface NoteRevision {

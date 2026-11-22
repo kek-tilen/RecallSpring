@@ -19,13 +19,19 @@ from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_s
 from ..errors import ApiError, not_found
 from ..models import Course, Note, NoteRevision, SyllabusItem
 from ..schemas import NoteIn, NoteOut, NotePatch, NoteRevisionOut
-from ..services.events import learning_event
+from ..services.events import audit, learning_event
+from ..services.note_refs import references
 from ..services.ownership import owned
 
 router = APIRouter(tags=["notes"])
 
 
-def note_view(note: Note) -> dict[str, Any]:
+RESTORE_DAYS = 30
+
+
+def note_view(db: Session, note: Note, refs: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    if refs is None:
+        refs = references(db, note.user_id, [note])[note.id]
     return NoteOut(
         id=note.id,
         course_id=note.course_id,
@@ -36,7 +42,14 @@ def note_view(note: Note) -> dict[str, Any]:
         revision=note.revision,
         saved_at=note.saved_at,
         created_at=note.created_at,
+        references=refs,  # type: ignore[arg-type]
+        deleted_at=note.deleted_at,
     ).model_dump(mode="json")
+
+
+def note_views(db: Session, user_id: uuid.UUID, notes: list[Note]) -> list[dict[str, Any]]:
+    refs = references(db, user_id, notes)
+    return [note_view(db, n, refs[n.id]) for n in notes]
 
 
 def _snapshot(db: Session, note: Note) -> None:
@@ -74,7 +87,7 @@ def _existing(db: Session, ctx: WriteCtx, payload: NoteIn) -> JSONResponse:
     assert note is not None
     if note.course_id != payload.course_id:
         raise ApiError(409, "client_note_id_conflict", "This client_note_id belongs to another note.")
-    return JSONResponse(note_view(note), status_code=200, headers={"Idempotent-Replay": "true"})
+    return JSONResponse(note_view(db, note), status_code=200, headers={"Idempotent-Replay": "true"})
 
 
 @router.post("/notes", status_code=201, response_model=NoteOut)
@@ -118,7 +131,7 @@ def create_note(payload: NoteIn, ctx: WriteCtx = Depends(write_ctx), db: Session
         payload={"revision": 1},
         request_id=ctx.request_id,
     )
-    return commit_with_response(db, ctx, payload, 201, note_view(note))
+    return commit_with_response(db, ctx, payload, 201, note_view(db, note))
 
 
 @router.patch("/notes/{note_id}", response_model=NoteOut)
@@ -161,7 +174,7 @@ def update_note(
             "code": "revision_conflict",
             "message": "This note changed on another device. Both versions are kept; choose or merge them.",
             "request_id": ctx.request_id,
-            "details": {"current": note_view(note), "conflict_revision_id": str(conflict.id)},
+            "details": {"current": note_view(db, note), "conflict_revision_id": str(conflict.id)},
         }
         return commit_with_response(db, ctx, payload, 409, body)
     if payload.title is not None:
@@ -181,7 +194,7 @@ def update_note(
         payload={"revision": note.revision},
         request_id=ctx.request_id,
     )
-    return commit_with_response(db, ctx, payload, 200, note_view(note))
+    return commit_with_response(db, ctx, payload, 200, note_view(db, note))
 
 
 @router.get("/notes", response_model=list[NoteOut])
@@ -196,12 +209,79 @@ def list_notes(
         stmt = stmt.where(Note.course_id == course_id)
     if topic_id is not None:
         stmt = stmt.where(Note.syllabus_item_id == topic_id)
-    return [note_view(n) for n in db.scalars(stmt.order_by(Note.saved_at.desc()))]
+    return note_views(db, ctx.user.id, list(db.scalars(stmt.order_by(Note.saved_at.desc()))))
+
+
+@router.get("/notes/deleted", response_model=list[NoteOut])
+def deleted_notes(
+    course_id: uuid.UUID | None = None, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
+) -> list[dict[str, Any]]:
+    """Notes deleted in the last 30 days, newest first, so they can be restored."""
+    since = clock.now() - timedelta(days=RESTORE_DAYS)
+    stmt = select(Note).where(Note.user_id == ctx.user.id, Note.deleted_at.is_not(None), Note.deleted_at >= since)
+    if course_id is not None:
+        stmt = stmt.where(Note.course_id == course_id)
+    return note_views(db, ctx.user.id, list(db.scalars(stmt.order_by(Note.deleted_at.desc()))))
 
 
 @router.get("/notes/{note_id}", response_model=NoteOut)
 def get_note(note_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
-    return note_view(owned(db, Note, note_id, ctx.user.id))
+    return note_view(db, owned(db, Note, note_id, ctx.user.id))
+
+
+@router.delete("/notes/{note_id}")
+def delete_note(note_id: uuid.UUID, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)) -> JSONResponse:
+    """Soft delete after the learner confirmed it in the app. Text and history are kept and restorable for 30 days;
+    the note leaves the Notes list and what the assistants see."""
+    key = {"delete": str(note_id)}
+    if replay := replay_if_seen(db, ctx, key):
+        return replay
+    note = owned(db, Note, note_id, ctx.user.id, for_update=True)
+    note.deleted_at = clock.now()
+    db.flush()
+    _audit(db, ctx, note, "note.deleted")
+    return commit_with_response(db, ctx, key, 200, {"deleted": note_view(db, note), "restorable_days": RESTORE_DAYS})
+
+
+@router.post("/notes/{note_id}/restore", response_model=NoteOut)
+def restore_note(note_id: uuid.UUID, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)) -> JSONResponse:
+    key = {"restore": str(note_id)}
+    if replay := replay_if_seen(db, ctx, key):
+        return replay
+    since = clock.now() - timedelta(days=RESTORE_DAYS)
+    note = db.scalar(
+        select(Note)
+        .where(Note.id == note_id, Note.user_id == ctx.user.id, Note.deleted_at.is_not(None), Note.deleted_at >= since)
+        .with_for_update()
+    )
+    if note is None:
+        raise not_found("Note")
+    note.deleted_at = None
+    db.flush()
+    _audit(db, ctx, note, "note.restored")
+    return commit_with_response(db, ctx, key, 200, note_view(db, note))
+
+
+def _audit(db: Session, ctx: WriteCtx, note: Note, action: str) -> None:
+    details = {"title": note.title, "course_id": str(note.course_id), "revision": note.revision}
+    audit(
+        db,
+        actor_id=ctx.user.id,
+        action=action,
+        target_type="note",
+        target_id=note.id,
+        details=details,
+        request_id=ctx.request_id,
+    )
+    learning_event(
+        db,
+        user_id=ctx.user.id,
+        entity_type="note",
+        entity_id=note.id,
+        event_type=action,
+        payload={"revision": note.revision},
+        request_id=ctx.request_id,
+    )
 
 
 @router.get("/notes/{note_id}/revisions", response_model=list[NoteRevisionOut])

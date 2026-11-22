@@ -1,5 +1,7 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { API } from "../api";
+import type { NoteRef } from "../types";
 import { Visual, type VisualResult } from "./Visual";
 
 /**
@@ -7,6 +9,9 @@ import { Visual, type VisualResult } from "./Visual";
  * inline bold/italic/code/links. Nothing is ever inserted as HTML, so HTML, scripts or styles in a reply are shown
  * as text and never run (AGENTS.md: no model-generated HTML/JS/CSS). A fence tagged `recallspring-visual` is drawn
  * from the server's checked copy (`visuals`, in the same order), never from the raw text.
+ *
+ * In a note (`refs` given) `[name](source:<id>)` links a Library file and `![name](source:<id>)` shows a picture,
+ * always through RecallSpring's own owner-checked file address; elsewhere such text stays plain.
  */
 
 export const VISUAL_LANG = "recallspring-visual";
@@ -19,6 +24,12 @@ export interface Cite {
   label: string;
 }
 export type Cites = Record<string, Cite>;
+/** The note's linked files by ID, as the server resolved them. */
+export type Refs = Record<string, NoteRef>;
+
+const UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+/** `[name](source:<id>)` / `![name](source:<id>)` anywhere in a text, as the server reads it. */
+export const SOURCE_REF = new RegExp(`(!?)\\[([^\\]\\n]*)\\]\\(source:(${UUID})\\)`, "g");
 
 type Block =
   | { kind: "p"; lines: string[] }
@@ -127,8 +138,16 @@ export function parseBlocks(source: string): Block[] {
   return blocks;
 }
 
-const INLINE =
-  /(`[^`\n]+`)|(\*\*[^*\n]+\*\*|__[^_\n]+__)|(\*[^*\s][^*\n]*\*|_[^_\s][^_\n]*_)|(\[[^\]\n]+\]\((https?:\/\/[^\s)]+)\))|\[(S\d{1,4})\]/;
+const INLINE = new RegExp(
+  [
+    /(`[^`\n]+`)/.source,
+    /(\*\*[^*\n]+\*\*|__[^_\n]+__)/.source,
+    /(\*[^*\s][^*\n]*\*|_[^_\s][^_\n]*_)/.source,
+    /(\[[^\]\n]+\]\((https?:\/\/[^\s)]+)\))/.source,
+    /\[(S\d{1,4})\]/.source,
+    `((!?)\\[([^\\]\\n]*)\\]\\(source:(${UUID})\\))`,
+  ].join("|"),
+);
 
 function safeUrl(url: string): string | null {
   try {
@@ -149,7 +168,42 @@ function Citation({ id, cite }: { id: string; cite: Cite | undefined }) {
   );
 }
 
-export function inline(text: string, key = "i", cites?: Cites): ReactNode[] {
+/** A linked Library file: a picture is shown, any other file is a link to it in the Library. */
+export function SourceRef({ id, label, image, info }: { id: string; label: string; image: boolean; info: NoteRef | undefined }) {
+  const name = label.trim() || info?.filename || "file";
+  if (info?.missing) {
+    return (
+      <span className="note-ref missing" title="This file was deleted from your Library or is not available.">
+        {name} (missing file)
+      </span>
+    );
+  }
+  if (image && (!info || info.kind === "image")) return <NoteImage id={id} name={name} filename={info?.filename ?? name} />;
+  return (
+    <Link to={`/library/${id}`} className="note-ref" title={info?.filename ? `${info.filename}: open in Library` : "Open in Library"}>
+      {name}
+    </Link>
+  );
+}
+
+/** A picture from the Library; if its file cannot be loaded, a link to it in the Library instead of a broken image. */
+function NoteImage({ id, name, filename }: { id: string; name: string; filename: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <Link to={`/library/${id}`} className="note-ref" title="The picture could not be loaded. Open it in Library.">
+        {name} (picture could not be loaded)
+      </Link>
+    );
+  }
+  return (
+    <Link to={`/library/${id}`} className="note-image" title={`${filename}: open in Library`}>
+      <img src={`${API}/sources/${id}/file`} alt={name} loading="lazy" onError={() => setFailed(true)} />
+    </Link>
+  );
+}
+
+export function inline(text: string, key = "i", cites?: Cites, refs?: Refs): ReactNode[] {
   const out: ReactNode[] = [];
   let rest = text;
   let n = 0;
@@ -163,9 +217,13 @@ export function inline(text: string, key = "i", cites?: Cites): ReactNode[] {
     const token = m[0];
     const k = `${key}-${n++}`;
     if (m[1]) out.push(<code key={k}>{token.slice(1, -1)}</code>);
-    else if (m[2]) out.push(<strong key={k}>{inline(token.slice(2, -2), k, cites)}</strong>);
-    else if (m[3]) out.push(<em key={k}>{inline(token.slice(1, -1), k, cites)}</em>);
+    else if (m[2]) out.push(<strong key={k}>{inline(token.slice(2, -2), k, cites, refs)}</strong>);
+    else if (m[3]) out.push(<em key={k}>{inline(token.slice(1, -1), k, cites, refs)}</em>);
     else if (m[6]) out.push(cites ? <Citation key={k} id={m[6]} cite={cites[m[6]]} /> : token);
+    else if (m[7]) {
+      const id = m[10]!.toLowerCase();
+      out.push(refs ? <SourceRef key={k} id={id} label={m[9]!} image={m[8] === "!"} info={refs[id]} /> : token);
+    }
     else if (m[4]) {
       const label = token.slice(1, token.indexOf("]("));
       const href = safeUrl(m[5]!);
@@ -184,13 +242,25 @@ export function inline(text: string, key = "i", cites?: Cites): ReactNode[] {
   return out;
 }
 
-function List({ items, ordered, start, cites }: { items: { text: string; depth: number }[]; ordered: boolean; start: number; cites?: Cites }) {
+function List({
+  items,
+  ordered,
+  start,
+  cites,
+  refs,
+}: {
+  items: { text: string; depth: number }[];
+  ordered: boolean;
+  start: number;
+  cites?: Cites;
+  refs?: Refs;
+}) {
   const Tag = ordered ? "ol" : "ul";
   return (
     <Tag start={ordered && start !== 1 ? start : undefined}>
       {items.map((it, i) => (
         <li key={i} style={it.depth ? { marginLeft: `${it.depth * 1.25}em` } : undefined}>
-          {inline(it.text, `l${i}`, cites)}
+          {inline(it.text, `l${i}`, cites, refs)}
         </li>
       ))}
     </Tag>
@@ -202,11 +272,14 @@ export function Markdown({
   visuals,
   source = "the model",
   cites,
+  refs,
 }: {
   text: string;
   visuals?: VisualResult[];
   source?: string;
   cites?: Cites;
+  /** Only for the learner's notes: resolves `source:` links to their Library files. */
+  refs?: Refs;
 }) {
   let visual = 0;
   return (
@@ -215,7 +288,7 @@ export function Markdown({
         switch (b.kind) {
           case "h": {
             const Tag = b.level <= 2 ? "h3" : b.level === 3 ? "h4" : "h5";
-            return <Tag key={i}>{inline(b.text, `h${i}`, cites)}</Tag>;
+            return <Tag key={i}>{inline(b.text, `h${i}`, cites, refs)}</Tag>;
           }
           case "code":
             if (visuals && b.lang.toLowerCase() === VISUAL_LANG) {
@@ -227,9 +300,9 @@ export function Markdown({
               </pre>
             );
           case "list":
-            return <List key={i} items={b.items} ordered={b.ordered} start={b.start} cites={cites} />;
+            return <List key={i} items={b.items} ordered={b.ordered} start={b.start} cites={cites} refs={refs} />;
           case "quote":
-            return <blockquote key={i}>{b.lines.map((l, j) => <p key={j}>{inline(l, `q${i}-${j}`, cites)}</p>)}</blockquote>;
+            return <blockquote key={i}>{b.lines.map((l, j) => <p key={j}>{inline(l, `q${i}-${j}`, cites, refs)}</p>)}</blockquote>;
           case "table":
             return (
               <div key={i} className="table-wrap">
@@ -237,7 +310,7 @@ export function Markdown({
                   <thead>
                     <tr>
                       {b.head.map((c, j) => (
-                        <th key={j}>{inline(c, `t${i}-${j}`, cites)}</th>
+                        <th key={j}>{inline(c, `t${i}-${j}`, cites, refs)}</th>
                       ))}
                     </tr>
                   </thead>
@@ -245,7 +318,7 @@ export function Markdown({
                     {b.rows.map((r, j) => (
                       <tr key={j}>
                         {r.map((c, k) => (
-                          <td key={k}>{inline(c, `t${i}-${j}-${k}`, cites)}</td>
+                          <td key={k}>{inline(c, `t${i}-${j}-${k}`, cites, refs)}</td>
                         ))}
                       </tr>
                     ))}
@@ -261,7 +334,7 @@ export function Markdown({
                 {b.lines.map((l, j) => (
                   <Fragment key={j}>
                     {j > 0 && <br />}
-                    {inline(l, `p${i}-${j}`, cites)}
+                    {inline(l, `p${i}-${j}`, cites, refs)}
                   </Fragment>
                 ))}
               </p>

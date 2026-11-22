@@ -37,7 +37,10 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | GET/PATCH | `/topics/{id}` | Topic and links |
 | POST | `/notes` | Create note, autosave revisions |
 | PATCH | `/notes/{id}` | Mutate note by `base_revision`; `409 revision_conflict` keeps the rejected draft as a `conflict` revision |
-| GET | `/notes`, `/notes/{id}`, `/notes/{id}/revisions` | Notes and history (autosave snapshots, preserved conflicts) |
+| GET | `/notes`, `/notes/{id}`, `/notes/{id}/revisions` | Notes and history (autosave snapshots, preserved conflicts). Each note has `references`: the Library files its text links (`[name](source:<id>)`), in order, as `{id, filename, kind, course_id, missing}`; `missing` (no name) for a deleted file or an ID that is not the learner's |
+| DELETE | `/notes/{id}` | Soft delete after the learner confirmed it (idempotent; audit `note.deleted`, learning event); returns `{deleted, restorable_days: 30}`. A deleted note is 404 for get, patch and revisions and leaves `get_notes` |
+| GET | `/notes/deleted` | Notes deleted in the last 30 days (optional `course_id`), newest first |
+| POST | `/notes/{id}/restore` | Restore within 30 days (audit `note.restored`); 404 afterwards |
 | POST | `/study-sessions` | Start study/review session |
 | GET | `/study-sessions/{id}` | Retrieve session with messages and state |
 | POST | `/study-sessions/{id}/turns` | User message saved; optional streamed tutor response |
@@ -109,7 +112,7 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `get_study_plan` | read | Today's ranked plan with `why_selected` |
 | `list_courses`, `get_course_outline` | read | Courses, syllabus topics, concepts and coverage |
 | `search_sources`, `get_source_section` | read | Section text wrapped as untrusted document content, with section ID and citation label; IDs are remembered for the session |
-| `get_notes` | read | Learner notes for a topic (read-only; the tutor may comment in chat but never rewrites notes) |
+| `get_notes` | read | Learner notes for a topic (read-only; the tutor may comment in chat but never rewrites notes), each with the Library files it links (`files` / `references`: name, kind, `source_id`, or deleted) so the assistant can open them with `view_image`, `view_page` or `get_source_section` |
 | `get_due_reviews` | read | Due concepts with due reason and last evidence |
 | `get_attempt` | read | Exact stored answer, question with rubric (an attempt exists), cited sections |
 | `get_answer` | read | The latest saved answer to a question, as `get_attempt` (after a RecallSpring link), or that none is saved yet |

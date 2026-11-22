@@ -422,16 +422,36 @@ async def get_source_section(section_id: str) -> str:
 
 @mcp.tool(annotations=READ)
 async def get_notes(course_id: str, topic_id: str | None = None) -> str:
-    """The learner's own notes for a course or topic (read-only: comment in chat, never rewrite them)."""
+    """The learner's own notes for a course or topic (read-only: comment in chat, never rewrite them).
+
+    A note can link Library files as [name](source:<id>) (pictures as ![name](source:<id>)); the `files` attribute
+    lists them with their source_id: look at a picture with view_image, a PDF page with view_page, and read text
+    files with get_source_status + get_source_section, only when it helps."""
     notes = await get_client().get("/notes", course_id=course_id, topic_id=topic_id)
     if not notes:
         return "No notes for this course yet."
     return "\n\n".join(
         learner_material(
-            n["body"], note_id=n["id"], title=n["title"], saved_at=n["saved_at"], truncated=n["truncated"] or None
+            n["body"],
+            note_id=n["id"],
+            title=n["title"],
+            saved_at=n["saved_at"],
+            truncated=n["truncated"] or None,
+            files=linked_files(n.get("references") or []),
         )
         for n in notes
     )
+
+
+def linked_files(refs: list[dict[str, Any]]) -> str | None:
+    """'name [kind, source_id=...]; ...' for a note's linked files (deleted ones say so)."""
+    parts = [
+        f"{r['filename']} [{r['kind']}, source_id={r['source_id']}]"
+        if not r.get("missing")
+        else f"deleted file [source_id={r['source_id']}]"
+        for r in refs
+    ]
+    return "; ".join(parts) or None
 
 
 @mcp.tool(annotations=READ)

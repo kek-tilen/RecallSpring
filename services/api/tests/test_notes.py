@@ -6,9 +6,10 @@ import uuid
 
 from fastapi.testclient import TestClient
 
+from recallspring_api import clock
 from recallspring_api.main import create_app
 
-from .conftest import Api, FrozenClock, make_user
+from .conftest import Api, ConnectorApi, FrozenClock, make_user
 
 
 def new_note(api: Api, body: str = "First draft", client_note_id: str | None = None) -> dict:
@@ -116,3 +117,101 @@ def test_notes_are_owner_scoped(owner_api: Api) -> None:
         assert other.get(f"/notes/{note['id']}").status_code == 404
         assert patch(other, note["id"], 1, "hijack").status_code == 404
         assert other.get("/notes").json() == []
+
+
+def test_note_lists_the_library_files_it_references(owner_api: Api, conn: ConnectorApi) -> None:
+    from recallspring_api.db import new_session
+    from recallspring_api.models import Source
+
+    note = new_note(owner_api)
+    cid = note["course_id"]
+    pic = owner_api.paste(cid, "# Diagram\nA cell.", title="cell.md").json()
+    sheet = owner_api.paste(cid, "# Sheet\nATP.", title="atp.md").json()
+    body = (
+        f"See ![cell](source:{pic['id']}) and [the sheet](source:{sheet['id']}), again [sheet](source:{sheet['id']}).\n"
+        f"[gone](source:{uuid.uuid4()})"
+    )
+    saved = patch(owner_api, note["id"], 1, body).json()
+    refs = saved["references"]
+    assert [r["id"] for r in refs[:2]] == [pic["id"], sheet["id"]] and len(refs) == 3  # first appearance, unique
+    assert refs[0]["filename"] == pic["filename"] and refs[0]["missing"] is False
+    assert refs[2] == {"id": refs[2]["id"], "filename": None, "kind": None, "course_id": None, "missing": True}
+    assert owner_api.get("/notes").json()[0]["references"] == refs
+
+    with new_session() as db:  # a file deleted later shows as missing, the note text is untouched
+        db.get(Source, uuid.UUID(sheet["id"])).deleted_at = clock.now()
+        db.commit()
+    again = owner_api.get(f"/notes/{note['id']}").json()
+    assert again["body"] == body and [r["missing"] for r in again["references"]] == [False, True, True]
+
+    # Claude and ChatGPT get the names and IDs, so they can open the files.
+    seen = conn.get("/notes", course_id=cid).json()[0]["references"]
+    assert seen[0] == {"source_id": pic["id"], "filename": pic["filename"], "kind": pic["kind"], "missing": False}
+
+
+def test_references_to_another_learners_file_reveal_nothing(owner_api: Api) -> None:
+    make_user("other")
+    with TestClient(create_app()) as other_client:
+        other = Api(other_client)
+        other.login("other")
+        course = other.post("/courses", {"title": "Secret"}).json()
+        secret = other.paste(course["id"], "# Private\nx", title="private.md").json()
+    note = new_note(owner_api)
+    saved = patch(owner_api, note["id"], 1, f"![x](source:{secret['id']})").json()
+    assert saved["references"][0]["missing"] is True and saved["references"][0]["filename"] is None
+
+
+def test_delete_note_is_confirmed_soft_and_restorable(owner_api: Api, frozen: FrozenClock) -> None:
+    from sqlalchemy import select
+
+    from recallspring_api.db import new_session
+    from recallspring_api.models import AuditEvent
+
+    note = new_note(owner_api, body="Keep me")
+    key = str(uuid.uuid4())
+    gone = owner_api.client.delete(f"/api/v1/notes/{note['id']}", headers=owner_api.headers(key))
+    assert gone.status_code == 200 and gone.json()["restorable_days"] == 30
+    assert gone.json()["deleted"]["deleted_at"] is not None
+    replay = owner_api.client.delete(f"/api/v1/notes/{note['id']}", headers=owner_api.headers(key))
+    assert replay.status_code == 200 and replay.headers.get("Idempotent-Replay") == "true"
+
+    assert owner_api.get("/notes").json() == []
+    assert owner_api.get(f"/notes/{note['id']}").status_code == 404
+    assert owner_api.get(f"/notes/{note['id']}/revisions").status_code == 404
+    assert patch(owner_api, note["id"], 1, "edit after delete").status_code == 404
+    again = owner_api.client.delete(f"/api/v1/notes/{note['id']}", headers=owner_api.headers())
+    assert again.status_code == 404
+    deleted = owner_api.get("/notes/deleted").json()
+    assert [d["id"] for d in deleted] == [note["id"]] and deleted[0]["body"] == "Keep me"
+
+    restored = owner_api.post(f"/notes/{note['id']}/restore")
+    assert restored.status_code == 200 and restored.json()["deleted_at"] is None
+    assert owner_api.get(f"/notes/{note['id']}").json()["body"] == "Keep me"
+    assert owner_api.get("/notes/deleted").json() == []
+    with new_session() as db:
+        actions = [a.action for a in db.scalars(select(AuditEvent).where(AuditEvent.target_type == "note"))]
+    assert actions.count("note.deleted") == 1 and actions.count("note.restored") == 1
+
+    # After 30 days the note can no longer be restored from the app (it stays in the database and backups).
+    owner_api.client.delete(f"/api/v1/notes/{note['id']}", headers=owner_api.headers())
+    frozen.advance(days=31)
+    assert owner_api.get("/notes/deleted").json() == []
+    assert owner_api.post(f"/notes/{note['id']}/restore").status_code == 404
+
+
+def test_deleting_or_restoring_another_learners_note_is_not_found(owner_api: Api) -> None:
+    note = new_note(owner_api)
+    make_user("other")
+    with TestClient(create_app()) as other_client:
+        other = Api(other_client)
+        other.login("other")
+        assert other.client.delete(f"/api/v1/notes/{note['id']}", headers=other.headers()).status_code == 404
+        assert other.post(f"/notes/{note['id']}/restore").status_code == 404
+        assert other.get("/notes/deleted").json() == []
+    assert owner_api.get(f"/notes/{note['id']}").status_code == 200
+
+
+def test_deleted_notes_leave_the_assistants_view(owner_api: Api, conn: ConnectorApi) -> None:
+    note = new_note(owner_api, body="Hidden after delete")
+    owner_api.client.delete(f"/api/v1/notes/{note['id']}", headers=owner_api.headers())
+    assert conn.get("/notes", course_id=note["course_id"]).json() == []

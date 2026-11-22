@@ -86,6 +86,7 @@ from ..services import targets as target_svc
 from ..services.courses import ensure_new_title
 from ..services.events import audit, learning_event
 from ..services.learning import effective_status, mark, require_studied, save_summary
+from ..services.note_refs import references as note_references
 from ..services.ownership import owned
 from ..services.planner import today_plan
 from ..services.reviews import concept_ids_for_question, recompute, review_queue
@@ -290,6 +291,8 @@ def notes(
     stmt = select(Note).where(Note.user_id == ctx.user.id, Note.course_id == course_id, Note.deleted_at.is_(None))
     if topic_id is not None:
         stmt = stmt.where(Note.syllabus_item_id == topic_id)
+    rows = list(db.scalars(stmt.order_by(Note.saved_at.desc())))
+    refs = note_references(db, ctx.user.id, rows)
     return [
         {
             "id": str(n.id),
@@ -299,9 +302,15 @@ def notes(
             "saved_at": n.saved_at.isoformat(),
             "body": n.body[:limit],
             "truncated": len(n.body) > limit,
+            # Files the note links as [name](source:<id>): the source_id works with get_source_status,
+            # view_image (pictures) and view_page; missing ones were deleted.
+            "references": [
+                {"source_id": r["id"], "filename": r["filename"], "kind": r["kind"], "missing": r["missing"]}
+                for r in refs[n.id]
+            ],
             "content_kind": UNTRUSTED,
         }
-        for n in db.scalars(stmt.order_by(Note.saved_at.desc()))
+        for n in rows
     ]
 
 
