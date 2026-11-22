@@ -117,6 +117,11 @@ describe("ChatGPT using RecallSpring in Chat", () => {
     expect(message.message).toBe("[RecallSpring] I saved my answer to question q1 in the form. Please give me feedback.");
     expect(message.recallspring).toBe(true);
     expect(message.conversation_id).toBe("c1");
+    // The conversation moved on (a newer turn), yet the sent form stays with the question and the exact answer.
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Your answer was saved at .* and ChatGPT was told/));
+    expect(screen.getByText("Where does glycolysis run?")).toBeTruthy();
+    expect(screen.getByLabelText("Your answer").textContent).toBe("  V citoplazmi.\n");
+    expect(screen.queryByText("(shown earlier)")).toBeNull();
   });
 
   it("lets the learner chat without RecallSpring and remembers it", async () => {

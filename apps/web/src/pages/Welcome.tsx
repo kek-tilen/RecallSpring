@@ -123,11 +123,11 @@ const ABOUT: Record<AssistantKey, { needs: string; summary: string }> = {
   },
   codex: {
     needs: "Codex (app, CLI or IDE extension), signed in with your ChatGPT plan.",
-    summary: "You study in Codex, in one folder per course. Codex uses RecallSpring's connector; you answer questions on RecallSpring's own pages it links to.",
+    summary: "You study in Codex, in one folder per course. Codex uses RecallSpring's connector and shows its question and summary forms in the conversation.",
   },
   antigravity: {
     needs: "Google Antigravity (app or CLI), signed in with your Google account (free, Google AI Plus or Pro).",
-    summary: "You study in Antigravity, in one folder per course. Antigravity uses RecallSpring's connector; you answer questions on RecallSpring's own pages it links to.",
+    summary: "You study in Antigravity, in one folder per course. Antigravity uses RecallSpring's connector and shows its question and summary forms in the conversation.",
   },
   chatgpt: {
     needs: "A ChatGPT Plus or Pro plan. Works while RecallSpring runs on this computer (preview).",

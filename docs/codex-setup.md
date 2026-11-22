@@ -46,7 +46,8 @@ Then restart Codex.
 2. Check that the connector runs: `/mcp` in the CLI lists `recallspring`.
 3. Write "Start studying." Codex follows `AGENTS.md`: study context, plan, learn first, then practice.
 
-**Forms.** Claude Desktop shows answer, summary and simulation forms inside the chat (MCP Apps). When an app does not
+**Forms.** Claude Desktop, Codex and Antigravity show answer, summary and simulation forms inside the chat (MCP Apps;
+Codex and Antigravity seen by the owner on 2026-11-22). When an app does not
 announce MCP Apps support, RecallSpring's tools return a link instead, e.g. `http://127.0.0.1:4318/answer/<id>`.
 You answer on that RecallSpring page, so your exact words are saved before Codex sees them; then tell Codex you are
 done, and it reads the answer with `get_answer` or `get_quiz_results`. Simulations use the existing Simulations page;

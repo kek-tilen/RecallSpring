@@ -111,6 +111,8 @@ function AnswerForm({ q, sessionId, onSaved }: {
   const [openNotes, setOpenNotes] = useState(false);
   const [saved, setSaved] = useState<Saved | null>(null);
   const [savedPhotos, setSavedPhotos] = useState<string[]>([]);
+  // In Chat the saved answer stays in the conversation, so the learner still sees what they sent.
+  const [savedText, setSavedText] = useState<string | null>(null);
   const photos = usePhotos(q.course_id, ANSWER_FOLDER);
   const hasAnswer = !!draft.text.trim() || photos.ids.length > 0;
   const save = useMutation({
@@ -132,6 +134,7 @@ function AnswerForm({ q, sessionId, onSaved }: {
       clearDraft();
       photos.clear();
       setSavedPhotos(sentPhotos);
+      setSavedText(kind === "answer" ? draft.text : null);
       setSaved(s);
       void qc.invalidateQueries({ queryKey: keys.dashboard });
       void qc.invalidateQueries({ queryKey: ["questions", q.id] });
@@ -141,7 +144,22 @@ function AnswerForm({ q, sessionId, onSaved }: {
 
   if (saved && onSaved) {
     return (
-      <div className="stack" style={{ gap: 8 }}>
+      <div className="stack chat-form-saved" style={{ gap: 8 }}>
+        <p className="tiny muted" style={{ margin: 0 }}>
+          Question · Bloom {q.bloom_level}
+        </p>
+        <p className="pre" style={{ margin: 0, fontWeight: 600 }}>
+          {q.prompt}
+        </p>
+        {savedText !== null ? (
+          <div className="chat-form-answer pre" aria-label="Your answer">
+            {savedText || "(photos only)"}
+          </div>
+        ) : (
+          <p className="small muted" style={{ margin: 0 }}>
+            You said you don&apos;t know.
+          </p>
+        )}
         <p className="notice small" role="status" style={{ margin: 0 }}>
           Your answer was saved at {dateTime(saved.saved_at)} and ChatGPT was told.
         </p>
@@ -287,6 +305,7 @@ function SummaryForm({
   const qc = useQueryClient();
   const [draft, setText, clearDraft] = useDraft(`rs-summary-draft:${courseId}:${title}`);
   const [done, setDone] = useState<SummarySaved | null>(null);
+  const [savedText, setSavedText] = useState("");
   const save = useMutation({
     mutationFn: () =>
       request<SummarySaved>("/learning", {
@@ -294,6 +313,7 @@ function SummaryForm({
         json: { course_id: courseId, concept_ids: concepts.map((c) => c.id), title, text: draft.text, client_request_id: draft.key },
       }),
     onSuccess: (s) => {
+      setSavedText(draft.text);
       clearDraft();
       setDone(s);
       void qc.invalidateQueries({ queryKey: keys.dashboard });
@@ -304,9 +324,17 @@ function SummaryForm({
 
   if (done && onSaved) {
     return (
-      <p className="notice small" role="status" style={{ margin: 0 }}>
-        {done.note_id ? "Your summary was saved as a note" : "Saved"}; these topics now count as studied. ChatGPT was told.
-      </p>
+      <div className="stack chat-form-saved" style={{ gap: 8 }}>
+        <p className="tiny muted" style={{ margin: 0 }}>
+          Summary · {title}
+        </p>
+        <div className="chat-form-answer pre" aria-label="Your summary">
+          {savedText}
+        </div>
+        <p className="notice small" role="status" style={{ margin: 0 }}>
+          {done.note_id ? "Your summary was saved as a note" : "Saved"}; these topics now count as studied. ChatGPT was told.
+        </p>
+      </div>
     );
   }
   if (done) {

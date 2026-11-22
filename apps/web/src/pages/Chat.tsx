@@ -326,6 +326,9 @@ function ChatForm({ form, live, onSend }: {
   live: boolean;
   onSend: ((text: string, photoIds?: string[]) => void) | null;
 }) {
+  // A form sent from here stays in the conversation in its saved state (question and the learner's own text), even
+  // after the turn moves on; forms of earlier turns that were not sent from here become links.
+  const [sent, setSent] = useState(false);
   if (form.kind === "quiz") {
     return (
       <div className="chat-form-card row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
@@ -339,7 +342,11 @@ function ChatForm({ form, live, onSend }: {
       </div>
     );
   }
-  if (!live || !onSend) {
+  const send = (text: string, photoIds?: string[]) => {
+    setSent(true);
+    onSend?.(text, photoIds);
+  };
+  if (!sent && (!live || !onSend)) {
     return (
       <p className="tiny muted" style={{ margin: 0 }}>
         {form.kind === "answer" ? (
@@ -358,8 +365,8 @@ function ChatForm({ form, live, onSend }: {
           questionId={form.question_id}
           onSaved={(kind, photoIds) =>
             kind === "answer"
-              ? onSend(FORM_MESSAGES.answer(form.question_id, photoIds.length), photoIds)
-              : onSend(FORM_MESSAGES.dont_know(form.question_id))
+              ? send(FORM_MESSAGES.answer(form.question_id, photoIds.length), photoIds)
+              : send(FORM_MESSAGES.dont_know(form.question_id))
           }
         />
       ) : (
@@ -368,7 +375,7 @@ function ChatForm({ form, live, onSend }: {
           conceptIds={form.concept_ids}
           title={form.title}
           covered={form.covered}
-          onSaved={() => onSend(FORM_MESSAGES.summary(form.title))}
+          onSaved={() => send(FORM_MESSAGES.summary(form.title))}
         />
       )}
     </div>

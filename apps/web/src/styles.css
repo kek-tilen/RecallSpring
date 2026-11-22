@@ -4077,3 +4077,12 @@ math mtable mtd {
   display: block;
   margin: 8px 0;
 }
+
+/* A form sent from Chat, kept in the conversation with what the learner wrote. */
+.chat-form-answer {
+  padding: 8px 12px;
+  border-left: 3px solid var(--primary);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 0.92rem;
+}
