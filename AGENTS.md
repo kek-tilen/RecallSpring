@@ -8,6 +8,8 @@ Implement RecallSpring per `README.md` and the `docs/` specifications. It is a s
 
 ## Safety critical: ProtectedApp uptime
 
+*ProtectedApp* is the codename for an existing production application that runs on the same server RecallSpring may later be deployed to. Its real name, containers and locations are only in the private operator snapshot, never in this repository.
+
 1. **ZERO PLANNED PROTECTEDAPP DOWNTIME**. Never stop, restart, rebuild, pause, rename, remove, prune volumes for, or recreate ProtectedApp's containers.
 2. Never edit the existing ProtectedApp application files, Compose config, database, volumes, environment, Docker networks or enabled Nginx site; see the private operator snapshot for precise locations.
 3. No `docker compose down` from an ambiguous directory; no `docker system prune -a`, `docker volume prune`, `docker network prune`, broad Docker cleanups, or blanket host firewall changes.
