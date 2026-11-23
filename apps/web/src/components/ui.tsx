@@ -4,8 +4,10 @@ import { ApiError } from "../api";
 import { BAND_LABEL, DIFFICULTY_SOURCE, STUDY_LABEL, gradeHelp, gradeLabel } from "../format";
 import type { Band, Progress, StudyStatus } from "../types";
 
-export function Card({ title, meta, children, tint, action, id }: {
+export function Card({ title, meta, children, tint, action, id, level = 2 }: {
   id?: string;
+  /** 3 when the card sits under a section heading (Settings). */
+  level?: 2 | 3;
   title?: ReactNode;
   meta?: ReactNode;
   children: ReactNode;
@@ -16,7 +18,7 @@ export function Card({ title, meta, children, tint, action, id }: {
     <section id={id} className={tint ? "card tint" : "card"}>
       {(title || meta || action) && (
         <div className="card-head">
-          {title && <h2>{title}</h2>}
+          {title && (level === 3 ? <h3>{title}</h3> : <h2>{title}</h2>)}
           <div className="row">
             {meta && <span className="meta">{meta}</span>}
             {action}

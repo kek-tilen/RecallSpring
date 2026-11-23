@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AssistantNextSteps, TimeZoneSelect, useSaveProfile } from "./Welcome";
 import { ASSISTANTS } from "../assistant";
 import { request } from "../api";
@@ -111,23 +111,28 @@ function StudyForm({ initial }: { initial: StudySettings }) {
 
 const ASSISTANT: Record<AssistantClient, string> = { claude: "Claude Desktop", codex: "Codex", antigravity: "Antigravity" };
 
+/** One token as a compact row (no wide table): name and assistant, dates below, Revoke on the right. */
 function TokenRow({ t, onRevoke }: { t: ConnectorToken; onRevoke: (t: ConnectorToken) => void }) {
+  const assistant = ASSISTANT[t.client] ?? t.client;
   return (
-    <tr>
-      <td>{t.label}</td>
-      <td className="small">{ASSISTANT[t.client] ?? t.client}</td>
-      <td className="small">{dateTime(t.created_at)}</td>
-      <td className="small">{t.last_used_at ? dateTime(t.last_used_at) : "Never"}</td>
-      <td>
-        {t.revoked_at ? (
-          <span className="chip">Revoked {dateTime(t.revoked_at)}</span>
-        ) : (
-          <button type="button" className="btn small danger" onClick={() => onRevoke(t)}>
-            Revoke
-          </button>
-        )}
-      </td>
-    </tr>
+    <li className="token-item">
+      <div className="token-main">
+        <div className="row" style={{ gap: 8 }}>
+          <strong>{t.label}</strong>
+          {t.label !== assistant && <span className="chip">{assistant}</span>}
+        </div>
+        <span className="tiny muted">
+          Created {dateTime(t.created_at)} · Last used {t.last_used_at ? dateTime(t.last_used_at) : "never"}
+        </span>
+      </div>
+      {t.revoked_at ? (
+        <span className="chip">Revoked {dateTime(t.revoked_at)}</span>
+      ) : (
+        <button type="button" className="btn small danger" onClick={() => onRevoke(t)} aria-label={`Revoke ${t.label} (${assistant})`}>
+          Revoke
+        </button>
+      )}
+    </li>
   );
 }
 
@@ -230,24 +235,15 @@ function ConnectorPanel({ c }: { c: ConnectorSettings }) {
           </span>
         </div>
       )}
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Label</th>
-              <th>Assistant</th>
-              <th>Created</th>
-              <th>Last used</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {c.tokens.map((t) => (
-              <TokenRow key={t.id} t={t} onRevoke={setRevoking} />
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {c.tokens.length > 0 ? (
+        <ul className="token-list" aria-label="Connector tokens">
+          {c.tokens.map((t) => (
+            <TokenRow key={t.id} t={t} onRevoke={setRevoking} />
+          ))}
+        </ul>
+      ) : (
+        <p className="small muted">No tokens yet.</p>
+      )}
       <Confirm
         open={revoking !== null}
         title="Revoke connector token?"
@@ -535,50 +531,134 @@ function ProfileForm() {
   );
 }
 
+/** The five parts of Settings, in page order (the contents beside the page link to them). */
+export const SECTIONS = [
+  { id: "study", title: "Study", sub: "How much you study and how RecallSpring plans your time." },
+  { id: "assistants", title: "Assistants", sub: "Who helps you: Claude Desktop, Codex, Antigravity and ChatGPT." },
+  { id: "data", title: "Data & backups", sub: "Where your data is kept and how you get it back." },
+  { id: "appearance", title: "Appearance", sub: "How RecallSpring looks on this device." },
+  { id: "account", title: "Account & system", sub: "Your sign-in, time zone and RecallSpring running in the background." },
+] as const;
+
+type SectionId = (typeof SECTIONS)[number]["id"];
+
+/** The section being read: the last one whose heading has passed the upper part of the window. */
+function useCurrentSection(): SectionId {
+  const [current, setCurrent] = useState<SectionId>("study");
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    const seen = new Map<string, boolean>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) seen.set(e.target.id, e.isIntersecting);
+        const visible = SECTIONS.find((x) => seen.get(x.id));
+        if (visible) setCurrent(visible.id);
+      },
+      { rootMargin: "-15% 0px -55% 0px" },
+    );
+    for (const x of SECTIONS) {
+      const el = document.getElementById(x.id);
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, []);
+  return current;
+}
+
+function Section({ id, children }: { id: SectionId; children: ReactNode }) {
+  const s = SECTIONS.find((x) => x.id === id)!;
+  return (
+    <section id={id} className="settings-section" aria-labelledby={`${id}-title`}>
+      <div className="settings-section-head">
+        <h2 id={`${id}-title`}>{s.title}</h2>
+        <p className="small muted">{s.sub}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const study = useStudySettings();
   const connector = useConnector();
   const assistants = useAssistants();
   const backup = useBackup();
+  const current = useCurrentSection();
   useEffect(() => {
-    // Links like /settings#chatgpt (Welcome page) open at that card.
+    // Links like /settings#chatgpt (Welcome page) open at that section or card.
     const id = window.location.hash.slice(1);
     if (id) document.getElementById(id)?.scrollIntoView?.({ block: "start" });
   }, []);
   return (
     <div className="page">
-      <PageHead title="Settings" sub="Your profile, study time, your assistants (Claude Desktop, Codex, Antigravity, ChatGPT), backups and how RecallSpring looks. Every change is recorded in History." />
-      <div className="grid cols-2" style={{ alignItems: "start" }}>
-        <div className="stack" style={{ gap: 16 }}>
-          <Card title="Study time">
-            <Async q={study}>{(s) => <StudyForm initial={s} />}</Async>
-          </Card>
-          <Card title="Study preferences">
-            <PreferencesEditor />
-          </Card>
-          <Card title="Appearance">
-            <ThemePicker />
-          </Card>
-          <Card title="Profile" id="profile">
-            <ProfileForm />
-          </Card>
-          <Card title="Running in the background" id="service">
-            <ServiceStatus />
-          </Card>
-        </div>
-        <div className="stack" style={{ gap: 16 }}>
-          <Card title="Assistants" id="assistants">
-            <Async q={assistants}>{(s) => <AssistantsPanel s={s} />}</Async>
-          </Card>
-          <Card title="Assistant connector" id="connector">
-            <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
-          </Card>
-          <Card title="ChatGPT (preview)" id="chatgpt">
-            <ChatGptPanel />
-          </Card>
-          <Card title="Backups">
-            <Async q={backup}>{(b) => <BackupPanel b={b} />}</Async>
-          </Card>
+      <PageHead title="Settings" sub="Every change is recorded in History." />
+      <div className="settings-layout">
+        <nav className="settings-toc" aria-label="Settings sections">
+          <ol>
+            {SECTIONS.map((x) => (
+              <li key={x.id}>
+                <a href={`#${x.id}`} aria-current={current === x.id ? "true" : undefined}>
+                  {x.title}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+        <div className="settings-body">
+          <Section id="study">
+            <div className="grid cols-2" style={{ alignItems: "start" }}>
+              <Card title="Study time" level={3}>
+                <Async q={study}>{(s) => <StudyForm initial={s} />}</Async>
+              </Card>
+              <Card title="Study preferences" level={3}>
+                <PreferencesEditor />
+              </Card>
+            </div>
+          </Section>
+          <Section id="assistants">
+            <Card title="Your assistants" level={3}>
+              <Async q={assistants}>{(s) => <AssistantsPanel s={s} />}</Async>
+            </Card>
+            <div className="grid cols-2" style={{ alignItems: "start" }}>
+              <Card title="ChatGPT (preview)" id="chatgpt" level={3}>
+                <ChatGptPanel />
+              </Card>
+              <Card title="Assistant connector" id="connector" level={3}>
+                <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
+              </Card>
+            </div>
+          </Section>
+          <Section id="data">
+            <div className="grid cols-2" style={{ alignItems: "start" }}>
+              <Card title="Backups" id="backups" level={3}>
+                <Async q={backup}>{(b) => <BackupPanel b={b} />}</Async>
+              </Card>
+              <Card title="History" level={3}>
+                <p className="small">
+                  Every change you or an assistant makes is recorded, with who made it and when. Deleted items stay
+                  restorable for 30 days.
+                </p>
+                <p className="small" style={{ marginTop: 8 }}>
+                  <Link to="/history">Open History</Link>
+                </p>
+              </Card>
+            </div>
+          </Section>
+          <Section id="appearance">
+            <Card title="Theme" level={3}>
+              <ThemePicker />
+            </Card>
+          </Section>
+          <Section id="account">
+            <div className="grid cols-2" style={{ alignItems: "start" }}>
+              <Card title="Profile" id="profile" level={3}>
+                <ProfileForm />
+              </Card>
+              <Card title="Running in the background" id="service" level={3}>
+                <ServiceStatus />
+              </Card>
+            </div>
+          </Section>
         </div>
       </div>
     </div>
