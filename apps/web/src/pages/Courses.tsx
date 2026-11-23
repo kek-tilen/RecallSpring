@@ -24,8 +24,9 @@ function CourseCard({ c }: { c: CourseSummary }) {
   const [editing, setEditing] = useState(false);
   return (
     <article className={`card stack course-card ${cc(c.color)} ${c.status === "archived" ? "archived" : ""}`}>
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{ minWidth: 0 }}>
+      {/* The title side takes the room and Edit stays top right, also beside a long description. */}
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", flexWrap: "nowrap" }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <h3 className="row" style={{ gap: 8, overflowWrap: "anywhere" }}>
             <CourseDot color={c.color} />
             <Link to={`/courses/${c.id}`}>{c.title}</Link>
