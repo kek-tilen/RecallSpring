@@ -64,7 +64,9 @@ def test_four_needs_a_reason_and_a_changed_grade_is_noted(owner_api: Api, frozen
     )
     own = r.json()["assessments"][0]
     assert own["grade"] == 4
-    assert own["feedback"].startswith("Self-assessed: 2 of 2 expected points met (suggested Solid (3/4), chosen Transfer (4/4)).")
+    assert own["feedback"].startswith(
+        "Self-assessed: 2 of 2 expected points met (suggested Solid (3/4), chosen Transfer (4/4))."
+    )
     assert "why the cycle needs oxygen" in own["feedback"]
 
 

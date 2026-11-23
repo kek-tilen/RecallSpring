@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ChatPage } from "./pages/Chat";
+import { ChatPage, whileWriting } from "./pages/Chat";
 
 afterEach(() => {
   cleanup();
@@ -11,6 +11,8 @@ afterEach(() => {
 });
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const lines = (events: unknown[]) =>
+  new Response(events.map((e) => JSON.stringify(e)).join("\n") + "\n", { status: 200, headers: { "Content-Type": "application/x-ndjson" } });
 
 const STATUS = { connected: true, registered: true, unreadable: false, email: "l@example.com", name: null, scopes: [], plan_usage: true, signed_in_at: null, unavailable_reason: null };
 
@@ -97,7 +99,10 @@ function routeFetch(sent: { path: string; body: unknown }[], conv: typeof CONV =
       });
     }
     if (path === "/attempts") return json(201, { attempt_id: "a1", status: "saved_awaiting_evaluation", saved_at: "2026-11-21T20:01:00Z" });
-    if (path === "/ai/chatgpt/messages") return json(200, { ...CONV, messages: [...CONV.messages, msg({ id: "m3", position: 3, role: "user", text: "next" })] });
+    if (path === "/ai/chatgpt/messages/stream") {
+      const done = { ...CONV, messages: [...CONV.messages, msg({ id: "m3", position: 3, role: "user", text: "next" })] };
+      return lines([{ type: "saved", conversation_id: "c1" }, { type: "text", text: "next" }, { type: "done", conversation: done }]);
+    }
     return json(404, { code: "not_found", message: "Not found." });
   });
 }
@@ -126,7 +131,7 @@ describe("ChatGPT using RecallSpring in Chat", () => {
     const box = await screen.findByRole("textbox", { name: /your answer/i });
     fireEvent.change(box, { target: { value: "  V citoplazmi.\n" } });
     fireEvent.click(screen.getByRole("button", { name: "Save and send to ChatGPT" }));
-    await waitFor(() => expect(sent.map((s) => s.path)).toEqual(["/attempts", "/ai/chatgpt/messages"]));
+    await waitFor(() => expect(sent.map((s) => s.path)).toEqual(["/attempts", "/ai/chatgpt/messages/stream"]));
     expect((sent[0]!.body as { answer_text: string }).answer_text).toBe("  V citoplazmi.\n");
     const message = sent[1]!.body as { message: string; recallspring: boolean; conversation_id: string };
     expect(message.message).toBe("[RecallSpring] I saved my answer to question q1 in the form. Please give me feedback.");
@@ -178,8 +183,54 @@ describe("ChatGPT using RecallSpring in Chat", () => {
     await screen.findByRole("option", { name: "GPT Test" });
     fireEvent.change(screen.getByRole("textbox", { name: "Message to ChatGPT" }), { target: { value: "Just chat" } });
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-    await waitFor(() => expect(sent.some((s) => s.path === "/ai/chatgpt/messages")).toBe(true));
-    expect((sent.find((s) => s.path === "/ai/chatgpt/messages")!.body as { recallspring: boolean }).recallspring).toBe(false);
+    await waitFor(() => expect(sent.some((s) => s.path === "/ai/chatgpt/messages/stream")).toBe(true));
+    expect((sent.find((s) => s.path === "/ai/chatgpt/messages/stream")!.body as { recallspring: boolean }).recallspring).toBe(false);
+  });
+
+  it("shows the reply and RecallSpring's steps while ChatGPT writes, then the saved reply", async () => {
+    const sent: { path: string; body: unknown }[] = [];
+    const route = routeFetch(sent);
+    const encoder = new TextEncoder();
+    let push: (e: unknown) => void = () => {};
+    let end: () => void = () => {};
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        push = (e) => controller.enqueue(encoder.encode(JSON.stringify(e) + "\n"));
+        end = () => controller.close();
+      },
+    });
+    const fallback = route.getMockImplementation()!;
+    route.mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/ai/chatgpt/messages/stream")) {
+        sent.push({ path: "/ai/chatgpt/messages/stream", body: JSON.parse(String(init?.body)) });
+        return new Response(body, { status: 200, headers: { "Content-Type": "application/x-ndjson" } });
+      }
+      return fallback(input, init);
+    });
+    show();
+    await screen.findByRole("option", { name: "GPT Test" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Message to ChatGPT" }), { target: { value: "Explain glycolysis" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByText(/waiting for ChatGPT/)).toBeTruthy();
+    push({ type: "saved", conversation_id: "c1" });
+    push({ type: "step", step: { call_id: "x", name: "get_course_outline", status: "ok", error_code: null, summary: "Read the course outline", writes: false, ms: 3 } });
+    push({ type: "text", text: "Glycolysis splits " });
+    push({ type: "text", text: "glucose." });
+    expect(await screen.findByText("Glycolysis splits glucose.")).toBeTruthy();
+    expect(screen.getByText("ChatGPT is writing…")).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Messages" }).getAttribute("aria-busy")).toBe("true");
+    const done = { ...CONV, messages: [...CONV.messages, msg({ id: "m3", position: 3, role: "user", text: "Explain glycolysis" }), msg({ id: "m4", position: 4, role: "assistant", text: "Glycolysis splits glucose into pyruvate." })] };
+    push({ type: "done", conversation: done });
+    end();
+    expect(await screen.findByText("Glycolysis splits glucose into pyruvate.")).toBeTruthy();
+    expect(screen.queryByText("ChatGPT is writing…")).toBeNull();
+    expect(screen.getByRole("list", { name: "Messages" }).getAttribute("aria-busy")).toBeNull();
+  });
+
+  it("keeps a visual out of the reply until it is complete and checked", () => {
+    const text = "Here:\n```recallspring-visual\n{\"type\": \"steps\"";
+    expect(whileWriting(text)).toBe("Here:\n\n\n*Visual: shown when the reply is complete.*\n\n");
+    expect(whileWriting(`${text}}\n\`\`\`\nAfter.`)).toContain("After.");
   });
 
   it("uploads a file from the composer into the library and this conversation", async () => {

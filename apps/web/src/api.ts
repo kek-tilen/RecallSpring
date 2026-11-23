@@ -72,12 +72,74 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   }
   if (res.status === 204) return undefined as T;
   const data: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    const e = (data ?? {}) as { code?: string; message?: string; details?: Record<string, unknown>; request_id?: string };
-    if (res.status === 401 && path !== "/auth/login") onUnauthenticated?.();
-    throw new ApiError(res.status, e.code ?? "error", e.message ?? `Request failed (${res.status}).`, e.details, e.request_id);
-  }
+  if (!res.ok) throw failure(res, data, path);
   return data as T;
+}
+
+function failure(res: Response, data: unknown, path: string): ApiError {
+  const e = (data ?? {}) as { code?: string; message?: string; details?: Record<string, unknown>; request_id?: string };
+  if (res.status === 401 && path !== "/auth/login") onUnauthenticated?.();
+  return new ApiError(res.status, e.code ?? "error", e.message ?? `Request failed (${res.status}).`, e.details, e.request_id);
+}
+
+/** One event of a streamed reply (one JSON object per line). */
+export type StreamEvent =
+  | { type: "saved"; conversation_id: string }
+  | { type: "text"; text: string }
+  | { type: "step"; step: unknown }
+  | { type: "done"; conversation: unknown }
+  | { type: "error"; status: number; code: string; message: string; details?: Record<string, unknown> | null };
+
+/**
+ * A write whose answer arrives in pieces: `onEvent` sees each event as it comes; the promise resolves with the final
+ * `done` value or rejects with the `error` event (as an ApiError, like any failed request).
+ */
+export async function streamRequest<T>(path: string, json: unknown, onEvent: (e: StreamEvent) => void, key?: string): Promise<T> {
+  const headers = { Accept: "application/x-ndjson", "Content-Type": "application/json", "X-CSRF-Token": csrfToken(), "Idempotency-Key": key ?? newKey() };
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}`, { method: "POST", headers, body: JSON.stringify(json), credentials: "same-origin" });
+  } catch {
+    throw new ApiError(0, "offline", "RecallSpring is not reachable. Check that the local server is running.");
+  }
+  if (!res.ok) throw failure(res, await res.json().catch(() => null), path);
+  let result: { done: T } | null = null;
+  let error: ApiError | null = null;
+  const take = (line: string) => {
+    if (!line.trim()) return;
+    let e: StreamEvent;
+    try {
+      e = JSON.parse(line) as StreamEvent;
+    } catch {
+      return;
+    }
+    if (e.type === "done") result = { done: e.conversation as T };
+    else if (e.type === "error") error = new ApiError(e.status, e.code, e.message, e.details ?? undefined);
+    onEvent(e);
+  };
+  try {
+    if (res.body) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let rest = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        rest += decoder.decode(value, { stream: !done });
+        const lines = rest.split("\n");
+        rest = lines.pop() ?? "";
+        lines.forEach(take);
+        if (done) break;
+      }
+      take(rest);
+    } else {
+      (await res.text()).split("\n").forEach(take);
+    }
+  } catch {
+    // the connection broke; what the server finished is still saved
+  }
+  if (error) throw error;
+  if (result) return (result as { done: T }).done;
+  throw new ApiError(0, "interrupted", "The connection broke while ChatGPT was answering. Reload the conversation: a finished reply is saved.");
 }
 
 export const get = <T>(path: string, params?: RequestOptions["params"]) => request<T>(path, { params });

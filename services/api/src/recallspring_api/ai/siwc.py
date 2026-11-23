@@ -34,7 +34,7 @@ import secrets
 import threading
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlencode, urlsplit
@@ -506,9 +506,15 @@ def _echo(item: dict[str, Any], namespace: str | None) -> tuple[dict[str, Any] |
     return None, None
 
 
-def _stream(user_id: uuid.UUID, body: dict[str, Any], namespace: str | None = None) -> Round:
+def _stream(
+    user_id: uuid.UUID,
+    body: dict[str, Any],
+    namespace: str | None = None,
+    on_text: Callable[[str], None] | None = None,
+) -> Round:
     """Send one request and read the stream. Only ``response.completed`` is success; anything else raises with a
-    clear code."""
+    clear code. ``on_text`` gets each piece of the reply's text as it arrives (shown live in Chat; the saved reply
+    is still only the completed one)."""
     token, _ = _access_token(user_id)
     parts: list[str] = []
     done_items: list[dict[str, Any]] = []
@@ -526,6 +532,8 @@ def _stream(user_id: uuid.UUID, body: dict[str, Any], namespace: str | None = No
                     kind = event.get("type")
                     if kind == "response.output_text.delta" and isinstance(event.get("delta"), str):
                         parts.append(event["delta"])
+                        if on_text is not None:
+                            on_text(event["delta"])
                     elif kind == "response.output_item.done" and isinstance(event.get("item"), dict):
                         done_items.append(event["item"])
                     elif kind == "response.completed":
@@ -566,16 +574,27 @@ def _round(
 
 
 def respond(
-    user_id: uuid.UUID, model: str, instructions: str, items: list[dict[str, Any]], tools: list[dict[str, Any]]
+    user_id: uuid.UUID,
+    model: str,
+    instructions: str,
+    items: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    on_text: Callable[[str], None] | None = None,
 ) -> Round:
     """One response of a turn with RecallSpring's tools (see ``build_tool_request``)."""
     namespace = tools[0].get("name") if tools else None
-    return _stream(user_id, build_tool_request(model, instructions, items, tools), namespace)
+    return _stream(user_id, build_tool_request(model, instructions, items, tools), namespace, on_text)
 
 
-def reply(user_id: uuid.UUID, model: str, instructions: str, history: list[dict[str, Any]]) -> Reply:
+def reply(
+    user_id: uuid.UUID,
+    model: str,
+    instructions: str,
+    history: list[dict[str, Any]],
+    on_text: Callable[[str], None] | None = None,
+) -> Reply:
     """One streamed reply without tools."""
-    out = _stream(user_id, build_request(model, instructions, history))
+    out = _stream(user_id, build_request(model, instructions, history), on_text=on_text)
     return Reply(out.text, out.model, out.usage, out.response_id)
 
 

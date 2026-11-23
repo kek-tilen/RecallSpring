@@ -2,11 +2,11 @@ import { PhotoStrip, SavedPhotos, usePhotos } from "../components/Photos";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { ApiError, get, request } from "../api";
+import { ApiError, get, request, streamRequest } from "../api";
 import { ChatGptSignIn, STATUS_KEY, useChatGptStatus } from "../components/ChatGpt";
 import { AttachDialog } from "../components/ChatAttach";
 import { MaterialPicker, MAX_FILES, type ChosenFile } from "../components/ChatMaterial";
-import { Markdown, type Cites } from "../components/Markdown";
+import { Markdown, VISUAL_LANG, type Cites } from "../components/Markdown";
 import type { VisualResult } from "../components/Visual";
 import { Confirm, ErrorNote, Loading } from "../components/ui";
 import { dateTime, plural } from "../format";
@@ -402,27 +402,61 @@ function formsByMessage(messages: AiMessage[]): Map<string, { forms: ToolForm[];
   return out;
 }
 
+/** The reply so far while ChatGPT writes it, and the RecallSpring steps it already ran. */
+export interface LiveReply {
+  text: string;
+  steps: ToolStep[];
+}
+
+const FENCE = "```" + VISUAL_LANG;
+
+/** A reply still being written: a visual is drawn once the reply is complete (it is checked first). */
+export function whileWriting(text: string): string {
+  let out = "";
+  let rest = text;
+  for (;;) {
+    const at = rest.indexOf(FENCE);
+    if (at < 0) return out + rest;
+    out += rest.slice(0, at) + "\n\n*Visual: shown when the reply is complete.*\n\n";
+    const close = rest.indexOf("\n```", at + FENCE.length);
+    if (close < 0) return out;
+    rest = rest.slice(close + 4);
+  }
+}
+
 function Thread({
   conv,
   names,
   pending,
+  live,
   onFormSaved,
 }: {
   conv: Conversation | null;
   names: Map<string, string>;
   pending: string | null;
+  live: LiveReply | null;
   onFormSaved: ((text: string, photoIds?: string[]) => void) | null;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  const atEnd = useRef(true);
   const count = conv?.messages.length ?? 0;
   useEffect(() => {
     // Keep the newest message in view inside the thread (never scrolls the page itself).
     if (box.current) box.current.scrollTop = box.current.scrollHeight;
   }, [count, pending, conv?.id]);
+  const growing = (live?.text.length ?? 0) + (live?.steps.length ?? 0);
+  useEffect(() => {
+    // While the reply grows, follow it only if the learner has not scrolled up to read.
+    if (box.current && atEnd.current) box.current.scrollTop = box.current.scrollHeight;
+  }, [growing]);
+  const onScroll = () => {
+    const b = box.current;
+    if (b) atEnd.current = b.scrollHeight - b.scrollTop - b.clientHeight < 80;
+  };
   const messages = conv?.messages ?? [];
   const forms = formsByMessage(messages);
   return (
-    <div ref={box} className="chat-scroll">
+    <div ref={box} className="chat-scroll" onScroll={onScroll}>
       {!messages.length && !pending ? (
         <div className="chat-empty muted">
           <p>
@@ -433,7 +467,7 @@ function Thread({
           </p>
         </div>
       ) : (
-        <ol className="chat-thread" aria-label="Messages" aria-live="polite">
+        <ol className="chat-thread" aria-label="Messages" aria-live="polite" aria-busy={live ? true : undefined}>
           {messages.map((m) => (
             <li key={m.id} className={m.role === "user" ? "chat-msg you" : "chat-msg ai"}>
               {m.role === "user" ? (
@@ -471,7 +505,16 @@ function Thread({
           {pending && (
             <li className="chat-msg you">
               <div className="chat-bubble pre">{pending}</div>
-              <div className="tiny muted">Saved · waiting for ChatGPT (it may read or save in RecallSpring)…</div>
+              <div className="tiny muted">
+                {live?.text ? "Saved" : "Saved · waiting for ChatGPT (it may read or save in RecallSpring)…"}
+              </div>
+              {(live?.steps.length ?? 0) > 0 && <ToolSteps steps={live!.steps} />}
+            </li>
+          )}
+          {pending && live?.text && (
+            <li className="chat-msg ai chat-live">
+              <Markdown text={whileWriting(live.text)} source="ChatGPT" />
+              <div className="tiny muted chat-writing">ChatGPT is writing…</div>
             </li>
           )}
         </ol>
@@ -959,21 +1002,27 @@ export function ChatPage() {
   const current = currentId ? (conv.data ?? null) : null;
   const material = current ? current.material : currentId ? [] : draft;
 
+  const [live, setLive] = useState<LiveReply | null>(null);
   const send = useMutation({
     mutationFn: (input: string | { text: string; photoIds: string[] }) => {
       const { text, photoIds } = typeof input === "string" ? { text: input, photoIds: [] } : input;
-      return request<Conversation>("/ai/chatgpt/messages", {
-        json: {
-          conversation_id: currentId,
-          model: chosen,
-          message: text,
-          photo_ids: photoIds,
-          visuals,
-          recallspring: tools,
-          ...(currentId ? {} : { source_ids: draft.map((f) => f.id), course_id: tools && studyCourse ? studyCourse : null }),
-        },
+      setLive({ text: "", steps: [] });
+      const body = {
+        conversation_id: currentId,
+        model: chosen,
+        message: text,
+        photo_ids: photoIds,
+        visuals,
+        recallspring: tools,
+        ...(currentId ? {} : { source_ids: draft.map((f) => f.id), course_id: tools && studyCourse ? studyCourse : null }),
+      };
+      // The reply is shown as it arrives; the saved conversation replaces it when it is complete.
+      return streamRequest<Conversation>("/ai/chatgpt/messages/stream", body, (e) => {
+        if (e.type === "text") setLive((l) => ({ text: (l?.text ?? "") + e.text, steps: l?.steps ?? [] }));
+        else if (e.type === "step") setLive((l) => ({ text: l?.text ?? "", steps: [...(l?.steps ?? []), e.step as ToolStep] }));
       });
     },
+    onSettled: () => setLive(null),
     onSuccess: (c) => {
       qc.setQueryData([...LIST_KEY, c.id], c);
       void qc.invalidateQueries({ queryKey: LIST_KEY, exact: true });
@@ -1128,6 +1177,7 @@ export function ChatPage() {
               conv={current}
               names={names}
               pending={send.isPending && send.variables !== undefined ? (typeof send.variables === "string" ? send.variables : send.variables.text) : null}
+              live={send.isPending ? live : null}
               onFormSaved={canSend && chosen ? (text, photoIds) => send.mutate({ text, photoIds: photoIds ?? [] }) : null}
             />
           )}

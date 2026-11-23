@@ -3,26 +3,36 @@ callback, which is checked by its one-time state instead. Connector tokens canno
 
 Every request to OpenAI starts from the learner pressing a button; nothing runs in the background. Conversations
 are saved (services/ai_conversations.py). With "Use RecallSpring" on, ChatGPT tutors through RecallSpring's tools
-(services/chat_tools.py): a few rounds per message, each started by that message, never in the background."""
+(services/chat_tools.py): a few rounds per message, each started by that message, never in the background.
+
+Replies are shown as they arrive (``/ai/chatgpt/messages/stream``, newline-delimited JSON). The reply is finished
+and saved by its own worker even if the browser leaves the page; only the completed reply is saved."""
 
 from __future__ import annotations
 
+import contextvars
+import dataclasses
 import json
+import logging
+import queue
+import threading
 import time
 import uuid
+from collections.abc import Callable, Iterator
 from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import RedirectResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..ai import siwc
 from ..config import get_settings
-from ..db import get_db
+from ..db import get_db, new_session
 from ..deps import Ctx, WriteCtx, csrf_ctx, current_ctx, write_ctx
 from ..errors import ApiError
-from ..models import AiMessage, Course
+from ..models import AiMessage, Course, User
 from ..schemas import ChatGptConversationPatch, ChatGptMaterialIn, ChatGptMessageIn
 from ..services import ai_conversations as conv_svc
 from ..services import chat_material, chat_tools, visual_blocks
@@ -31,6 +41,38 @@ from ..services.events import audit
 from ..services.ownership import owned
 
 router = APIRouter(tags=["chatgpt"])
+log = logging.getLogger(__name__)
+
+Emit = Callable[[dict[str, Any]], None]
+
+
+def _silent(event: dict[str, Any]) -> None:
+    return None
+
+
+class _Live:
+    """The reply's text as it arrives, with a blank line between the texts of separate rounds (as when saved)."""
+
+    def __init__(self, emit: Emit) -> None:
+        self.emit = emit
+        self.shown = False
+        self.fresh = True
+
+    def next_round(self) -> None:
+        self.fresh = True
+
+    def text(self, delta: str) -> None:
+        if self.fresh:
+            delta = delta.lstrip()
+            if not delta:
+                return
+            if self.shown:
+                delta = "\n\n" + delta
+            self.fresh = False
+        if delta:
+            self.shown = True
+            self.emit({"type": "text", "text": delta})
+
 
 INSTRUCTIONS = (
     "You are ChatGPT, used from RecallSpring, a study app the learner runs on their own computer. You cannot see "
@@ -118,6 +160,7 @@ def _tool_turn(
     instructions: str,
     turns: list[dict[str, Any]],
     course_id: uuid.UUID | None = None,
+    emit: Emit = _silent,
 ) -> tuple[str, siwc.Reply, list[dict[str, Any] | None], int, bool]:
     """Rounds of one learner message with RecallSpring's tools: ChatGPT answers or asks for calls; RecallSpring runs
     them as the learner and sends the outputs back, up to chat_tools.MAX_ROUNDS responses and MAX_CALLS calls. Each
@@ -129,8 +172,10 @@ def _tool_turn(
     usages: list[dict[str, Any] | None] = []
     steps: list[dict[str, Any]] = list(question.tool_calls or [])
     last: siwc.Reply | None = None
+    live = _Live(emit)
     for n in range(1, chat_tools.MAX_ROUNDS + 1):
-        out = siwc.respond(ctx.user.id, model, instructions, items, tools)
+        live.next_round()
+        out = siwc.respond(ctx.user.id, model, instructions, items, tools, live.text)
         last = out
         usages.append(out.usage)
         if out.text.strip():
@@ -148,10 +193,13 @@ def _tool_turn(
             steps.append(entry)
             question.tool_calls = list(steps)
             db.commit()  # each step is on record before the next request
+            emit({"type": "step", "step": entry})
             items.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
             if shown := _answer_photos(db, ctx, output, {str(p) for p in question.photo_ids or []}):
                 items.append(shown)
     assert last is not None
+    live.next_round()
+    live.text(STOPPED_NOTE)
     texts.append(STOPPED_NOTE)
     return "\n\n".join(texts), last, usages, chat_tools.MAX_ROUNDS, True
 
@@ -227,15 +275,27 @@ def conversation(
     return conv_svc.conversation_view(db, conv_svc.get(db, ctx.user, conversation_id))
 
 
-@router.post("/ai/chatgpt/messages")
-def send_message(
-    payload: ChatGptMessageIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
-) -> dict[str, Any]:
-    """Save the learner's message, then ask ChatGPT and wait for the whole reply, which is saved with the model and
-    version that answered, the time it took and the token usage. A retry with the same Idempotency-Key never asks
-    twice."""
+@dataclasses.dataclass
+class _Prepared:
+    """A learner message saved and ready to send: everything the request to ChatGPT needs."""
+
+    conversation_id: uuid.UUID
+    question_id: uuid.UUID
+    model: str
+    instructions: str
+    turns: list[dict[str, Any]]
+    use_tools: bool
+    visuals: bool
+    records: list[dict[str, Any]]
+    how: str | None
+    account: str | None
+
+
+def _prepare(payload: ChatGptMessageIn, ctx: WriteCtx, db: Session) -> _Prepared | uuid.UUID:
+    """Check the sign-in, save the learner's message (committed before ChatGPT is asked) and build the request.
+    A retry with an Idempotency-Key already seen returns that conversation's id instead: never asked twice."""
     if (seen := conv_svc.find_request(db, ctx.user, ctx.idempotency_key)) is not None:
-        return conv_svc.conversation_view(db, conv_svc.get(db, ctx.user, seen.conversation_id))
+        return seen.conversation_id
     state = siwc.status(ctx.user.id)
     if not state["connected"]:
         raise _api_error(siwc.SiwcError("not_connected"))
@@ -276,18 +336,39 @@ def send_message(
         parts.append(visual_blocks.INSTRUCTIONS)
     if excerpts:
         parts.append(chat_material.instructions(excerpts, how))
-    instructions = "\n\n".join(parts)
     db.commit()
+    return _Prepared(
+        conversation_id=conv.id,
+        question_id=question.id,
+        model=payload.model,
+        instructions="\n\n".join(parts),
+        turns=turns,
+        use_tools=use_tools,
+        visuals=payload.visuals,
+        records=records,
+        how=how,
+        account=state.get("email") or state.get("name"),
+    )
+
+
+def _answer(db: Session, ctx: WriteCtx, p: _Prepared, emit: Emit = _silent) -> dict[str, Any]:
+    """Ask ChatGPT (pieces of text and RecallSpring steps go to ``emit`` as they happen), save the completed reply
+    with the model and version that answered, the time it took and the token usage, and return the conversation.
+    A failure is saved on the learner's message and raised as an ApiError naming the conversation."""
+    conv = conv_svc.get(db, ctx.user, p.conversation_id)
+    question = db.get(AiMessage, p.question_id)
+    assert question is not None
     started = time.monotonic()
     rounds, stopped = 1, False
     try:
-        if use_tools:
+        if p.use_tools:
             text, result, usages, rounds, stopped = _tool_turn(
-                db, ctx, question, payload.model, instructions, turns, conv.course_id
+                db, ctx, question, p.model, p.instructions, p.turns, conv.course_id, emit
             )
             usage = conv_svc.combine_usage(usages)
         else:
-            result = siwc.reply(ctx.user.id, payload.model, instructions, turns)
+            live = _Live(emit)
+            result = siwc.reply(ctx.user.id, p.model, p.instructions, p.turns, live.text)
             text, usage = result.text, result.usage
     except siwc.SiwcError as exc:
         db.rollback()
@@ -299,17 +380,17 @@ def send_message(
             target_type="ai_conversation",
             target_id=conv.id,
             details={
-                "model": payload.model,
+                "model": p.model,
                 "outcome": exc.code,
                 "param": exc.detail if exc.code == "unsupported" else None,
-                "excerpts": len(records),
-                "recallspring_tools": use_tools,
+                "excerpts": len(p.records),
+                "recallspring_tools": p.use_tools,
                 "tool_calls": [s["name"] for s in question.tool_calls or []],
             },
             request_id=ctx.request_id,
         )
         db.commit()
-        error = _api_error(exc, use_tools)
+        error = _api_error(exc, p.use_tools)
         error.details = {**(error.details or {}), "conversation_id": str(conv.id)}
         raise error from exc
     reply = conv_svc.save_reply(
@@ -320,7 +401,7 @@ def send_message(
         model=result.model,
         response_id=result.response_id,
         usage=usage,
-        account=state.get("email") or state.get("name"),
+        account=p.account,
         duration_ms=int((time.monotonic() - started) * 1000),
     )
     audit(
@@ -332,13 +413,13 @@ def send_message(
         details={
             "model": result.model,
             "outcome": "completed",
-            "turns": len(turns),
+            "turns": len(p.turns),
             "usage": reply.usage,
-            "visuals_allowed": payload.visuals,
-            "visuals": [v["ok"] for v in visual_blocks.from_reply(text, refs=[r["ref"] for r in records])],
-            "excerpts": len(records),
-            "excerpts_chosen_by": how,
-            "recallspring_tools": use_tools,
+            "visuals_allowed": p.visuals,
+            "visuals": [v["ok"] for v in visual_blocks.from_reply(text, refs=[r["ref"] for r in p.records])],
+            "excerpts": len(p.records),
+            "excerpts_chosen_by": p.how,
+            "recallspring_tools": p.use_tools,
             "rounds": rounds,
             "stopped_at_limit": stopped,
             "tool_calls": [
@@ -350,6 +431,83 @@ def send_message(
     )
     db.commit()
     return conv_svc.conversation_view(db, conv)
+
+
+@router.post("/ai/chatgpt/messages")
+def send_message(
+    payload: ChatGptMessageIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Save the learner's message, then ask ChatGPT and wait for the whole reply (``/messages/stream`` shows it
+    as it arrives). A retry with the same Idempotency-Key never asks twice."""
+    prepared = _prepare(payload, ctx, db)
+    if isinstance(prepared, uuid.UUID):
+        return conv_svc.conversation_view(db, conv_svc.get(db, ctx.user, prepared))
+    return _answer(db, ctx, prepared)
+
+
+@router.post("/ai/chatgpt/messages/stream")
+def send_message_stream(
+    payload: ChatGptMessageIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> StreamingResponse:
+    """Like ``/messages``, shown as it happens: one JSON object per line. ``saved`` (the learner's message is on
+    record), then ``text`` (a piece of the reply) and ``step`` (a RecallSpring step ChatGPT ran, already saved), and
+    finally ``done`` with the saved conversation or ``error`` (code, message, details as in other errors).
+
+    Problems found before ChatGPT is asked (signed out, unknown course, ...) are ordinary error responses. The reply
+    runs in its own worker with its own database session, so it is finished and saved even if the browser leaves."""
+    prepared = _prepare(payload, ctx, db)
+    conversation_id = prepared if isinstance(prepared, uuid.UUID) else prepared.conversation_id
+    events: queue.Queue[dict[str, Any] | None] = queue.Queue()
+    user_id = ctx.user.id
+
+    def work() -> None:
+        try:
+            with new_session() as wdb:
+                user = wdb.get(User, user_id)
+                assert user is not None
+                wctx = dataclasses.replace(ctx, user=user)
+                if isinstance(prepared, uuid.UUID):
+                    view = conv_svc.conversation_view(wdb, conv_svc.get(wdb, user, prepared))
+                else:
+                    view = _answer(wdb, wctx, prepared, events.put)
+                events.put({"type": "done", "conversation": jsonable_encoder(view)})
+        except ApiError as exc:
+            events.put(
+                {
+                    "type": "error",
+                    "status": exc.status,
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details,
+                }
+            )
+        except Exception:
+            log.exception("ChatGPT reply failed")
+            events.put(
+                {
+                    "type": "error",
+                    "status": 500,
+                    "code": "internal_error",
+                    "message": "Something went wrong while answering. Your message is saved.",
+                    "details": {"conversation_id": str(conversation_id)},
+                }
+            )
+        finally:
+            events.put(None)
+
+    context = contextvars.copy_context()  # keeps the request id in the worker's logs
+    threading.Thread(target=context.run, args=(work,), name="chatgpt-reply", daemon=True).start()
+
+    def lines() -> Iterator[str]:
+        yield json.dumps({"type": "saved", "conversation_id": str(conversation_id)}) + "\n"
+        while (event := events.get()) is not None:
+            yield json.dumps(event, default=str) + "\n"
+
+    return StreamingResponse(
+        lines(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.patch("/ai/chatgpt/conversations/{conversation_id}")
