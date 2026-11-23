@@ -13,6 +13,7 @@ import {
   useInvalidateOrganisation,
 } from "../components/organise";
 import { NewCourseDialog, RecentlyDeletedCourses } from "../components/CourseForms";
+import { StudyIn } from "../components/StudyIn";
 import { Async, Confirm, Empty, ErrorNote, PageHead, StudyMeter } from "../components/ui";
 import { dateLabel, plural } from "../format";
 import { useArchived, useCourseSummary, useGroups } from "../queries";
@@ -69,6 +70,7 @@ function CourseCard({ c }: { c: CourseSummary }) {
         <span>{plural(c.simulations, "simulation")}</span>
         {c.due_reviews > 0 && <span className="chip warn">{c.due_reviews} due</span>}
       </div>
+      {c.status !== "archived" && <StudyIn course={c} />}
       {editing && <CourseDialog course={c} open onClose={() => setEditing(false)} />}
     </article>
   );

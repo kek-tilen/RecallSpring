@@ -1,6 +1,6 @@
 # ADR-012 — Forms last, formulas in questions, a calmer home, Study in…, Chat folders, Plain and Ghost chats
 
-Status: accepted 2026-11-23 (owner in chat); rolled out in steps, see Rollout (steps 1 to 4 done 2026-11-23). Extends ADR-010 and ADR-011.
+Status: accepted 2026-11-23 (owner in chat); rolled out in steps, see Rollout (all five steps done 2026-11-23). Extends ADR-010 and ADR-011.
 
 ## Context
 
@@ -43,6 +43,14 @@ choice is remembered. Chat opens a new conversation for the course. Codex and An
 folder when the app supports a link for it. Claude Desktop and ChatGPT desktop: open the app when possible and copy a
 starting message to the clipboard ("Let's study <course> (course_id …)"), which works in a new or an existing
 conversation; "Copy only" is offered too.
+
+Built 2026-11-23 with documented links only: Claude Desktop `claude://claude.ai/new?q=<message>` (Claude Help Center,
+"Open Claude Desktop with a link") and Codex, which is the ChatGPT desktop app's coding mode,
+`codex://new?prompt=<message>` (ChatGPT desktop "Commands", Deep links). Both only prefill the composer; nothing is
+sent. The `path` parameter of the Codex link would set the study folder as the workspace, but the web app does not know
+where the learner made the folders, so the note asks them to pick it. Antigravity documents no link for a folder or a
+chat, so its start message is copied only; RecallSpring's Chat is its own "ChatGPT" choice
+(`/chat/new?course=<id>`). The clipboard copy always comes too.
 
 ### 4. Chat folders
 

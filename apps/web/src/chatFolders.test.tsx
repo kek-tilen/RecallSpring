@@ -170,6 +170,13 @@ describe("Chat folders (ADR-012 §4)", () => {
 });
 
 describe("Plain and Ghost chats (ADR-012 §5)", () => {
+  it("Study in… → Chat preselects the course for a new conversation", async () => {
+    serve([]);
+    show("/chat/new?course=k1");
+    await screen.findByRole("option", { name: "Study: Biology 101" });
+    await waitFor(() => expect((screen.getByLabelText("What this chat is for") as HTMLSelectElement).value).toBe("k1"));
+  });
+
   it("a plain chat has no RecallSpring switch and says so to the server", async () => {
     const sent: { method: string; path: string; body: unknown }[] = [];
     serve(sent);

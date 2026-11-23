@@ -1,7 +1,7 @@
 import { PhotoStrip, SavedPhotos, usePhotos } from "../components/Photos";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { ApiError, get, request, streamRequest, type StreamEvent } from "../api";
 import { ChatGptSignIn, STATUS_KEY, useChatGptStatus } from "../components/ChatGpt";
 import { AttachDialog } from "../components/ChatAttach";
@@ -1279,7 +1279,13 @@ export function ChatPage() {
   const [visuals, setVisuals] = useState(() => remembered(VISUALS_STORE) !== "off");
   const [tools, setTools] = useState(() => remembered(TOOLS_STORE) !== "off");
   // What a new conversation is for: a course to study, "" = planning (all courses), PLAIN = a plain chat.
-  const [studyCourse, setStudyCourse] = useState("");
+  // "Study in… → Chat" on Courses (ADR-012 §3) opens /chat/new?course=<id>: that course is preselected.
+  const [search] = useSearchParams();
+  const [studyCourse, setStudyCourse] = useState(() => (currentId ? "" : (search.get("course") ?? "")));
+  const askedCourse = currentId ? null : search.get("course");
+  useEffect(() => {
+    if (askedCourse) setStudyCourse(askedCourse);
+  }, [askedCourse]);
   const courses = useQuery({ queryKey: keys.courses, queryFn: () => get<Course[]>("/courses"), enabled: !currentId });
   // Ghost (ADR-012 §5): the switch for a new conversation, and the ghost chat itself once it has started.
   const [ghostOn, setGhostOn] = useState(false);

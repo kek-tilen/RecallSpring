@@ -2444,6 +2444,55 @@ tr.selected td {
   }
 }
 
+/* Study in… on a course card (ADR-012 §3) */
+.study-in {
+  position: relative;
+}
+
+.study-in-buttons {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.study-in-more {
+  padding-inline: 8px;
+}
+
+.study-in-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.12);
+}
+
+.study-in-menu button {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.study-in-menu button:hover,
+.study-in-menu button:focus-visible {
+  background: var(--surface);
+}
+
+.study-in-note {
+  margin-top: 6px;
+}
+
 .chat-folder-icon {
   flex: none;
 }
