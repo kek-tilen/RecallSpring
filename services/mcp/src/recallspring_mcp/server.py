@@ -30,6 +30,7 @@ from .client import RecallSpringClient
 FORM_URI = "ui://recallspring/answer-form"
 QUIZ_URI = "ui://recallspring/quiz"
 SUMMARY_URI = "ui://recallspring/summary"
+EXPLANATION_URI = "ui://recallspring/explanation"
 
 INSTRUCTIONS = """\
 RecallSpring is the learner's own study system. It stores their sources, notes, study targets (kolokvij / exam),
@@ -69,11 +70,11 @@ Start of every study session in a course:
    back after a 0-1 answer, and once 5 is solid suggests mixed levels (the least recently practised); a quiz mixes
    concepts and levels rather than one level only. Never go above practice_limit.level (the learner's choice;
    RecallSpring refuses higher levels). If practice_limit.warning is set, explain it once (the exam paper asks
-   for higher levels) and let the learner decide; they can keep the limit on the course page. Single questions: create_questions +
-   open_answer_form. If your app cannot show RecallSpring's forms, these tools return a RecallSpring link instead:
-   give it to the learner, wait until they say they answered, then call get_answer (or get_quiz_results). Only if
-   the learner cannot use the link either, ask in chat and save with submit_chat_answer, copying their words
-   exactly.
+   for higher levels) and let the learner decide; they can keep the limit on the course page. Single questions:
+   create_questions + open_answer_form. If your app cannot show RecallSpring's forms, these tools return a
+   RecallSpring link instead: give it to the learner, wait until they say they answered, then call get_answer (or
+   get_quiz_results). Only if the learner cannot use the link either, ask in chat and save with submit_chat_answer,
+   copying their words exactly.
 5. Grading: get_quiz_results (or get_attempt), then record_assessments (or record_assessment): grade 0-4
    exactly by the grading_scale returned with the answer, the same for every assistant (0 No evidence, 1 Fragile,
    2 Partial, 3 Solid, 4 Transfer; a correct recall or true/false answer is 3, 4 only for real transfer);
@@ -85,6 +86,13 @@ Start of every study session in a course:
    get_self_assessments_to_check, then get_attempt and record_assessment for each; your grade replaces theirs.
    When it differs by 2 or more (self_assessment.differs in the result), explain which expected points decided it.
    Every question and open simulation item needs expected_points: short, checkable, each from a section you read.
+   CONCEPT-TO-CLARITY (C2C): when the learner wants to explain a concept in their own words, or asks for C2C
+   (offer it after a discussion or when an explanation would help; never insist), open_explanation_form for that
+   concept. Each save is a new version of their explanation, kept exactly. When it is saved, get_explanation, compare
+   the newest version with the material you read (and with earlier versions, to name the progress) and
+   record_explanation_feedback: correct, missing and wrong points, citing only section IDs you received. It is not a
+   grade and does not affect reviews; never rewrite their explanation or write a version for them. A version from an
+   exam answer was written with a word limit: judge it as an explanation without counting its limited scope.
 6. End with record_session_summary. Update the target when the learner reports a result (update_study_target).
 
 Building the library (only when the learner asks): create_course; import_file for a PDF, Word (.docx),
@@ -371,6 +379,66 @@ apps.add_html_resource(
 )
 
 
+@apps.tool(resource_uri=EXPLANATION_URI, annotations=READ, title="Ask for the learner's explanation")
+async def open_explanation_form(
+    concept_id: str, source: Literal["learner", "discuss"] = "learner", ctx: Context | None = None
+) -> CallToolResult:
+    """Concept-to-Clarity: show a form where the learner explains one concept in their own words. Each save is a
+    new version, kept exactly (their last version and its missing / wrong points are shown to help them improve).
+    source="discuss" at the end of a discussion. Then wait; when it is saved, get_explanation and
+    record_explanation_feedback. If your app cannot show the form, you get a link to the same form instead."""
+    current = await get_client().get(f"/concepts/{concept_id}/explanation")
+    term = current["concept"]["term"]
+    versions = current.get("versions") or []
+    last = None
+    if versions:
+        v = versions[-1]
+        fb = (v.get("feedback") or [{}])[-1]
+        last = {
+            "number": v["number"],
+            "text": v["text"],
+            "missing": fb.get("missing", []),
+            "wrong": fb.get("wrong", []),
+        }
+    data = {"concept_id": concept_id, "term": term, "source": source, "versions": len(versions), "last": last}
+    if not shows_forms(ctx):
+        link = web_link("/explain", concept=concept_id, source=source if source != "learner" else None)
+        text = (
+            f"This app cannot show RecallSpring's explanation form. Give the learner this link to explain '{term}' in "
+            f"their own words (saved exactly as a new version):\n{link}\n\nThen wait. When they say it is saved, "
+            "get_explanation and record_explanation_feedback (correct, missing, wrong; not a grade)."
+        )
+        return CallToolResult(content=[TextContent(type="text", text=text)], structured_content={**data, "link": link})
+    text = (
+        f"Showing the explanation form for '{term}'. Wait for the learner; when they say it is saved, "
+        "get_explanation and record_explanation_feedback (correct, missing, wrong; not a grade)."
+    )
+    return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=data)
+
+
+@apps.tool(resource_uri=EXPLANATION_URI, visibility=["app"], annotations=APPEND, title="Save explanation")
+async def save_explanation_version(
+    concept_id: str, text: str, client_request_id: str, source: Literal["learner", "discuss"] = "learner"
+) -> CallToolResult:
+    """Called only by the explanation form: stores the learner's explanation exactly as a new version."""
+    saved = await get_client().post(
+        f"/concepts/{concept_id}/explanation/versions",
+        {"text": text, "source": source, "client_request_id": client_request_id},
+        idempotency_key=client_request_id,
+    )
+    return CallToolResult(content=[TextContent(type="text", text=as_json(saved))], structured_content=saved)
+
+
+apps.add_html_resource(
+    EXPLANATION_URI,
+    resources.files("recallspring_mcp").joinpath("explanation_form.html").read_text(encoding="utf-8"),
+    name="explanation",
+    title="RecallSpring Concept-to-Clarity",
+    description="Explain a concept in your own words; each save is a new version, kept exactly.",
+    prefers_border=True,
+)
+
+
 apps.add_html_resource(
     QUIZ_URI,
     resources.files("recallspring_mcp").joinpath("quiz_form.html").read_text(encoding="utf-8"),
@@ -633,6 +701,37 @@ async def record_assessment(
         "model_name": model_name,
     }
     return as_json(await get_client().post(f"/attempts/{attempt_id}/assessments", payload))
+
+
+@mcp.tool(annotations=READ)
+async def get_explanation(concept_id: str) -> str:
+    """The learner's Concept-to-Clarity explanation of one concept: every version (their exact text, where it came
+    from, the word limit when it was an exam answer) with the feedback already given, oldest first."""
+    return as_json(await get_client().get(f"/concepts/{concept_id}/explanation"))
+
+
+@mcp.tool(annotations=APPEND)
+async def record_explanation_feedback(
+    version_id: str,
+    feedback: str,
+    correct: list[str] | None = None,
+    missing: list[str] | None = None,
+    wrong: list[str] | None = None,
+    evidence_refs: list[str] | None = None,
+    model_name: str | None = None,
+) -> str:
+    """Your feedback on one version of the learner's explanation (version_id from get_explanation): what is correct,
+    what is missing and what is wrong (short points), and section IDs you actually read. Not a grade; never rewrite
+    their text. Unknown section IDs are dropped (dropped_refs in the result)."""
+    payload = {
+        "feedback": feedback,
+        "correct": correct or [],
+        "missing": missing or [],
+        "wrong": wrong or [],
+        "evidence_refs": evidence_refs or [],
+        "model_name": model_name,
+    }
+    return as_json(await get_client().post(f"/explanation-versions/{version_id}/feedback", payload))
 
 
 @mcp.tool(annotations=APPEND)

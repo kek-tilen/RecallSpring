@@ -98,6 +98,10 @@ class User(Base):
     # steps depend on it; every assistant keeps working.
     assistant: Mapped[str | None] = mapped_column(String(20))
     assistant_mix: Mapped[list[Any]] = _json_list()
+    # Which kinds of practice suggestion the learner wants (ADR-010), e.g. {"exam_answer": false}; missing = on.
+    practice_suggestions: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
+    )
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
 
@@ -294,10 +298,26 @@ class Question(Base):
     provenance: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = _created()
 
+    # ADR-010: an exam answer has a word limit; the assistant recommends it, the learner may change it per question.
+    practice_kind: Mapped[str] = mapped_column(String(20), nullable=False, server_default="quiz", default="quiz")
+    length_recommended_words: Mapped[int | None] = mapped_column(SmallInteger)
+    length_words: Mapped[int | None] = mapped_column(SmallInteger)
+    length_set_by: Mapped[str | None] = mapped_column(String(20))
+    length_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     __table_args__ = (
         CheckConstraint("bloom_level BETWEEN 1 AND 6", name="bloom_level"),
         CheckConstraint("difficulty IS NULL OR difficulty BETWEEN 1 AND 5", name="difficulty"),
         CheckConstraint("question_type IN ('open','mcq')", name="question_type"),
+        CheckConstraint("practice_kind IN ('quiz','exam_answer')", name="practice_kind"),
+        CheckConstraint(
+            "(length_words IS NULL OR length_words BETWEEN 10 AND 1000) AND "
+            "(length_recommended_words IS NULL OR length_recommended_words BETWEEN 10 AND 1000)",
+            name="length_words",
+        ),
+        CheckConstraint(
+            "length_set_by IS NULL OR length_set_by IN ('assistant','default','learner')", name="length_set_by"
+        ),
     )
 
 
@@ -371,6 +391,8 @@ class Assessment(Base):
     rubric_scores: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     factuality_flags: Mapped[list[Any]] = _json_list()
     supersedes_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("assessments.id"))
+    # ADR-010: how an exam answer used its space (coverage, repetition, words); never part of the grade.
+    answer_technique: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = _created()
 
     __table_args__ = (
@@ -609,6 +631,67 @@ class NoteRevision(Base):
     saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (CheckConstraint("kind IN ('autosave','conflict')", name="kind"),)
+
+
+# --------------------------------------------------------------------------- Concept-to-Clarity (ADR-010)
+
+
+class Explanation(Base):
+    """The learner's explanation of one concept (Concept-to-Clarity), kept as numbered versions."""
+
+    __tablename__ = "explanations"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    concept_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("concepts.id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+    __table_args__ = (UniqueConstraint("user_id", "concept_id", name="uq_explanations_user_concept"),)
+
+
+class ExplanationVersion(Base):
+    """One version, saved exactly as the learner wrote it before any assistant reads it. Never rewritten."""
+
+    __tablename__ = "explanation_versions"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    explanation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("explanations.id"), nullable=False, index=True)
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)  # learner | discuss | exam_answer
+    source_attempt_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("attempts.id"))
+    word_limit: Mapped[int | None] = mapped_column(SmallInteger)  # the exam answer's limit, when from one
+    client_request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = _created()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("source IN ('learner','discuss','exam_answer')", name="source"),
+        CheckConstraint("(source = 'exam_answer') = (source_attempt_id IS NOT NULL)", name="exam_answer_attempt"),
+        UniqueConstraint("explanation_id", "number", name="uq_explanation_versions_number"),
+        UniqueConstraint("user_id", "client_request_id", name="uq_explanation_versions_user_client_request"),
+    )
+
+
+class ExplanationFeedback(Base):
+    """An assistant's feedback on one version: what is correct, missing and wrong, with cited sections. No grade."""
+
+    __tablename__ = "explanation_feedback"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("explanation_versions.id"), nullable=False, index=True)
+    provider: Mapped[str | None] = mapped_column(String(40))
+    model: Mapped[str | None] = mapped_column(String(120))
+    model_reported_by: Mapped[str | None] = mapped_column(String(40))
+    correct: Mapped[list[Any]] = _json_list()
+    missing: Mapped[list[Any]] = _json_list()
+    wrong: Mapped[list[Any]] = _json_list()
+    evidence_refs: Mapped[list[Any]] = _json_list()
+    feedback: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _created()
 
 
 # --------------------------------------------------------------------------- jobs

@@ -14,7 +14,7 @@ from mcp.client import advertise
 
 from recallspring_mcp import server
 from recallspring_mcp.client import ConnectorError, RecallSpringClient
-from recallspring_mcp.server import FORM_URI, mcp
+from recallspring_mcp.server import FORM_URI, INSTRUCTIONS, mcp
 
 pytestmark = pytest.mark.anyio
 
@@ -293,6 +293,8 @@ async def test_every_ui_tool_is_registered_with_its_resource() -> None:
         "submit_quiz",
         "open_summary_form",
         "save_learning_summary",
+        "open_explanation_form",
+        "save_explanation_version",
     }
     assert {u["resourceUri"] for u in ui.values()} <= resources
     assert {n for n, u in ui.items() if u.get("visibility") == ["app"]} == {
@@ -300,6 +302,7 @@ async def test_every_ui_tool_is_registered_with_its_resource() -> None:
         "save_quiz_draft",
         "submit_quiz",
         "save_learning_summary",
+        "save_explanation_version",
     }
 
 
@@ -598,3 +601,72 @@ async def test_get_answer_reads_the_latest_answer_or_says_none_yet(api: FakeApi)
     async with Client(mcp) as client:
         out = text_of(await client.call_tool("get_answer", {"question_id": "q1"}))
     assert "<learner_material" in out and "Typed in RecallSpring" in out
+
+
+# ---------------------------------------------------------------- Concept-to-Clarity (ADR-010)
+
+EXPLANATION = {
+    "concept": {"id": "c1", "term": "Glycolysis", "course_id": "k1"},
+    "versions": [
+        {
+            "id": "v1",
+            "number": 1,
+            "text": "Glucose is split.",
+            "feedback": [{"missing": ["two pyruvate"], "wrong": ["not in mitochondria"], "correct": []}],
+        }
+    ],
+    "deleted": [],
+}
+
+
+async def test_explanation_form_is_self_contained_and_text_only() -> None:
+    async with Client(mcp) as client:
+        html = (await client.read_resource("ui://recallspring/explanation")).contents[0].text
+    assert "<script src" not in html and "http://" not in html and "https://" not in html
+    assert "innerHTML" not in html and '"save_explanation_version"' in html and "Start from my last version" in html
+
+
+async def test_the_explanation_form_shows_the_last_version_and_its_gaps_or_a_link(api: FakeApi) -> None:
+    api.route("GET", "/concepts/c1/explanation", 200, EXPLANATION)
+    async with Client(mcp) as client:
+        result = await client.call_tool("open_explanation_form", {"concept_id": "c1", "source": "discuss"})
+    data = result.structured_content
+    assert data["term"] == "Glycolysis" and data["versions"] == 1 and data["source"] == "discuss"
+    assert data["last"] == {
+        "number": 1,
+        "text": "Glucose is split.",
+        "missing": ["two pyruvate"],
+        "wrong": ["not in mitochondria"],
+    }
+    assert data["link"] == "http://127.0.0.1:4318/explain?concept=c1&source=discuss"
+    assert "record_explanation_feedback" in text_of(result)
+
+
+async def test_an_explanation_is_saved_exactly_and_feedback_is_sent_as_given(api: FakeApi) -> None:
+    api.route("POST", "/concepts/c1/explanation/versions", 201, EXPLANATION)
+    api.route("POST", "/explanation-versions/v1/feedback", 200, {"saved": True, "dropped_refs": 0})
+    text = "  Glikoliza razgradi glukozo." + chr(10) + "(moje besede)  "
+    async with Client(mcp) as client:
+        await client.call_tool(
+            "save_explanation_version",
+            {"concept_id": "c1", "text": text, "client_request_id": "c0ffee00-0000-4000-8000-0000000000cc"},
+        )
+        await client.call_tool(
+            "record_explanation_feedback",
+            {"version_id": "v1", "feedback": "Close.", "missing": ["two pyruvate"], "evidence_refs": ["s1"]},
+        )
+    saved, feedback = api.requests
+    assert json.loads(saved.content) == {
+        "text": text,
+        "source": "learner",
+        "client_request_id": "c0ffee00-0000-4000-8000-0000000000cc",
+    }
+    assert saved.headers["Idempotency-Key"] == "c0ffee00-0000-4000-8000-0000000000cc"
+    assert json.loads(feedback.content)["missing"] == ["two pyruvate"]
+    assert json.loads(feedback.content)["evidence_refs"] == ["s1"]
+
+
+async def test_instructions_explain_concept_to_clarity() -> None:
+    text = " ".join(INSTRUCTIONS.split())
+    assert "CONCEPT-TO-CLARITY" in text and "never rewrite their explanation" in text
+    assert "not a grade and does not affect reviews" in text

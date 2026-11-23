@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router";
+import { ClarityPanel } from "../components/Clarity";
 import { Async, BandChip, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip } from "../components/ui";
 import { ATTEMPT_KIND, CAPTURED_VIA, DIFFICULTY_SOURCE, STUDY_SOURCE, dateLabel, dateTime, gradedBy, plural, relativeDay } from "../format";
 import { useConcept, useCourses } from "../queries";
@@ -75,6 +76,9 @@ export function ConceptPage() {
                         ))}
                       </ul>
                     )}
+                  </Card>
+                  <Card title="Concept-to-Clarity" meta="Your explanation in versions">
+                    <ClarityPanel conceptId={c.id} />
                   </Card>
                 </div>
 

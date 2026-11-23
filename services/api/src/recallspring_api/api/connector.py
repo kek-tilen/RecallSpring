@@ -59,6 +59,8 @@ from ..schemas import (
     CourseIn,
     CourseOut,
     DifficultyIn,
+    ExplanationFeedbackIn,
+    ExplanationVersionIn,
     FocusIn,
     InterestGoalIn,
     KnownConceptsIn,
@@ -79,6 +81,7 @@ from ..schemas import (
 )
 from ..services import assistants, bloom, check_first, focus, overview, readiness, week
 from ..services import attempts as attempt_svc
+from ..services import explanations as explanation_svc
 from ..services import folders as folder_svc
 from ..services import interests as interest_svc
 from ..services import quizzes as quiz_svc
@@ -1069,6 +1072,68 @@ def save_learning_summary(
     )
     db.flush()
     return commit_with_response(db, ctx, payload, 201, body)
+
+
+# ---------------------------------------------------------------- Concept-to-Clarity (ADR-010)
+
+
+@router.get("/concepts/{concept_id}/explanation")
+def explanation(
+    concept_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """The learner's explanation of a concept: every version (exact text, source, word limit when it came from an
+    exam answer) with the feedback already given, and how to give feedback."""
+    return explanation_svc.view(db, ctx.user, concept_id)
+
+
+@router.post("/concepts/{concept_id}/explanation/versions", status_code=201)
+def add_explanation_version(
+    concept_id: uuid.UUID,
+    payload: ExplanationVersionIn,
+    ctx: WriteCtx = Depends(connector_write_ctx),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Sent by the C2C form: the learner's own explanation, saved exactly as a new version."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    body = explanation_svc.add_version(
+        db,
+        ctx.user,
+        concept_id,
+        text=payload.text,
+        source=payload.source,
+        client_request_id=payload.client_request_id,
+        from_attempt_id=payload.from_attempt_id,
+        request_id=ctx.request_id,
+    )
+    return commit_with_response(db, ctx, payload, 201, body)
+
+
+@router.post("/explanation-versions/{version_id}/feedback")
+def record_explanation_feedback(
+    version_id: uuid.UUID,
+    payload: ExplanationFeedbackIn,
+    ctx: WriteCtx = Depends(connector_write_ctx),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """The assistant's feedback on one version: correct / missing / wrong with cited sections. Not a grade."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    body = explanation_svc.record_feedback(
+        db,
+        ctx.user,
+        version_id,
+        correct=payload.correct,
+        missing=payload.missing,
+        wrong=payload.wrong,
+        evidence_refs=payload.evidence_refs,
+        feedback=payload.feedback,
+        client=ctx.client,
+        model=ctx.model or payload.model_name,
+        model_reported_by="provider" if ctx.model else "assistant",
+        request_id=ctx.request_id,
+    )
+    return commit_with_response(db, ctx, payload, 200, body)
 
 
 @router.post("/concepts/known")

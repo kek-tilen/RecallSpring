@@ -12,6 +12,7 @@ import { Confirm, ErrorNote, Loading } from "../components/ui";
 import { dateTime, plural } from "../format";
 import { keys } from "../queries";
 import type { Course } from "../types";
+import { ChatExplanationForm } from "../components/Clarity";
 import { ChatAnswerForm, ChatSentAnswer, ChatSummaryForm } from "./Answer";
 
 interface Usage {
@@ -47,7 +48,8 @@ interface AiMessage {
 type ToolForm =
   | { kind: "answer"; question_id: string }
   | { kind: "summary"; course_id: string; concept_ids: string[]; title: string; covered: string | null }
-  | { kind: "quiz"; quiz_id: string; title: string | null };
+  | { kind: "quiz"; quiz_id: string; title: string | null }
+  | { kind: "explanation"; concept_id: string; term: string; source: "learner" | "discuss" };
 
 /** What ChatGPT read or saved in RecallSpring while answering a message. */
 interface ToolStep {
@@ -312,7 +314,15 @@ const FORM_MESSAGES = {
   dont_know: (id: string) => `[RecallSpring] I answered "I don't know" to question ${id} in the form.`,
   summary: (title: string) =>
     `[RecallSpring] I saved my summary of "${title}" in the form. Please check it against the material (what is right, wrong or missing), then continue.`,
+  explanation: (version: number, term: string) =>
+    `[RecallSpring] I saved version ${version} of my explanation of "${term}" in the form. Please read it and give me feedback (what is correct, missing or wrong).`,
 };
+
+function explainLink(f: Extract<ToolForm, { kind: "explanation" }>): string {
+  const q = new URLSearchParams({ concept: f.concept_id });
+  if (f.source !== "learner") q.set("source", f.source);
+  return `/explain?${q.toString()}`;
+}
 
 function summaryLink(f: Extract<ToolForm, { kind: "summary" }>): string {
   const q = new URLSearchParams({ course: f.course_id, concepts: f.concept_ids.join(","), title: f.title });
@@ -358,6 +368,8 @@ function ChatForm({ form, live, onSend }: {
       <p className="tiny muted" style={{ margin: 0 }}>
         {form.kind === "answer" ? (
           <Link to={`/answer/${form.question_id}`}>Answer form</Link>
+        ) : form.kind === "explanation" ? (
+          <Link to={explainLink(form)}>Explanation form “{form.term}”</Link>
         ) : (
           <Link to={summaryLink(form)}>Summary form “{form.title}”</Link>
         )}{" "}
@@ -375,6 +387,12 @@ function ChatForm({ form, live, onSend }: {
               ? send(FORM_MESSAGES.answer(form.question_id, photoIds.length), photoIds)
               : send(FORM_MESSAGES.dont_know(form.question_id))
           }
+        />
+      ) : form.kind === "explanation" ? (
+        <ChatExplanationForm
+          conceptId={form.concept_id}
+          source={form.source}
+          onSaved={(n, term) => send(FORM_MESSAGES.explanation(n, term))}
         />
       ) : (
         <ChatSummaryForm

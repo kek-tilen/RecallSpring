@@ -45,7 +45,7 @@ function readDraft(storeKey: string): Draft {
   return { text: "", key: newKey() };
 }
 
-function useDraft(storeKey: string): [Draft, (text: string) => void, () => void] {
+export function useDraft(storeKey: string): [Draft, (text: string) => void, () => void] {
   const [draft, setDraft] = useState<Draft>(() => readDraft(storeKey));
   useEffect(() => setDraft(readDraft(storeKey)), [storeKey]);
   const update = (text: string) => {
@@ -67,7 +67,7 @@ function useDraft(storeKey: string): [Draft, (text: string) => void, () => void]
   return [draft, update, clear];
 }
 
-function BackToAssistant({ what }: { what: string }) {
+export function BackToAssistant({ what }: { what: string }) {
   return (
     <div className="notice stack" role="status">
       <strong>{what}</strong>

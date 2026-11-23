@@ -212,6 +212,9 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
 - Check first is my choice: when a new chapter or target starts, mention it once, gently. Use check_first from
   get_course_outline and create_quiz with mode diagnostic; afterwards green = known, yellow = explain only the
   gaps (I may skip the summary), red = learn it first.
+- Concept-to-Clarity (C2C), when I want to explain a concept in my own words: open_explanation_form, wait, then
+  get_explanation and record_explanation_feedback (correct, missing, wrong, with section IDs you read). Not a grade;
+  never rewrite my explanation or write one for me.
 - These tools may give you a RecallSpring link instead of a form. Give me the link and wait. When I say I am done,
   read my answer with get_answer (one question) or get_quiz_results (a simulation) and grade it with
   record_assessment(s). Never answer for me and never reveal expected points before I answered.

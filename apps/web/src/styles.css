@@ -4377,3 +4377,48 @@ math mtable mtd {
   min-width: 0;
   flex: 1 1 220px;
 }
+
+/* Concept-to-Clarity (ADR-010): versions of the learner's explanation with feedback per version. */
+.c2c-version {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 12px 14px;
+  background: var(--bg);
+}
+details.c2c-version > summary {
+  cursor: pointer;
+}
+.c2c-feedback,
+.c2c-hints {
+  background: var(--surface);
+  border-radius: var(--radius-control);
+  padding: 10px 12px;
+}
+.c2c-points ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+.c2c-points.good > span {
+  color: var(--primary);
+}
+.c2c-points.warn > span {
+  color: var(--warning);
+}
+.c2c-points.bad > span {
+  color: var(--danger);
+}
+.c2c-diff {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.c2c-diff ins {
+  background: var(--surface);
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+.c2c-diff del {
+  background: var(--danger-bg);
+  color: var(--danger);
+}

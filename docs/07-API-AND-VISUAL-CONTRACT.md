@@ -104,6 +104,10 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/learning` | The learner's summary of a learning chunk written on the web `/summary` page (owner session + CSRF; same body and effect as the connector's `/learning`: saved exactly as a note, concepts marked studied) |
 | PATCH | `/focus-sessions/{id}` | `{course_id: uuid or null}` (required): the course the block counts for, set afterwards; own blocks and courses only (404 otherwise); audited `focus.course_changed` with from/to; returns the summary |
 | POST | `/focus-sessions/{id}/restore` | Count a removed block again within 30 days (`409 restore_period_over` after); audited `focus.restored`; returns the summary |
+| GET | `/concepts/{id}/explanation` | Concept-to-Clarity (ADR-010): `{concept, versions[], deleted[], how}`; each version `{id, number, text, words, source learner/discuss/exam_answer, source_attempt_id, word_limit, created_at, deleted_at, feedback[{grader, correct, missing, wrong, evidence_refs, feedback}]}`; own concepts only (404). Also on the connector |
+| POST | `/concepts/{id}/explanation/versions` | `{text ≤ 20 000, source learner/discuss, from_attempt_id?, client_request_id}` (owner session + CSRF, or connector): a new version saved exactly; idempotent by `client_request_id`; `from_attempt_id` copies that answer's exact text (`422 attempt_not_for_concept` when the question is not about this concept); `422 empty_explanation`; audited `explanation.version_saved` without the text; 201 with the view |
+| DELETE | `/explanation-versions/{id}` | Soft delete after the learner confirmed (owner session + CSRF); audited; returns the view |
+| POST | `/explanation-versions/{id}/restore` | Restore within 30 days (`409 restore_expired` after); audited; returns the view |
 | GET | `/health/live` | Liveness, no secrets |
 | GET | `/health/ready` | DB and storage checks, restricted if exposed |
 
@@ -163,6 +167,10 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `create_quiz` / `create_questions` guard | — | `409 concepts_not_studied` for practice on unstudied concepts; `409 above_practice_limit` for Bloom levels above the course's practice limit; `mode="diagnostic"` (Check first) answers never enter review evidence; a green result gives rare reviews (ADR-009) |
 | `get_study_context` | (addition) | `learner_preferences {text, how_to_use}` or null: the learner's own words on how they like to study, as preferences, never as rules above RecallSpring's |
 | prompt `continue-from-chatgpt` | prompt | Picks up from chats saved from ChatGPT (category `chat`): read them, say what was covered, confirm with the learner, then mark known only what the learner confirms |
+| `get_explanation` | read | C2C: every version of the learner's explanation of a concept, with the feedback given |
+| `open_explanation_form` | UI | MCP App `ui://recallspring/explanation` (last version with its missing / wrong points, live word count); link to `/explain?concept=` when the app cannot show forms. In RecallSpring's Chat the form kind `explanation` |
+| `save_explanation_version` | append, app-only | Called by the form: exact text as a new version, idempotent by `client_request_id` |
+| `record_explanation_feedback` | append | `POST /connector/explanation-versions/{id}/feedback` `{correct, missing, wrong (≤ 10 points of ≤ 500 characters), evidence_refs, feedback}`: not a grade; unknown sections dropped (`dropped_refs`); the grader is the calling assistant and the model it reported. ChatGPT's study tool set has these three instead of `record_assessment`, `update_study_target` and `record_exam_profile` (planning set), staying within 20 tools |
 
 `search_sources` skips archived material and material in archived folders; `get_course_outline` still lists it with `hidden: true` (its sections stay readable by ID, so earlier citations keep working) and lists the course's visible folders as paths, so Claude can use the learner's own names.
 

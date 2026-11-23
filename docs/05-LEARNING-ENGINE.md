@@ -108,6 +108,20 @@ Suggested baseline weighted priority: overdue duration capped, low recent eviden
 - A plan for one course or interest (`course_id`) applies no priority rules. Without interests and focus `plan-v2`
   equals `plan-v1`.
 
+### Implemented: Concept-to-Clarity (ADR-010, step 1)
+
+- **C2C** trains understanding: the learner explains one concept in their own words. Each save is a new **version**
+  (v1, v2, …) of one explanation per concept, kept exactly as written, with where it came from (written by the
+  learner, after a discussion, or from an exam answer with its word limit; the last one only when the learner adds
+  it, from step 2).
+- The assistant reads the versions and gives **feedback per version**: correct, missing and wrong points and a short
+  text, citing only sections of the concept's course (others are dropped). It is **not a grade**: it does not change
+  the concept's study status, reviews, practice ramp or readiness, and the assistant never rewrites the explanation or
+  writes a version for the learner.
+- The concept page shows the newest version with its feedback, the changes from the previous version (added and
+  removed words) and earlier versions folded. Versions are soft-deleted after confirmation and can be restored for
+  30 days; numbers are never reused.
+
 ## Long-term learning
 
 Review should persist after exams to address owner's reported forgetting. Long-term targets prioritize fundamentals and inter-topic transfer. Default schedule and concept importance can be adjusted by user with natural-language commands, but modifications always pass through typed server actions and audit.

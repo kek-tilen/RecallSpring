@@ -28,7 +28,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
@@ -45,6 +45,7 @@ from ..schemas import (
     ConnectorConceptsIn,
     ConnectorQuestionsIn,
     CourseIn,
+    ExplanationFeedbackIn,
     KnownConceptsIn,
     OrganiseCoursesIn,
     QuizIn,
@@ -80,14 +81,15 @@ Then 2-3 short check questions. If the learner says they already know a topic (e
 lectures), ask, then mark_concepts_known.
 - Asking a question: create_questions, then open_answer_form, then end your message and wait. Never grade an answer \
 typed into the chat: the learner answers in the form, so their exact words are saved first.
-- When the learner says an answer is saved: get_answer, then record_assessment with grade 0-4 exactly by the \
+- When the learner says an answer is saved: get_answer, then record_assessments (one item per answer) with grade \
+0-4 exactly by the \
 grading_scale that comes with the answer (the same scale for every assistant; a correct recall or true/false \
 answer is 3, 4 only for real transfer). Status "provisional" when you are unsure or several answers are \
 defensible, "ungraded" with grade null when it cannot be judged. Reward reasoning, not agreement with you. Cite \
 only section IDs you received. Then explain the feedback and the next review dates RecallSpring returned.
 - Self-assessments: when get_study_context shows self_assessments_to_check > 0, the learner graded some answers \
 themselves (no assistant was available); the oldest are listed in self_assessments. Early in the session offer to \
-check them: get_answer(question_id), then grade it by the grading_scale with record_assessment; your grade \
+check them: get_answer(question_id), then grade it by the grading_scale with record_assessments; your grade \
 replaces theirs. When yours \
 differs by 2 or more (the result says self_assessment.differs), explain kindly which expected points decided it.
 - Questions and open simulation items always need expected_points (the learner checks against them when you are \
@@ -104,6 +106,10 @@ they can check what they already know (a chapter, or a bit of everything for the
 check_first from get_course_outline and create_quiz with mode diagnostic: each concept at its check.level, "open" = \
 one open question, "closed" = two closed ones. Afterwards green = known (background), yellow = explain only the \
 gaps, then the summary form (the learner may skip), red = learn it first.
+- Concept-to-Clarity (C2C), when the learner wants to explain a concept in their own words or asks for it (offer \
+it after a discussion; never insist): open_explanation_form, end your message and wait. When it is saved, \
+get_explanation and record_explanation_feedback on the newest version: what is correct, missing and wrong, citing \
+only section IDs you read. Not a grade; never rewrite their explanation or write one for them.
 - AI grades are study feedback, not validated scores; never present them as official marks.
 - Messages starting with [RecallSpring] were sent by RecallSpring for the learner after they used a form; keep \
 replying in the language the learner uses.
@@ -114,8 +120,9 @@ STUDY_SETUP = """Setting up this course, only when needed, after asking: if get_
 ask what the learner prepares for (1st kolokvij, 2nd kolokvij or the exam; the date; from which material to which; \
 whether they have an old paper). Map their answer to the material with get_course_outline, show them the mapping, \
 then set_study_target with their own words as scope_description. If they uploaded an old paper, read it and \
-record_exam_profile. If the course has material but no concepts yet, read the sections and create_concepts linked to \
-the section IDs that support them. When the learner reports a new date or a result, update_study_target."""
+record_exam_profile only in a planning conversation: ask them to open Chat without a course for that. If the \
+course has material but no concepts yet, read the sections and create_concepts linked to the section IDs that \
+support them. A new date or a result is also saved in a planning conversation (Chat without a course)."""
 
 PLANNING = """This is a planning conversation for all of the learner's courses; nothing is taught or quizzed here. \
 Help them set up their semester: list_courses first (never create a course twice), create_course for missing ones, \
@@ -192,6 +199,21 @@ class SummaryFormArgs(BaseModel):
     concept_ids: list[uuid.UUID] = Field(min_length=1, max_length=20, description="The concepts this chunk taught")
     title: str = Field(min_length=1, max_length=200, description="Name of the chunk, e.g. the chapter")
     covered: str | None = Field(default=None, max_length=300, description="What was covered, e.g. pages 4-9")
+
+
+class ConceptArg(BaseModel):
+    concept_id: uuid.UUID
+
+
+class ExplanationFormArgs(BaseModel):
+    concept_id: uuid.UUID
+    source: Literal["learner", "discuss"] = Field(
+        default="learner", description='"discuss" at the end of a discussion, otherwise "learner"'
+    )
+
+
+class ExplanationFeedbackArgs(ExplanationFeedbackIn):
+    version_id: uuid.UUID
 
 
 class AssessmentArgs(ConnectorAssessmentIn):
@@ -288,6 +310,26 @@ def _summary_form(db: Session, ctx: WriteCtx, a: SummaryFormArgs) -> tuple[Any, 
     )
 
 
+def _explanation_form(db: Session, ctx: WriteCtx, a: ExplanationFormArgs) -> tuple[Any, dict[str, Any]]:
+    concept = owned(db, Concept, a.concept_id, ctx.user.id)
+    return (
+        {
+            "shown": True,
+            "concept": concept.term,
+            "next": "The learner explains the concept in the form under your message (saved exactly as a new "
+            "version). End your message now and wait until they say it is saved; then get_explanation and "
+            "record_explanation_feedback.",
+        },
+        {"kind": "explanation", "concept_id": str(concept.id), "term": concept.term, "source": a.source},
+    )
+
+
+def _explanation_feedback(db: Session, ctx: WriteCtx, a: ExplanationFeedbackArgs) -> tuple[Any, None]:
+    payload = ExplanationFeedbackIn.model_validate({**a.model_dump(exclude={"version_id"}), "model_name": ctx.model})
+    resp = _c().record_explanation_feedback(version_id=a.version_id, payload=payload, ctx=ctx, db=db)
+    return _body(resp), None
+
+
 def _assessment(db: Session, ctx: WriteCtx, a: AssessmentArgs) -> tuple[Any, None]:
     payload = ConnectorAssessmentIn.model_validate(
         {**a.model_dump(exclude={"attempt_id"}), "model_name": ctx.model, "rubric_version": RUBRIC_VERSION}
@@ -340,6 +382,13 @@ def _grade(result: Any) -> str:
         if grade is not None
         else "Saved feedback (ungraded)"
     )
+
+
+def _grades(result: Any) -> str:
+    results = result.get("results") if isinstance(result, dict) else None
+    if isinstance(results, list) and len(results) == 1:
+        return _grade({"assessments": [results[0]]})
+    return f"Saved feedback on {_plural(_n(result, 'results'), 'answer')}"
 
 
 def _plural(n: int, word: str) -> str:
@@ -462,6 +511,32 @@ _TOOLS = [
         lambda a, r: "Showed a summary form",
     ),
     Tool(
+        "get_explanation",
+        "The learner's Concept-to-Clarity explanation of one concept: every version (their exact text, where it came "
+        "from, a word limit when it was an exam answer) with the feedback already given.",
+        ConceptArg,
+        lambda db, ctx, a: (_c().explanation(concept_id=a.concept_id, ctx=ctx, db=db), None),
+        lambda a, r: "Read your explanation",
+    ),
+    Tool(
+        "open_explanation_form",
+        "Show the Concept-to-Clarity form under your message: the learner explains one concept in their own words, "
+        "saved exactly as a new version (not a grade). End your message after calling this.",
+        ExplanationFormArgs,
+        _explanation_form,
+        lambda a, r: "Showed the explanation form",
+    ),
+    Tool(
+        "record_explanation_feedback",
+        "Feedback on one version of the learner's explanation (version_id from get_explanation): what is correct, "
+        "missing and wrong, citing only section IDs you read. Not a grade; never rewrite their text.",
+        ExplanationFeedbackArgs,
+        _explanation_feedback,
+        lambda a, r: f"Saved feedback on version {r.get('version') if isinstance(r, dict) else ''}".strip(),
+        writes=True,
+        drop=("model_name",),
+    ),
+    Tool(
         "record_assessment",
         "Grade one saved answer (attempt_id from get_answer). Evidence must be section IDs you received; others "
         "are dropped and a final grade becomes provisional. Returns the next review dates.",
@@ -476,7 +551,7 @@ _TOOLS = [
         "Grade several saved answers at once (e.g. a simulation's open answers); all or nothing.",
         AssessmentBatchIn,
         _assessments,
-        lambda a, r: f"Saved feedback on {_plural(_n(r, 'results'), 'answer')}",
+        lambda a, r: _grades(r),
         writes=True,
         drop=("model_name", "rubric_version"),
     ),
@@ -567,14 +642,16 @@ STUDY = _READ + [
     "create_questions",
     "open_answer_form",
     "open_summary_form",
-    "record_assessment",
     "record_assessments",
     "mark_concepts_known",
     "create_quiz",
     "create_concepts",
     "set_study_target",
-    "update_study_target",
-    "record_exam_profile",
+    # Concept-to-Clarity (ADR-010). record_assessment (record_assessments grades one too), update_study_target and
+    # record_exam_profile stay in the planning set, so a study conversation keeps within MAX_TOOLS.
+    "get_explanation",
+    "open_explanation_form",
+    "record_explanation_feedback",
 ]
 PLANNING_TOOLS = ["list_courses", *_READ, "get_due_reviews", "create_course", "organise_courses"]
 PLANNING_TOOLS += ["create_concepts", "set_study_target", "update_study_target", "record_exam_profile"]

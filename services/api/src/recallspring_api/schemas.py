@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Grade = int
 
@@ -863,6 +863,35 @@ class LearningSummaryIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     text: str = Field(default="", max_length=200_000, description="The learner's own summary, exactly as typed")
     client_request_id: uuid.UUID
+
+
+class ExplanationVersionIn(BaseModel):
+    """A new Concept-to-Clarity version (ADR-010): the learner's own text, saved exactly. With ``from_attempt_id`` the
+    exact text of that exam answer is used instead (``text`` is ignored)."""
+
+    text: str = Field(default="", max_length=20_000, description="The learner's own explanation, exactly as typed")
+    source: Literal["learner", "discuss"] = "learner"
+    from_attempt_id: uuid.UUID | None = None
+    client_request_id: uuid.UUID
+
+
+class ExplanationFeedbackIn(BaseModel):
+    """An assistant's feedback on one C2C version: never a grade, never a rewrite of the learner's text."""
+
+    correct: list[str] = Field(default_factory=list, max_length=10, description="What the explanation gets right")
+    missing: list[str] = Field(default_factory=list, max_length=10, description="Important points it leaves out")
+    wrong: list[str] = Field(default_factory=list, max_length=10, description="What it gets wrong")
+    evidence_refs: list[str] = Field(default_factory=list, max_length=20, description="Section IDs you read")
+    feedback: str = Field(min_length=1, max_length=3000, description="Short feedback in the learner's language")
+    model_name: str | None = Field(default=None, max_length=120)
+
+    @field_validator("correct", "missing", "wrong")
+    @classmethod
+    def _short_items(cls, items: list[str]) -> list[str]:
+        cleaned = [i.strip() for i in items if i.strip()]
+        if any(len(i) > 500 for i in cleaned):
+            raise ValueError("each point can be up to 500 characters")
+        return cleaned
 
 
 class KnownConceptsIn(BaseModel):

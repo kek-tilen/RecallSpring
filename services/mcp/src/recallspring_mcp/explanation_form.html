@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RecallSpring Concept-to-Clarity</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #FFFFFF; --surface: #EDF7F4; --ink: #24332F; --muted: #52645C; --border: #CBDDD6;
+    --primary: #0F766E; --primary-hover: #115E59; --on-primary: #FFFFFF; --danger: #B42318; --focus: #0F766E;
+    --radius-control: 10px;
+    font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #14201D; --surface: #1C2B27; --ink: #E3EEEA; --muted: #A7BAB2; --border: #33463F;
+    --primary: #5EC4B6; --primary-hover: #7FD3C7; --on-primary: #0B1A17; --danger: #F59A8F; --focus: #5EC4B6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; line-height: 1.5; }
+  main { padding: 16px; max-width: 720px; }
+  .eyebrow { margin: 0 0 4px; color: var(--muted); font-size: 13px; }
+  h1 { margin: 0 0 6px; font-size: 18px; }
+  .muted { color: var(--muted); font-size: 14px; margin: 0; }
+  details { margin: 10px 0; padding: 8px 12px; background: var(--surface); border-radius: var(--radius-control); }
+  summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+  .last { white-space: pre-wrap; margin: 8px 0 0; font-size: 14px; }
+  ul { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
+  label { display: block; font-weight: 600; margin: 12px 0 6px; }
+  textarea { width: 100%; min-height: 180px; resize: vertical; padding: 10px 12px; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-control); }
+  textarea[readonly] { background: var(--surface); }
+  .hint { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+  button { min-height: 44px; padding: 0 16px; font: inherit; border-radius: var(--radius-control); cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg); color: var(--ink); }
+  button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+  button.primary:hover { background: var(--primary-hover); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  #status { min-height: 1.5em; margin: 12px 0 0; }
+  #status.error { color: var(--danger); }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">RecallSpring · Concept-to-Clarity</p>
+  <h1 id="title">Loading…</h1>
+  <p class="muted" id="about">Explain it in your own words, as if to a classmate. Each save is a new version; you get
+    feedback on what is correct, missing or wrong (not a grade).</p>
+  <details id="previous" hidden>
+    <summary id="previous-title">Your last version</summary>
+    <p class="last" id="previous-text"></p>
+    <div id="previous-feedback"></div>
+  </details>
+  <label for="text">Your explanation</label>
+  <textarea id="text" aria-describedby="words hint" disabled></textarea>
+  <p class="hint" id="words" aria-live="polite">0 words</p>
+  <p class="hint" id="hint">Saved exactly as you write it. Only you write versions; your assistant never rewrites them.</p>
+  <div class="actions">
+    <button type="button" class="primary" id="save" disabled>Save version</button>
+    <button type="button" id="reuse" hidden>Start from my last version</button>
+  </div>
+  <p id="status" role="status" aria-live="polite"></p>
+</main>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const ui = { title: $("title"), text: $("text"), words: $("words"), save: $("save"), reuse: $("reuse"),
+               status: $("status"), previous: $("previous"), previousTitle: $("previous-title"),
+               previousText: $("previous-text"), previousFeedback: $("previous-feedback") };
+  const clientRequestId = (crypto.randomUUID && crypto.randomUUID()) ||
+    "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) =>
+      (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
+  let concept = null, saved = false, nextId = 1;
+  const pending = new Map();
+  const send = (msg) => window.parent.postMessage(msg, "*");
+  const notify = (method, params) => send({ jsonrpc: "2.0", method, params: params || {} });
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    send({ jsonrpc: "2.0", id, method, params: params || {} });
+  });
+  const count = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
+  function setStatus(text, isError) { ui.status.textContent = text; ui.status.className = isError ? "error" : ""; }
+  function setBusy(busy) {
+    ui.save.disabled = busy || saved || !concept;
+    ui.text.disabled = !concept; ui.text.readOnly = busy || saved;
+    ui.reuse.disabled = busy || saved;
+  }
+  function resultData(result) {
+    if (result && result.structuredContent) return result.structuredContent;
+    try { return JSON.parse(result.content[0].text); } catch (e) { return null; }
+  }
+  function applyContext(ctx) {
+    if (ctx && (ctx.theme === "dark" || ctx.theme === "light")) document.documentElement.dataset.theme = ctx.theme;
+  }
+  function list(label, items) {
+    if (!items || !items.length) return;
+    const p = document.createElement("p"); p.className = "muted"; p.textContent = label;
+    const ul = document.createElement("ul");
+    for (const item of items) { const li = document.createElement("li"); li.textContent = item; ul.appendChild(li); }
+    ui.previousFeedback.appendChild(p); ui.previousFeedback.appendChild(ul);
+  }
+  function show(data) {
+    if (!data || !data.concept_id) return;
+    concept = data;
+    ui.title.textContent = data.term;                        // textContent only: never parsed as HTML
+    const last = data.last;
+    if (last) {
+      ui.previous.hidden = false;
+      ui.previousTitle.textContent = "Your last version (v" + last.number + ")";
+      ui.previousText.textContent = last.text;
+      ui.previousFeedback.textContent = "";
+      list("Missing:", last.missing);
+      list("Wrong:", last.wrong);
+      ui.reuse.hidden = false;
+    }
+    setBusy(false);
+    ui.text.focus();
+  }
+  ui.text.addEventListener("input", () => {
+    const n = count(ui.text.value);
+    ui.words.textContent = n === 1 ? "1 word" : n + " words";
+  });
+  ui.reuse.addEventListener("click", () => {
+    if (!concept || !concept.last || saved) return;
+    ui.text.value = concept.last.text;
+    ui.text.dispatchEvent(new Event("input"));
+    ui.text.focus();
+  });
+  async function submit() {
+    if (!concept || saved) return;
+    const text = ui.text.value;
+    if (!text.trim()) { setStatus("Write your explanation first.", true); return; }
+    setBusy(true);
+    setStatus("Saving…");
+    try {
+      const res = await request("tools/call", { name: "save_explanation_version", arguments: {
+        concept_id: concept.concept_id, text, source: concept.source || "learner",
+        client_request_id: clientRequestId } });
+      const data = resultData(res);
+      if (res.isError || !data || !data.versions) throw new Error((res.content && res.content[0] && res.content[0].text) || "Not saved.");
+      const mine = data.versions[data.versions.length - 1];
+      saved = true;
+      setBusy(false);
+      setStatus("Saved as version " + mine.number + ".");
+      request("ui/message", { role: "user", content: { type: "text",
+        text: "I saved version " + mine.number + " of my explanation of " + concept.term + " in RecallSpring. " +
+              "Please read it (get_explanation) and tell me what is correct, missing or wrong compared with the material." } }).catch(() => {});
+    } catch (err) {
+      setBusy(false);
+      setStatus("Not saved: " + (err && err.message ? err.message : "unknown error") + " Your text is still here.", true);
+    }
+  }
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const msg = event.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id !== undefined && !msg.method) {
+      const entry = pending.get(msg.id);
+      if (!entry) return;
+      pending.delete(msg.id);
+      if (msg.error) entry.reject(new Error(msg.error.message || "Request failed")); else entry.resolve(msg.result);
+      return;
+    }
+    if (msg.method === "ui/notifications/tool-result") show(resultData(msg.params));
+    else if (msg.method === "ui/notifications/host-context-changed") applyContext(msg.params);
+    else if (msg.method === "ui/resource-teardown" && msg.id !== undefined) send({ jsonrpc: "2.0", id: msg.id, result: {} });
+  });
+  ui.save.addEventListener("click", submit);
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => notify("ui/notifications/size-changed",
+      { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })).observe(document.body);
+  }
+  request("ui/initialize", { protocolVersion: "2026-01-26",
+    appInfo: { name: "recallspring-explanation", version: "1" }, appCapabilities: {} })
+    .then((res) => { applyContext(res && res.hostContext); notify("ui/notifications/initialized"); })
+    .catch(() => setStatus("This chat could not open the explanation form. Use the RecallSpring link instead.", true));
+})();
+</script>
+</body>
+</html>

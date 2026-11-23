@@ -1,4 +1,5 @@
 import { Navigate, Outlet, createBrowserRouter, useLocation } from "react-router";
+import { ExplainPage } from "./components/Clarity";
 import { Layout } from "./components/Layout";
 import { AnswerPage, SummaryPage } from "./pages/Answer";
 import { Loading } from "./components/ui";
@@ -81,6 +82,7 @@ export const router = createBrowserRouter([
           { path: "focus", element: <FocusPage /> },
           { path: "answer/:questionId", element: <AnswerPage /> },
           { path: "summary", element: <SummaryPage /> },
+          { path: "explain", element: <ExplainPage /> },
           { path: "history", element: <HistoryPage /> },
           { path: "guide", element: <GuidePage /> },
           { path: "settings", element: <SettingsPage /> },

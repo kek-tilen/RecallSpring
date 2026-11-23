@@ -157,7 +157,7 @@ def test_grades_carry_the_model_openai_reported_and_evidence_is_checked(owner_ap
     }
     fake.rounds = [
         calls(1, ("a1", "get_answer", {"question_id": ids["question_id"]})),
-        calls(2, ("g1", "record_assessment", grade)),
+        calls(2, ("g1", "record_assessments", {"items": [grade]})),
         reply_events("Solid answer. Review tomorrow.", 3),
     ]
     r = send(
@@ -172,7 +172,7 @@ def test_grades_carry_the_model_openai_reported_and_evidence_is_checked(owner_ap
         and read["result"]["answered"]
         and read["result"]["answer_text"] == "Glycolysis: cytoplasm, pyruvate."
     )
-    graded = outputs(fake.bodies()[2])["g1"]["result"]
+    graded = outputs(fake.bodies()[2])["g1"]["result"]["results"][0]
     assert graded["schedule"], graded
     stored = owner_api.get(f"/attempts/{attempt['attempt_id']}").json()["assessments"][0]
     assert stored["provider"] == "chatgpt" and stored["model"] == MODEL and stored["model_reported_by"] == "provider"
@@ -419,5 +419,50 @@ def test_a_study_conversation_sets_up_only_its_own_course(owner_api: Api, fake: 
         reply_events("Only this course.", 4),
     ]
     r = send(owner_api, "I passed chemistry.", conversation_id=r.json()["id"])
-    assert outputs(fake.bodies()[-1])["m1"]["error"] == "other_course"
+    # results and dates are saved in a planning conversation (Chat without a course)
+    assert outputs(fake.bodies()[-1])["m1"]["error"] == "not_in_this_conversation"
     assert next(t for t in _targets() if t.id == saved.id).status == "upcoming"
+
+
+def test_concept_to_clarity_in_a_study_conversation(owner_api: Api, fake: ToolFake) -> None:
+    """C2C (ADR-010): ChatGPT shows the explanation form, reads the learner's saved version and gives feedback on it
+    (not a grade), recorded with the model OpenAI reported."""
+    sign_in(owner_api, fake)
+    ids = owner_api.course_with_question()
+    cid = ids["concept_id"]
+    fake.rounds = [
+        calls(1, ("e1", "open_explanation_form", {"concept_id": cid, "source": "discuss"})),
+        reply_events("Explain it below.", 2),
+    ]
+    r = send(owner_api, "Let me explain glycolysis", course_id=ids["course_id"])
+    assert r.status_code == 200, r.text
+    names = json.dumps(fake.bodies()[0]["tools"])
+    for tool in ("get_explanation", "open_explanation_form", "record_explanation_feedback"):
+        assert tool in names
+    step = r.json()["messages"][0]["tool_calls"][0]
+    assert step["form"] == {"kind": "explanation", "concept_id": cid, "term": "Glycolysis", "source": "discuss"}
+
+    key = str(uuid.uuid4())
+    body = {"text": "Glycolysis runs in the mitochondria.", "source": "discuss", "client_request_id": key}
+    saved = owner_api.post(f"/concepts/{cid}/explanation/versions", body, key=key).json()
+    vid = saved["versions"][0]["id"]
+    feedback = {
+        "version_id": vid,
+        "correct": ["Names glycolysis"],
+        "wrong": ["It runs in the cytoplasm"],
+        "evidence_refs": [ids["section_ids"][0]],
+        "feedback": "Check where it happens.",
+    }
+    fake.rounds = [
+        calls(3, ("g1", "get_explanation", {"concept_id": cid}), ("r1", "record_explanation_feedback", feedback)),
+        reply_events("Here is my feedback.", 4),
+    ]
+    conv = r.json()["id"]
+    r = send(owner_api, "Saved version 1", conversation_id=conv, course_id=ids["course_id"])
+    assert r.status_code == 200, r.text
+    out = outputs(fake.bodies()[-1])
+    assert out["g1"]["result"]["versions"][0]["text"] == "Glycolysis runs in the mitochondria."
+    assert out["r1"]["ok"] and out["r1"]["result"]["dropped_refs"] == 0
+    [fb] = owner_api.get(f"/concepts/{cid}/explanation").json()["versions"][0]["feedback"]
+    assert fb["grader"]["model"] == MODEL and fb["wrong"] == ["It runs in the cytoplasm"]
+    assert "grade" not in fb
