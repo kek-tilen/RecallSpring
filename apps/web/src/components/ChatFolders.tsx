@@ -1,6 +1,6 @@
 /** Chat folders (ADR-012 §4): folders with one level of subfolders, an icon from a fixed set and a colour. */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { request } from "../api";
 import { useCourses } from "../queries";
 import { Confirm, ErrorNote, Modal } from "./ui";
@@ -62,13 +62,15 @@ export function FolderIcon({ icon, color, size = 18 }: { icon: string; color?: s
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      stroke={color ?? "currentColor"}
+      stroke="currentColor"
       strokeWidth={1.8}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
-      className="chat-folder-icon"
+      // The learner's colour goes through CSS, which lightens it on dark themes (styles.css, --folder-lift).
+      className={color ? "chat-folder-icon tinted" : "chat-folder-icon"}
+      style={color ? ({ "--fc": color } as CSSProperties) : undefined}
     >
       {paths.map((d) => (
         <path key={d} d={d} />
@@ -204,7 +206,7 @@ export function FolderDialog<L extends FolderList>({
                   aria-label={c.name}
                   title={c.name}
                   className={color === c.value ? "folder-swatch on" : "folder-swatch"}
-                  style={{ background: c.value }}
+                  style={{ "--fc": c.value } as CSSProperties}
                   onClick={() => setColor(c.value)}
                 />
               ))}

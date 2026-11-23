@@ -1626,6 +1626,7 @@ pre.template {
     --c-green: #0ca30c;
     --c-violet: #9085e9;
     --c-red: #e66767;
+    --folder-lift: 45%;
   }
 }
 
@@ -1643,6 +1644,8 @@ pre.template {
   --c-green: #0ca30c;
   --c-violet: #9085e9;
   --c-red: #e66767;
+  /* Chat folder colours are lightened on dark themes: at least 3:1 on every dark surface (2026-11-23). */
+  --folder-lift: 45%;
 }
 
 .cc-blue {
@@ -2560,6 +2563,20 @@ tr.selected td {
   border: 1px solid var(--border-strong);
   border-radius: 50%;
   cursor: pointer;
+}
+
+/* The learner's folder colour (--fc), lightened on dark themes. */
+.chat-folder-icon.tinted,
+.folder-swatch {
+  --fc-shown: color-mix(in oklab, var(--fc, currentColor), #fff var(--folder-lift, 0%));
+}
+
+.chat-folder-icon.tinted {
+  color: var(--fc-shown);
+}
+
+.folder-swatch:not(.none) {
+  background: var(--fc-shown);
 }
 
 .folder-swatch.none {

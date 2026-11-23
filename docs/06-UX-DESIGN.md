@@ -147,7 +147,8 @@ Implemented (2026-11-21, ADR-008):
   - **Folders** (ADR-012 §4, owner 2026-11-23): a folder button next to `New conversation` creates a folder; each
     folder row opens and closes (remembered on the device, and the folder of the open conversation is always open),
     with `+` for a subfolder and `⋯` for its settings: name, one of 16 icons (only folders have icons), a colour
-    (8 accessible ones, `Default`, or `Custom…`), a course (a new conversation about it goes there when it is the
+    (8 accessible ones, `Default`, or `Custom…`; on dark themes every folder colour is shown lightened by mixing 45%
+    white in OKLab, at least 3:1 on every dark surface), a course (a new conversation about it goes there when it is the
     only folder linked to the course), `Inside` (top level or one top-level folder; no deeper) and `Pin to the top`.
     Folders are sorted alphabetically, pinned first; counts include subfolders. Conversations without a folder are
     listed under `No folder`; a search lists matches from every folder with the folder's name. `Move to…` in a
