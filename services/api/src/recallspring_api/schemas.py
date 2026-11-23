@@ -33,6 +33,7 @@ class UserOut(_Out):
     timezone: str
     assistant: AssistantChoice | None = None
     assistant_mix: list[AssistantKey] = []
+    greeting_name: str | None = None
 
 
 class FirstRunIn(BaseModel):
@@ -50,6 +51,8 @@ class ProfileIn(BaseModel):
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
     assistant: AssistantChoice | None = None
     assistant_mix: list[AssistantKey] | None = Field(default=None, max_length=4)
+    # What Home calls the learner; null or blank = no name ("Good evening").
+    greeting_name: str | None = Field(default=None, max_length=40)
 
 
 class SessionOut(BaseModel):
@@ -213,6 +216,12 @@ class ChatGptMaterialIn(BaseModel):
 
 class PreferencesIn(BaseModel):
     text: str = Field(max_length=8000)
+
+
+class ProfileSourceIn(BaseModel):
+    """Which file of the course the exam-style analysis came from; null unlinks it."""
+
+    source_id: uuid.UUID | None
 
 
 class SourcesMoveIn(BaseModel):

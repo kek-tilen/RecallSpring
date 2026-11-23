@@ -1,15 +1,16 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useAssistant, type AssistantWords } from "../assistant";
 import { EventList } from "./History";
 import { Upload } from "../components/Upload";
-import { Async, Card, Empty, PageHead, StudyChip } from "../components/ui";
-import { WeekCard } from "./Week";
-import { dateLabel, longToday, plural } from "../format";
-import { useDashboard, useFocusSummary } from "../queries";
+import { Async, Card, Empty, StudyChip } from "../components/ui";
+import { longToday, nextDays, plural, shortDay } from "../format";
+import { useDashboard, useFocusSummary, useSession } from "../queries";
 import { usePomodoro } from "../components/Pomodoro";
-import { FocusTime } from "./Focus";
-import type { AttentionItem, PlanItem, TargetCapacity } from "../types";
+import type { AttentionItem, Dashboard, FocusSummary, PlanItem, TargetCapacity } from "../types";
+
+// Home (ADR-012, owner 2026-11-23: variants A1 + A2): a calm two-column top (greeting, one sentence, one next step,
+// the week) and "Today in detail" below, open by default. No streaks or other pressure counters.
 
 const CATEGORY_TONE: Record<PlanItem["category"], string> = {
   "Learn next": "chip solid",
@@ -99,201 +100,369 @@ function continueHint(a: AssistantWords, course: string): ReactNode {
   }
 }
 
+/** Good morning / afternoon / evening by the learner's clock, with the name they chose in Settings (if any). */
+export function greeting(hour: number, name?: string | null): string {
+  const base = hour >= 5 && hour < 12 ? "Good morning" : hour >= 12 && hour < 18 ? "Good afternoon" : "Good evening";
+  return name?.trim() ? `${base}, ${name.trim()}` : base;
+}
+
+function inDays(n: number): string {
+  if (n <= 0) return "today";
+  if (n === 1) return "tomorrow";
+  return `in ${n} days`;
+}
+
+/** "today", "tomorrow" or "Mon 30 Nov". */
+function when(t: TargetCapacity): string {
+  return t.days_left <= 1 ? inDays(t.days_left) : shortDay(t.due_date);
+}
+
+/** One sentence about today: the nearest exam or midterm and today's work. */
+export function todaySentence(d: Dashboard): string {
+  const next = [...d.plan.targets].filter((t) => t.days_left >= 0).sort((x, y) => x.days_left - y.days_left)[0];
+  const exam = next ? `${next.target} in ${next.course_title} is ${inDays(next.days_left)}.` : "";
+  const work =
+    d.plan.items.length === 0
+      ? "Nothing is planned for today, so you're free to explore."
+      : `Today's plan is about ${d.plan.planned_minutes} minutes.`;
+  return exam ? `${exam} ${work}` : work;
+}
+
+const NEXT_VERB: Record<PlanItem["category"], string> = {
+  "Learn next": "learn",
+  "Review due": "review",
+  Strengthen: "strengthen",
+  Practice: "practise",
+  Maintain: "keep fresh",
+};
+
+const SHORT_TAG: Record<PlanItem["category"], string> = {
+  "Learn next": "Learn",
+  "Review due": "Review",
+  Strengthen: "Strengthen",
+  Practice: "Practise",
+  Maintain: "Keep fresh",
+};
+
+/** The one next step: a line of text and one button. */
+function NextStep({ item, a }: { item: PlanItem; a: AssistantWords }) {
+  const button =
+    item.category === "Review due"
+      ? { to: "/review", label: "Start reviews" }
+      : a.key === "chatgpt"
+        ? { to: "/chat", label: "Open Chat" }
+        : { to: `/concepts/${item.concept_id}`, label: "Open concept" };
+  return (
+    <section className="home-next" aria-label="Next step">
+      <p className="home-next-text">
+        Next: {NEXT_VERB[item.category]} <Link to={`/concepts/${item.concept_id}`}>{item.term}</Link>
+        <span className="muted"> · {item.course_title}</span>
+      </p>
+      {item.category !== "Review due" && <p className="small muted">{continueHint(a, item.course_title)}</p>}
+      <div>
+        <Link to={button.to} className="btn primary">
+          {button.label}
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+/** The two plan items after the next step, quietly. */
+function ThenToday({ items }: { items: PlanItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="home-then" aria-labelledby="home-then-title">
+      <h2 id="home-then-title">Then today</h2>
+      <ul>
+        {items.map((i) => (
+          <li key={`${i.category}-${i.concept_id}`}>
+            <span className={CATEGORY_TONE[i.category]}>{SHORT_TAG[i.category]}</span>
+            <Link to={`/concepts/${i.concept_id}`}>{i.term}</Link>
+            <span className="muted small home-then-min">{i.estimated_minutes} min</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" });
+
+/** The next seven days from today: dates, reviews due today, minutes focused. */
+function WeekPanel({ d, focus }: { d: Dashboard; focus: FocusSummary | undefined }) {
+  const days = nextDays(7);
+  const soon = d.plan.targets.filter((t) => t.days_left >= 0 && t.days_left <= 7).sort((x, y) => x.days_left - y.days_left);
+  const due = d.plan.items.filter((i) => i.category === "Review due").length;
+  return (
+    <section className="card home-week" aria-labelledby="home-week-title">
+      <div className="home-card-head">
+        <h2 id="home-week-title">This week</h2>
+        <Link to="/week" className="small">
+          Weekly review
+        </Link>
+      </div>
+      <ol className="home-strip">
+        {days.map((day, i) => {
+          const dates = d.plan.targets.filter((t) => t.due_date.slice(0, 10) === day);
+          const label = `${shortDay(day)}${dates.length ? `: ${dates.map((t) => `${t.target}, ${t.course_title}`).join("; ")}` : ""}`;
+          return (
+            <li key={day} className={i === 0 ? "today" : undefined} aria-label={label} title={label}>
+              <span className="home-strip-wd" aria-hidden="true">
+                {WEEKDAY.format(new Date(`${day}T00:00:00Z`)).slice(0, 2)}
+              </span>
+              <span className="home-strip-d" aria-hidden="true">
+                {Number(day.slice(8, 10))}
+              </span>
+              <span className="home-strip-dot" aria-hidden="true">
+                {dates.length > 0 ? "●" : ""}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <ul className="home-rows">
+        {soon.map((t) => (
+          <li key={t.target_id}>
+            <Link to={`/courses/${t.course_id}?tab=targets`}>
+              {t.target} · {t.course_title}
+            </Link>
+            <span className="muted">{when(t)}</span>
+          </li>
+        ))}
+        <li>
+          <Link to="/review">Reviews today</Link>
+          <span className="muted">{due}</span>
+        </li>
+        <li>
+          <Link to="/focus">Focused this week</Link>
+          <span className="muted">{focus ? `${focus.week_minutes} min` : "–"}</span>
+        </li>
+      </ul>
+    </section>
+  );
+}
+
+const DETAIL_KEY = "rs.home.detail";
+
+/** "Today in detail": open unless the learner hid it (remembered on this device); mounted only when open. */
+function Detail({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(DETAIL_KEY) !== "hidden";
+    } catch {
+      return true;
+    }
+  });
+  const toggle = () => {
+    const now = !open;
+    setOpen(now);
+    try {
+      localStorage.setItem(DETAIL_KEY, now ? "open" : "hidden");
+    } catch {
+      /* storage blocked: not remembered */
+    }
+  };
+  return (
+    <section className="home-detail" aria-labelledby="home-detail-title">
+      <div className="home-detail-head">
+        <h2 id="home-detail-title">Today in detail</h2>
+        <button type="button" className="btn ghost small" aria-expanded={open} aria-controls="home-detail-body" onClick={toggle}>
+          {open ? "Hide" : "Show"}
+        </button>
+      </div>
+      {open && (
+        <div id="home-detail-body" className="home-detail-body">
+          {children}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PlanCard({ d }: { d: Dashboard }) {
+  return (
+    <Card title="Today's plan" meta={`${d.plan.planned_minutes} of ${d.plan.available_minutes} min`}>
+      {d.plan.message && <p className="notice small" style={{ marginBottom: 12 }}>{d.plan.message}</p>}
+      {d.plan.focus && (
+        <p className="notice small" style={{ marginBottom: 12 }}>
+          {d.plan.focus.message}
+        </p>
+      )}
+      {d.plan.interests && !d.plan.focus && (
+        <p className="notice small muted" style={{ marginBottom: 12 }}>
+          {d.plan.interests.message} <Link to="/settings">Change in Settings</Link>
+        </p>
+      )}
+      {d.plan.items.length === 0 ? (
+        <p className="muted">You're caught up. Continue a topic or browse your library.</p>
+      ) : (
+        <ul className="list">
+          {d.plan.items.map((item) => (
+            <li key={`${item.category}-${item.concept_id}`} className="plan-item">
+              <span className={CATEGORY_TONE[item.category]}>{item.category}</span>
+              <div>
+                <div className="row">
+                  <Link to={`/concepts/${item.concept_id}`} style={{ fontWeight: 600 }}>
+                    {item.term}
+                  </Link>
+                  <StudyChip status={item.study_status} />
+                  {item.focus ? (
+                    <span className="chip solid">Focus</span>
+                  ) : (
+                    item.course_kind === "interest" && <span className="chip">Interest</span>
+                  )}
+                </div>
+                <div className="why">
+                  {item.course_title}
+                  {item.target && ` · ${item.target}`} — {item.why_selected}
+                </div>
+                {item.sections.length > 0 && (
+                  <div className="tiny muted">{item.sections.map((s) => `${s.filename} ${s.citation_label}`).join(" · ")}</div>
+                )}
+              </div>
+              <div className="plan-side">
+                <span className="muted small">{item.estimated_minutes} min</span>
+                <StartFocus courseId={item.course_id} course={item.course_title} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {d.plan.note && (
+        <p className="tiny muted" style={{ marginTop: 12 }}>
+          {d.plan.note}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function ExamsCard({ targets }: { targets: TargetCapacity[] }) {
+  return (
+    <Card title="Exams and midterms" action={<Link to="/exams" className="small">All</Link>}>
+      {targets.length === 0 ? (
+        <p className="muted small">No dates yet. Your assistant adds them when you plan a course.</p>
+      ) : (
+        <ul className="list">
+          {targets.map((t) => (
+            <li key={t.target_id} className="stack" style={{ gap: 4 }}>
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <Link to={`/courses/${t.course_id}?tab=targets`} style={{ fontWeight: 600 }}>
+                  {t.course_title}
+                </Link>
+                <span className={CAPACITY[t.status].tone}>{CAPACITY[t.status].label}</span>
+              </div>
+              <div className="small muted">
+                {t.target} · {when(t)} · {plural(t.concepts_in_scope, "concept")}
+              </div>
+              <div className="small">{t.message}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function AttentionCard({ items }: { items: AttentionItem[] }) {
+  return (
+    <Card title="Needs attention">
+      {items.length === 0 ? (
+        <p className="muted small">Nothing needs you right now.</p>
+      ) : (
+        <ul className="list">
+          {items.map((a, i) => (
+            <li key={`${a.kind}-${a.id ?? i}`}>
+              <Link to={attentionLink(a)} style={{ fontWeight: 600 }}>
+                {a.title}
+              </Link>
+              {a.text && <div className="small muted">{a.text}</div>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+const HOLDS = [
+  ["courses", "course", "/courses"],
+  ["sources", "material", "/library"],
+  ["concepts", "concept", "/courses"],
+  ["notes", "note", "/notes"],
+  ["answers", "answer", "/history"],
+  ["simulations", "simulation", "/simulations"],
+] as const;
+
+function Holds({ counts }: { counts: Dashboard["counts"] }) {
+  return (
+    <p className="home-holds small muted">
+      What RecallSpring holds:{" "}
+      {HOLDS.map(([k, word, to], i) => (
+        <span key={k}>
+          {i > 0 && " · "}
+          <Link to={to}>{plural(counts[k], word)}</Link>
+        </span>
+      ))}
+    </p>
+  );
+}
+
 export function HomePage() {
   const q = useDashboard();
   const a = useAssistant();
+  const focus = useFocusSummary();
+  const name = useSession().data?.user.greeting_name;
   return (
     <div className="page">
       <Async q={q} lines={6}>
         {(d) => {
-          const learn = d.plan.items.find((i) => i.category === "Learn next") ?? d.plan.items[0];
-          const due = d.plan.items.filter((i) => i.category === "Review due");
+          const started = d.counts.courses > 0;
+          const next = d.plan.items[0];
           return (
             <>
-              <PageHead
-                title="Today"
-                sub={`${longToday()} · ${d.plan.planned_minutes} of ${d.plan.available_minutes} minutes planned`}
-              />
+              <div className={started ? "home-top" : "home-top single"}>
+                <header className="home-hello">
+                  <p className="home-date">{longToday()}</p>
+                  <h1 className="home-greeting">{greeting(new Date().getHours(), name)}</h1>
+                  {started && <p className="home-sentence">{todaySentence(d)}</p>}
+                  {a.key === null && started && (
+                    <p className="home-quiet small">
+                      Which assistant do you study with? <Link to="/welcome">Choose it</Link>
+                    </p>
+                  )}
+                  {started && next && <NextStep item={next} a={a} />}
+                  {started && <ThenToday items={d.plan.items.slice(1, 3)} />}
+                </header>
+                {started && <WeekPanel d={d} focus={focus.data} />}
+              </div>
 
-              {a.key === null && d.counts.courses > 0 && (
-                <p className="notice small" style={{ marginBottom: 16 }}>
-                  Which assistant do you study with? <Link to="/welcome">Choose it</Link> for setup steps and tips that fit.
-                </p>
-              )}
-              {d.counts.courses === 0 ? (
-                <Empty title="Add your first course">{firstCourseHint(a)}</Empty>
-              ) : (
+              {!started && <Empty title="Add your first course">{firstCourseHint(a)}</Empty>}
+
+              <Detail>
+                {started && (
+                  <div className="home-detail-split">
+                    <PlanCard d={d} />
+                    <ExamsCard targets={d.plan.targets} />
+                  </div>
+                )}
                 <div className="grid cols-3">
-                  <Card title="Continue learning" tint>
-                    {learn ? (
-                      <div className="stack">
-                        <div>
-                          <Link to={`/concepts/${learn.concept_id}`} style={{ fontWeight: 650 }}>
-                            {learn.term}
-                          </Link>
-                          <div className="muted small">{learn.course_title}</div>
-                        </div>
-                        <p className="small muted">{learn.why_selected}</p>
-                        <p className="small">{continueHint(a, learn.course_title)}</p>
-                      </div>
-                    ) : (
-                      <p className="muted small">Nothing new is planned for today.</p>
-                    )}
+                  <AttentionCard items={d.attention} />
+                  <Card title="Recent activity" action={<Link to="/history" className="small">All</Link>}>
+                    <EventList rows={d.recent.slice(0, 4)} compact />
                   </Card>
-                  <Card title="Review knowledge" tint>
-                    <div className="stack">
-                      <div className="stat" style={{ background: "var(--bg)" }}>
-                        <div className="n">{due.length}</div>
-                        <div className="l">{due.length === 1 ? "concept due today" : "concepts due today"}</div>
-                      </div>
-                      <Link to="/review" className="btn">
-                        See reviews
-                      </Link>
-                    </div>
-                  </Card>
-                  <Card title="Add material" tint>
+                  <Card title="Add material">
                     <Upload />
                   </Card>
                 </div>
-              )}
-
-              <div className="split">
-                <div className="stack" style={{ gap: 20 }}>
-                  <Card title="Today's plan" meta={`${d.plan.planned_minutes} min`}>
-                    {d.plan.message && <p className="notice small" style={{ marginBottom: 12 }}>{d.plan.message}</p>}
-                    {d.plan.focus && (
-                      <p className="notice small" style={{ marginBottom: 12 }}>
-                        {d.plan.focus.message}
-                      </p>
-                    )}
-                    {d.plan.interests && !d.plan.focus && (
-                      <p className="notice small muted" style={{ marginBottom: 12 }}>
-                        {d.plan.interests.message}{" "}
-                        <Link to="/settings">Change in Settings</Link>
-                      </p>
-                    )}
-                    {d.plan.items.length === 0 ? (
-                      <p className="muted">You're caught up. Continue a topic or browse your library.</p>
-                    ) : (
-                      <ul className="list">
-                        {d.plan.items.map((item) => (
-                          <li key={`${item.category}-${item.concept_id}`} className="plan-item">
-                            <span className={CATEGORY_TONE[item.category]}>{item.category}</span>
-                            <div>
-                              <div className="row">
-                                <Link to={`/concepts/${item.concept_id}`} style={{ fontWeight: 600 }}>
-                                  {item.term}
-                                </Link>
-                                <StudyChip status={item.study_status} />
-                                {item.focus ? (
-                                  <span className="chip solid">Focus</span>
-                                ) : (
-                                  item.course_kind === "interest" && <span className="chip">Interest</span>
-                                )}
-                              </div>
-                              <div className="why">
-                                {item.course_title}
-                                {item.target && ` · ${item.target}`} — {item.why_selected}
-                              </div>
-                              {item.sections.length > 0 && (
-                                <div className="tiny muted">
-                                  {item.sections.map((s) => `${s.filename} ${s.citation_label}`).join(" · ")}
-                                </div>
-                              )}
-                            </div>
-                            <div className="plan-side">
-                              <span className="muted small">{item.estimated_minutes} min</span>
-                              <StartFocus courseId={item.course_id} course={item.course_title} />
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <p className="tiny muted" style={{ marginTop: 12 }}>
-                      {d.plan.note}
-                    </p>
-                  </Card>
-
-                  {d.plan.targets.length > 0 && (
-                    <Card title="Exams and midterms">
-                      <ul className="list">
-                        {d.plan.targets.map((t) => (
-                          <li key={t.target_id} className="stack" style={{ gap: 4 }}>
-                            <div className="row" style={{ justifyContent: "space-between" }}>
-                              <Link to={`/courses/${t.course_id}?tab=targets`} style={{ fontWeight: 600 }}>
-                                {t.target} · {t.course_title}
-                              </Link>
-                              <span className={CAPACITY[t.status].tone}>{CAPACITY[t.status].label}</span>
-                            </div>
-                            <div className="small muted">
-                              {dateLabel(t.due_date)} · {plural(t.days_left, "day")} left · {plural(t.concepts_in_scope, "concept")} in scope
-                            </div>
-                            <div className="small">{t.message}</div>
-                          </li>
-                        ))}
-                      </ul>
-                    </Card>
-                  )}
-                </div>
-
-                <div className="stack" style={{ gap: 20 }}>
-                  <Card title="Needs attention">
-                    {d.attention.length === 0 ? (
-                      <p className="muted small">Nothing needs you right now.</p>
-                    ) : (
-                      <ul className="list">
-                        {d.attention.map((a, i) => (
-                          <li key={`${a.kind}-${a.id ?? i}`}>
-                            <Link to={attentionLink(a)} style={{ fontWeight: 600 }}>
-                              {a.title}
-                            </Link>
-                            {a.text && <div className="small muted">{a.text}</div>}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </Card>
-                  <WeekCard />
-                  <FocusCard />
-                  <Card title="What RecallSpring holds">
-                    <div className="stats">
-                      {(
-                        [
-                          ["courses", "Courses", "/courses"],
-                          ["sources", "Materials", "/library"],
-                          ["concepts", "Concepts", "/courses"],
-                          ["notes", "Notes", "/notes"],
-                          ["answers", "Answers", "/history"],
-                          ["simulations", "Simulations", "/simulations"],
-                        ] as const
-                      ).map(([k, label, to]) => (
-                        <Link key={k} to={to} className="stat" style={{ textDecoration: "none", color: "inherit" }}>
-                          <div className="n">{d.counts[k]}</div>
-                          <div className="l">{label}</div>
-                        </Link>
-                      ))}
-                    </div>
-                  </Card>
-                  <Card title="Recent activity" action={<Link to="/history" className="small">All history</Link>}>
-                    <EventList rows={d.recent} compact />
-                  </Card>
-                </div>
-              </div>
+                <Holds counts={d.counts} />
+              </Detail>
             </>
           );
         }}
       </Async>
     </div>
-  );
-}
-
-function FocusCard() {
-  const summary = useFocusSummary();
-  if (!summary.data || (summary.data.week_minutes === 0 && summary.data.recent.length === 0)) return null;
-  return (
-    <Card title="Focus time" action={<Link to="/focus" className="small">Open Focus</Link>}>
-      <FocusTime s={summary.data} compact />
-    </Card>
   );
 }
 

@@ -46,6 +46,11 @@ Start of every study session in a course:
    kolokvij, 2nd kolokvij, or the exam - whole course or only a part because something is already passed), the
    date, from which material to which, whether they have an old kolokvij, and any specifics. Map the answer to the
    material (get_course_outline), confirm it, then set_study_target. Analyse an old paper with record_exam_profile.
+   OLD PAPERS FIRST IN RECALLSPRING: the learner wants to see the old paper next to its analysis. Before
+   record_exam_profile, make sure the paper is the course's material: import_file it as past_paper when it is a
+   file or folder on this computer; when it was only attached to the chat, ask the learner to upload the originals
+   under the course as Past paper. Then pass its source_id. If it cannot be added, analyse it anyway without
+   source_id and tell the learner that RecallSpring has no copy of the paper.
 2. get_study_plan (course_id for one course, none for an overview across courses) and propose a session within the
    learner's available time. Passed material is maintenance only; the active target has priority. When the exam is
    within about two weeks, also call get_exam_readiness (course_id) and build the session on its next_steps:
@@ -1065,9 +1070,10 @@ async def record_exam_profile(
     source_id: str | None = None,
     model_name: str | None = None,
 ) -> str:
-    """After analysing an old kolokvij or exam (an imported source, or a paper the learner attached to the chat):
-    record question types with their shares, the Bloom mix, topic weights (link concept_id when you can) and a
-    few short paraphrased example items. Used to match the question style and to prioritise topics."""
+    """After analysing an old kolokvij or exam: record question types with their shares, the Bloom mix, topic
+    weights (link concept_id when you can) and a few short paraphrased example items. Used to match the question
+    style and to prioritise topics. Pass source_id: the paper imported as past_paper in this exam's course (the
+    learner opens it from the analysis). Without it the analysis says RecallSpring has no copy of the paper."""
     payload = {
         "item_types": [t.model_dump() for t in item_types],
         "topic_weights": [w.model_dump() for w in topic_weights],

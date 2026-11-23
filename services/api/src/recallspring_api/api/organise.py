@@ -17,7 +17,7 @@ from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
 from ..models import Course, CourseGroup, User
-from ..schemas import ArchiveIn, CoursePatch, GroupIn, GroupPatch, MergeIn, TargetIn, TargetUpdateIn
+from ..schemas import ArchiveIn, CoursePatch, GroupIn, GroupPatch, MergeIn, ProfileSourceIn, TargetIn, TargetUpdateIn
 from ..services import interests, overview, readiness
 from ..services import targets as target_svc
 from ..services.events import audit
@@ -260,6 +260,17 @@ def update_target(
     if replay := replay_if_seen(db, ctx, payload):
         return replay
     target = target_svc.update_target(db, ctx.user, target_id, payload, ctx.request_id, origin="web")
+    return commit_with_response(db, ctx, payload, 200, target_view(db, target, _today(ctx.user)))
+
+
+@router.put("/targets/{target_id}/profile/source")
+def link_profile_source(
+    target_id: uuid.UUID, payload: ProfileSourceIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """The learner says which old paper (now in the course's material) the exam-style analysis came from."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    target = target_svc.link_profile_source(db, ctx.user, target_id, payload.source_id, ctx.request_id)
     return commit_with_response(db, ctx, payload, 200, target_view(db, target, _today(ctx.user)))
 
 

@@ -1,16 +1,16 @@
 import { SavedPhotos } from "../components/Photos";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import { get } from "../api";
+import { get, request } from "../api";
 import { MathText } from "../components/Markdown";
-import { Async, BandChip, BandMeter, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip, StudyMeter } from "../components/ui";
+import { Async, BandChip, BandMeter, Card, Difficulty, Empty, ErrorNote, GradeChip, PageHead, StudyChip, StudyMeter } from "../components/ui";
 import { CourseDialog, CourseDot, FocusControl, groupPath } from "../components/organise";
 import { TargetDialog } from "../components/TargetDialog";
 import { CheckChip, CheckFirstPanel, PracticeLimitControl } from "../components/CheckFirst";
 import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
 import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, gradeLabel, gradedBy, plural, relativeDay } from "../format";
-import { useCourseOverview, useGroups } from "../queries";
+import { keys, useCourseOverview, useGroups, useSources } from "../queries";
 import type { AttemptDetail, AttemptRow, ConceptRow, CourseOverview, StudyStatus, Target, TargetProfile } from "../types";
 import { NewNoteButton, NoteList } from "./Notes";
 import { FolderBrowser } from "./Library";
@@ -128,6 +128,7 @@ export function CoursePage() {
                   courseId={o.course.id}
                   folderId={params.get("folder")}
                   href={(id) => `?tab=materials${id ? `&folder=${id}` : ""}`}
+                  addCategory={params.get("add") === "past_paper" ? "past_paper" : undefined}
                 />
               )}
               {tab === "notes" && (
@@ -260,6 +261,84 @@ function TopicWeights({ value }: { value: TargetProfile["topic_weights"] }) {
 
 const GOAL: Record<string, string> = { long_term: "Remember it long-term", exam_only: "Only for this exam" };
 
+/** Where the old paper behind an exam-style analysis is, or how to bring it into RecallSpring and link it. */
+export function OldPaper({ targetId, courseId, profile }: { targetId: string; courseId: string; profile: TargetProfile }) {
+  const sources = useSources(courseId);
+  const qc = useQueryClient();
+  const [choice, setChoice] = useState("");
+  const link = useMutation({
+    mutationFn: (sourceId: string | null) =>
+      request(`/targets/${targetId}/profile/source`, { method: "PUT", json: { source_id: sourceId } }),
+    onSuccess: () => {
+      setChoice("");
+      void qc.invalidateQueries({ queryKey: keys.course(courseId) });
+    },
+  });
+  const papers = (sources.data ?? []).filter((s) => s.category === "past_paper" && !s.hidden);
+  const others = (sources.data ?? []).filter((s) => s.category !== "past_paper" && !s.hidden);
+  const linkable = [...papers, ...others];
+  if (profile.source && !profile.source.removed) {
+    return (
+      <span className="row" style={{ gap: 10 }}>
+        <Link to={`/library/${profile.source.id}`}>{profile.source.filename}</Link>
+        <button type="button" className="btn ghost small" disabled={link.isPending} onClick={() => link.mutate(null)}>
+          Unlink
+        </button>
+        {link.error && <ErrorNote error={link.error} />}
+      </span>
+    );
+  }
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <span className="muted">
+        {profile.source?.removed
+          ? `The old paper (${profile.source.filename}) was removed from your material.`
+          : "The old paper was only shared in a chat, so RecallSpring has no copy of it."}{" "}
+        <Link to={`/courses/${courseId}?tab=materials&add=past_paper`}>Add old paper</Link>
+      </span>
+      {linkable.length > 0 && (
+        <form
+          className="row"
+          style={{ gap: 8 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (choice) link.mutate(choice);
+          }}
+        >
+          <label className="small">
+            Analysed from{" "}
+            <select value={choice} onChange={(e) => setChoice(e.target.value)}>
+              <option value="">Choose a file…</option>
+              {papers.length > 0 && (
+                <optgroup label="Past papers">
+                  {papers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.filename}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {others.length > 0 && (
+                <optgroup label="Other material">
+                  {others.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.filename}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </label>
+          <button type="submit" className="btn small" disabled={!choice || link.isPending}>
+            Link
+          </button>
+          {link.error && <ErrorNote error={link.error} />}
+        </form>
+      )}
+    </div>
+  );
+}
+
 function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; activeId: string | null; courseId: string }) {
   const [editing, setEditing] = useState<Target | null>(null);
   const [adding, setAdding] = useState(false);
@@ -372,6 +451,10 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
                 <summary style={{ cursor: "pointer", fontWeight: 600 }}>Exam style from an old paper</summary>
                 <div className="stack" style={{ marginTop: 10 }}>
                   <dl className="kv">
+                    <dt>Old paper</dt>
+                    <dd>
+                      <OldPaper targetId={t.id} courseId={courseId} profile={t.profile} />
+                    </dd>
                     <dt>Question types</dt>
                     <dd>
                       <ItemTypes value={t.profile.item_types} />

@@ -103,15 +103,18 @@ export function Upload({
   courseId: fixedCourse,
   folderId,
   onImported,
+  category: startCategory = "material",
 }: {
   courseId?: string;
   folderId?: string | null;
+  /** What new files are filed as at first (e.g. "past_paper" from "Add old paper" on an exam). */
+  category?: MaterialCategory;
   /** Called after an upload with what was saved and what was left out (Chat adds the files to a conversation). */
   onImported?: (result: ImportResult) => void;
 }) {
   const courses = useCourses();
   const [courseId, setCourseId] = useState(fixedCourse ?? "");
-  const [category, setCategory] = useState<MaterialCategory>("material");
+  const [category, setCategory] = useState<MaterialCategory>(startCategory);
   const [over, setOver] = useState(false);
   const [done, setDone] = useState<ImportResult | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);

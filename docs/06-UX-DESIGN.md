@@ -43,13 +43,32 @@ All text/action contrast must meet WCAG 2.2 AA; change tones as needed.
 **Desktop (optional left rail)**: `Home`, `Courses`, `Study`, `Review`, `Insights`, `Library`, `Settings`. The rail can be hidden (button next to the logo or `Ctrl+\`, remembered on the device in `rs-rail`) so the page uses the whole width; a small button at the top left brings it back and takes the keyboard focus. On phones the rail is a top bar and cannot be hidden.  
 **Mobile** (deferred — desktop-first by owner decision; keep layouts responsive where cheap): bottom nav with `Home`, `Study`, `Review`, `Library` + overflow `More`; keyboard shortcuts not required for core use.
 
-### Home dashboard: the three obvious actions
+### Exams that are behind the learner (owner 2026-11-23)
 
-1. **Continue learning** (last session/topic).
-2. **Review knowledge** (due count + honest estimate).
-3. **Add material** (drag-and-drop zone; click-to-browse fallback).
+- Marking an exam **Passed** or **Cancelled** when its course is in focus and has no other exam coming up asks: "<course> is in focus until <date>. … End the focus now?" with `Keep until <date>` and `End focus`. Failed does not ask (a retake usually follows). Ending it is the same audited change as `End focus` on the course.
+- A course card with no exam coming up shows the latest one behind the learner ("1. Kolokvij on 23 Nov · passed · no exam coming up"; failed reads "not passed yet", a date gone without a result "result not recorded") instead of "No exam or midterm set yet".
 
-Below: `Today's plan` with explainable 2–5 tasks, `Needs attention` and a brief progress snapshot. Include quota status only when relevant; never interrupt learner with admin chores.
+### Old paper next to its analysis (owner 2026-11-23)
+
+An exam's "Exam style from an old paper" starts with **Old paper**: the linked file (opens in the Library viewer, `Unlink`), or "The old paper was only shared in a chat, so RecallSpring has no copy of it." with `Add old paper` (the course's Materials with the upload set to Past papers and scrolled into view) and, when the course has files, "Analysed from [file] Link" (past papers first). Linking changes only the link, never the analysis.
+
+### Home: calm first (ADR-012, variants A1 + A2, owner 2026-11-23)
+
+Typography first, no streaks or other pressure counters.
+
+- **Top, two columns** (one column below 900 px). Left: the date, a greeting by time of day ("Good evening", or "Good evening, <name>"
+  with the name set in Settings → Profile, "What should Home call you?"; none by default), one sentence about
+  today (the nearest exam or midterm and about how many minutes are planned), a quiet "Which assistant…" line while
+  none is chosen, **one next step** (the first plan item as text, the assistant hint except for reviews, and one
+  button: `Start reviews`, `Open Chat` for ChatGPT, else `Open concept`) and "Then today" with the next two items.
+  Right, **This week**: a strip of the next seven days (today marked, a dot on days with an exam or midterm), the
+  dates within seven days ("today", "tomorrow", "Mon 30 Nov"), reviews due today, minutes focused this week, and a
+  link to the weekly review.
+- **Today in detail**, open by default; `Hide` / `Show` is remembered on this device and a hidden section loads
+  nothing: today's plan with `Start focus` next to exams and midterms (status On track / Tight / At risk), then
+  Needs attention, recent activity and Add material, and one line with what RecallSpring holds.
+- Before the first course: the greeting, the first-course hint, then Today in detail.
+Include quota status only when relevant; never interrupt the learner with admin chores.
 
 ### Study Workspace
 
@@ -106,6 +125,7 @@ Implemented (2026-11-21, ADR-008):
 
 - **Two ways to browse.** *By course* groups material automatically: university › semester › course, then kind (Material, Notes, Exercises, Past papers, Photos, Chats). *Folders* shows the learner's own folders inside a course, nested up to five levels. Folders are optional: nothing has to be filed, and material without a folder sits at the course's top level. A breadcrumb, a filter by kind and search work in both views.
 - **Folders:** new, rename, move, archive and remove (only when empty; soft delete, audited). Files are moved with a checkbox selection and "Move to…". Upload goes into the folder you are in. A dropped or picked **folder** keeps its sub-folders, so does a **.zip** (up to 500 files at a time). Deeper levels are joined into one name ("Week 3 - Lab - Raw"), and anything skipped is listed with the reason.
+- **Counts include subfolders** (owner 2026-11-23): `All` and each kind count every file under the current place, subfolders included (folders nest at most 5 levels). Without a filter the list shows this level only, with one quiet line when all files are in the folders above; picking a kind (e.g. Past papers) lists matching files from every subfolder with a Folder column.
 - **Archived** (`/library/archived`, linked from Library, Courses and the course page): one page for everything archived, grouped as Semesters and other groups, Courses, Folders and Files. Each has a **Restore** button and shows when it was archived. Archived material is hidden from the library and from search (Claude's course outline marks it hidden), but kept and still citable.
 - **Move in** (`/library/import`, the Library's "Move in" link) brings over what the learner did in ChatGPT, in three parts:
   1. *Your instructions and memory:* paste custom instructions and saved memories into **Study preferences**. Claude reads them at the start of a session. When an export contains them, they are offered as a suggestion; nothing is saved until the learner presses Save.

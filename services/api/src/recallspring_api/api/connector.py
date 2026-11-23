@@ -827,7 +827,9 @@ def record_profile(
     if target is None or target.user_id != ctx.user.id or target.deleted_at is not None:
         raise ApiError(404, "not_found", "Study target not found.")
     if payload.source_id is not None:
-        owned(db, Source, payload.source_id, ctx.user.id)
+        paper = owned(db, Source, payload.source_id, ctx.user.id)
+        if paper.course_id != target.course_id:
+            raise ApiError(422, "source_not_in_course", "The old paper must be material of this exam's course.")
     for w in payload.topic_weights:
         if w.concept_id is not None:
             concept = db.get(Concept, w.concept_id)

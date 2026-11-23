@@ -629,12 +629,19 @@ def courses_summary(db: Session, user: User) -> list[dict[str, Any]]:
     ):
         view = course_overview(db, user, course)
         active = next((t for t in view["targets"] if t["id"] == view["active_target_id"]), None)
+        # With nothing coming up, the most recent exam that is behind the learner (passed, failed, cancelled or its
+        # date gone), so the card does not read as if there never was one (owner 2026-11-23).
+        behind = [t for t in view["targets"] if t["status"] != "upcoming" or t["days_left"] < 0]
+        last = max(behind, key=lambda t: t["due_date"]) if behind and not active else None
         out.append(
             {
                 **view["course"],
                 "group_path": group_path(db, course.group_id),
                 "active_target": {k: active[k] for k in ("id", "kind", "name", "due_date", "days_left", "status")}
                 if active
+                else None,
+                "last_target": {k: last[k] for k in ("id", "kind", "name", "due_date", "days_left", "status")}
+                if last
                 else None,
                 "progress": view["progress"],
                 "sources": len(view["sources"]),

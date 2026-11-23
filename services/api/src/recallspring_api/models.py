@@ -98,6 +98,8 @@ class User(Base):
     # steps depend on it; every assistant keeps working.
     assistant: Mapped[str | None] = mapped_column(String(20))
     assistant_mix: Mapped[list[Any]] = _json_list()
+    # What Home calls the learner ("Good evening, <name>"; migration 0026, ADR-012); None = no name (the default).
+    greeting_name: Mapped[str | None] = mapped_column(String(40))
     # Which kinds of practice suggestion the learner wants (ADR-010), e.g. {"exam_answer": false}; missing = on.
     practice_suggestions: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict

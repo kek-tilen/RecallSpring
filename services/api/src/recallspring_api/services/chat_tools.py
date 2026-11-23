@@ -141,7 +141,9 @@ Help them set up their semester: list_courses first (never create a course twice
 organise_courses to file them under university, faculty and semester, and for every kolokvij and exam \
 set_study_target with the date, the type, the scope in the learner's own words and your mapping of that scope to the \
 material (get_course_outline). Ask for anything missing and show the mapping before you save it. Analyse an old \
-paper the learner uploaded with record_exam_profile. Create concepts from material you read (create_concepts, linked \
+paper with record_exam_profile and pass its source_id; if the paper is not in the course's material yet, ask the \
+learner to upload it under the course as Past paper first, so they can open it next to the analysis. \
+Create concepts from material you read (create_concepts, linked \
 to section IDs). Then show priorities across courses with get_study_plan without course_id. To study, practise or \
 get feedback on a course, the learner starts a new conversation and picks that course under Study."""
 
@@ -670,7 +672,8 @@ _TOOLS = [
     Tool(
         "record_exam_profile",
         "After reading an old paper the learner uploaded: the item types and their shares, the Bloom mix, topic "
-        "weights (0.5-2, optionally a concept_id of the course) and up to 10 example items, for a study target.",
+        "weights (0.5-2, optionally a concept_id of the course) and up to 10 example items, for a study target. "
+        "Pass source_id (the paper in this course's material).",
         ProfileArgs,
         _record_profile,
         lambda a, r: "Saved the exam profile",

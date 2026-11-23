@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { ApiError, request } from "../api";
 import { dateLabel } from "../format";
-import { useCourses, useSources, useTargets } from "../queries";
+import { useCourses, useSources, useStudySettings, useTargets } from "../queries";
 import type { ScopeItem, Target } from "../types";
 import { useInvalidateOrganisation } from "./organise";
 import { Confirm, ErrorNote, Modal } from "./ui";
@@ -58,6 +58,28 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
   const [notes, setNotes] = useState(target?.notes ?? "");
   const [rows, setRows] = useState<MaterialRow[]>(toRows(target?.scope ?? []));
   const textSources = (sources.data ?? []).filter((s) => s.kind !== "image");
+  const study = useStudySettings();
+  const allTargets = useTargets();
+  // Owner 2026-11-23: after the last exam of a focused course is passed or cancelled, offer to end the focus early.
+  const [askFocus, setAskFocus] = useState<{ course: string; until: string } | null>(null);
+  const endFocus = useMutation({
+    mutationFn: () => request("/settings/focus", { method: "PUT", json: { course_id: null, until: null } }),
+    onSuccess: () => {
+      refresh();
+      setAskFocus(null);
+      onClose();
+    },
+  });
+  function focusQuestion(): { course: string; until: string } | null {
+    const focus = study.data?.focus;
+    if (!target || !focus || !(status === "passed" || status === "cancelled") || status === target.status) return null;
+    const own = target.course_id ?? courseId;
+    if (focus.course_id !== own) return null;
+    const upcoming = (allTargets.data ?? []).some(
+      (t) => t.course_id === own && t.id !== target.id && t.status === "upcoming" && t.days_left >= 0,
+    );
+    return upcoming ? null : { course: focus.course_title, until: focus.until };
+  }
 
   const save = useMutation({
     mutationFn: () => {
@@ -89,7 +111,9 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
     },
     onSuccess: () => {
       refresh();
-      onClose();
+      const ask = focusQuestion();
+      if (ask) setAskFocus(ask);
+      else onClose();
     },
   });
 
@@ -104,7 +128,6 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
   });
 
   // Merging is always available by hand, not only when Exams detects a likely duplicate.
-  const allTargets = useTargets();
   const ownCourse = target?.course_id ?? courseId;
   const mergeOptions = target
     ? (allTargets.data ?? []).filter((t) => t.id !== target.id && t.course_id === ownCourse)
@@ -138,7 +161,27 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
   }
 
   return (
-    <Modal open={open} title={target ? `Edit ${target.name}` : "Add an exam or midterm"} onClose={onClose} wide>
+    <>
+    {askFocus && (
+      <Modal open title={`${askFocus.course} is in focus until ${dateLabel(askFocus.until)}`} onClose={onClose}>
+        <div className="stack">
+          <p className="small">
+            {status === "passed" ? `${target?.name} is passed` : `${target?.name} is cancelled`} and this course has no other exam
+            coming up. End the focus now, so your plan shares the time with your other courses again?
+          </p>
+          {endFocus.error && <ErrorNote error={endFocus.error} />}
+          <div className="row" style={{ justifyContent: "flex-end" }}>
+            <button type="button" className="btn" onClick={onClose}>
+              Keep until {dateLabel(askFocus.until)}
+            </button>
+            <button type="button" className="btn primary" disabled={endFocus.isPending} onClick={() => endFocus.mutate()}>
+              End focus
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )}
+    <Modal open={open && !askFocus} title={target ? `Edit ${target.name}` : "Add an exam or midterm"} onClose={onClose} wide>
       <form className="stack" onSubmit={submit}>
         {!target && (
           <label className="field">
@@ -320,5 +363,6 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
         </Confirm>
       )}
     </Modal>
+    </>
   );
 }

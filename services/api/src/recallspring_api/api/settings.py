@@ -133,7 +133,8 @@ def update_study_preferences(
 def update_profile(
     payload: ProfileIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
 ) -> JSONResponse:
-    """Time zone (dates, "today", plans) and the assistant the learner studies with (wording only)."""
+    """Time zone (dates, "today", plans), the assistant the learner studies with (wording only) and what Home calls
+    them (``greeting_name``; blank = none)."""
     if replay := replay_if_seen(db, ctx, payload):
         return replay
     user = db.get(User, ctx.user.id, with_for_update=True)
@@ -154,6 +155,11 @@ def update_profile(
                 changes["assistant_mix"] = {"from": list(user.assistant_mix or []), "to": mix}
             user.assistant = payload.assistant
             user.assistant_mix = mix
+    if "greeting_name" in payload.model_fields_set:
+        name = " ".join((payload.greeting_name or "").split()) or None
+        if name != user.greeting_name:
+            changes["greeting_name"] = {"set": name is not None}  # the name itself stays out of the audit log
+            user.greeting_name = name
     if changes:
         audit(db, actor_id=user.id, action="profile.changed", details=changes, request_id=ctx.request_id)
     db.flush()

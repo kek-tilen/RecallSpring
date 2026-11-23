@@ -110,12 +110,19 @@ def latest_profile(db: Session, target_id: uuid.UUID) -> TargetProfile | None:
     )
 
 
-def profile_view(profile: TargetProfile | None) -> dict[str, Any] | None:
+def profile_view(db: Session, profile: TargetProfile | None) -> dict[str, Any] | None:
     if profile is None:
         return None
+    src = db.get(Source, profile.source_id) if profile.source_id else None
     return {
         "id": str(profile.id),
         "source_id": str(profile.source_id) if profile.source_id else None,
+        # The old paper the analysis came from, when it is in RecallSpring (None: it was only shared in a chat).
+        "source": (
+            {"id": str(src.id), "filename": src.filename, "removed": src.deleted_at is not None}
+            if src is not None
+            else None
+        ),
         "item_types": profile.item_types,
         "bloom_mix": profile.bloom_mix,
         "topic_weights": profile.topic_weights,
@@ -124,6 +131,39 @@ def profile_view(profile: TargetProfile | None) -> dict[str, Any] | None:
         "derived_by": profile.model or "assistant",
         "created_at": profile.created_at.isoformat(),
     }
+
+
+def link_profile_source(
+    db: Session, user: User, target_id: uuid.UUID, source_id: uuid.UUID | None, request_id: str
+) -> StudyTarget:
+    """Say which old paper in the course's material the latest exam-style analysis came from (or unlink it). Only the
+    link changes; the analysis itself stays as the assistant wrote it. Audited."""
+    target = owned(db, StudyTarget, target_id, user.id)
+    if target.deleted_at is not None:
+        raise ApiError(404, "not_found", "Study target not found.")
+    profile = latest_profile(db, target.id)
+    if profile is None:
+        raise ApiError(404, "no_profile", "This exam has no analysis of an old paper yet.")
+    if source_id is not None:
+        src = owned(db, Source, source_id, user.id)
+        if src.course_id != target.course_id or src.deleted_at is not None:
+            raise ApiError(422, "source_not_in_course", "Choose a file from this course's material.")
+    if profile.source_id != source_id:
+        audit(
+            db,
+            actor_id=user.id,
+            action="exam_profile.source_linked",
+            target_type="target_profile",
+            target_id=profile.id,
+            details={
+                "from": str(profile.source_id) if profile.source_id else None,
+                "to": str(source_id) if source_id else None,
+            },
+            request_id=request_id,
+        )
+        profile.source_id = source_id
+        db.flush()
+    return target
 
 
 def target_view(db: Session, target: StudyTarget, today: date) -> dict[str, Any]:
@@ -140,7 +180,7 @@ def target_view(db: Session, target: StudyTarget, today: date) -> dict[str, Any]
         "scope": scope_view(db, target),
         "notes": target.notes,
         "concepts_in_scope": len(scope_concepts(db, target)),
-        "profile": profile_view(latest_profile(db, target.id)),
+        "profile": profile_view(db, latest_profile(db, target.id)),
     }
 
 

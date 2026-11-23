@@ -233,3 +233,23 @@ export const CATEGORY_LABEL: Record<string, string> = {
   chat: "Chats",
   other: "Other",
 };
+
+/** "Mon 30 Nov": a short date for quiet places (Home). Date-only strings are calendar dates. */
+export function shortDay(iso: string): string {
+  const day = iso.length === 10 ? iso : localDate(new Date(iso));
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(
+    new Date(Date.UTC(y, m - 1, d)),
+  );
+}
+
+/** Today's calendar date in the learner's timezone, as YYYY-MM-DD. */
+export function localDate(d: Date = new Date()): string {
+  return dayKey(d).split("/").reverse().join("-");
+}
+
+/** The next `n` calendar dates from today (YYYY-MM-DD), in the learner's timezone. */
+export function nextDays(n: number): string[] {
+  const [y, m, d] = localDate().split("-").map(Number) as [number, number, number];
+  return Array.from({ length: n }, (_, i) => new Date(Date.UTC(y, m - 1, d + i)).toISOString().slice(0, 10));
+}

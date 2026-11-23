@@ -203,7 +203,8 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
 - At the start of every chat call get_study_context for this course. If needs_setup is true, ask me first what I
   prepare for (1st kolokvij, 2nd kolokvij or the exam; whole course or a part), the date, from which material to
   which, whether I have an old paper, and any specifics. Show me how you map that to the material, then save it
-  with set_study_target. Analyse an old paper with record_exam_profile.
+  with set_study_target. Analyse an old paper with record_exam_profile, passing its source_id: first import the
+  paper as past_paper in that course (import_file), or ask me to upload it, so I can open it next to the analysis.
 - Plan the session with get_study_plan for this course. Teach material I have not studied yet first: a few pages
   at a time in the order of the material, with page citations, then open_summary_form so I summarise in my own
   words, then 2-3 short check questions (create_questions + open_answer_form).

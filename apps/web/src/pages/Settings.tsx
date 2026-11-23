@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AssistantNextSteps, TimeZoneSelect, useSaveProfile } from "./Welcome";
+import { greeting } from "./Home";
 import { ASSISTANTS } from "../assistant";
 import { request } from "../api";
 import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
@@ -474,20 +475,22 @@ export function AssistantsPanel({ s }: { s: AssistantsStatus }) {
   );
 }
 
-/** Username, session and time zone. */
+/** Username, session, what Home calls you and time zone. */
 function ProfileForm() {
   const qc = useQueryClient();
   const session = useSession();
   const user = session.data?.user;
   const [timezone, setTimezone] = useState(user?.timezone ?? "UTC");
+  const [name, setName] = useState(user?.greeting_name ?? "");
   const [saved, setSaved] = useState(false);
   const save = useSaveProfile();
   if (!user) return null;
-  const changed = timezone !== user.timezone;
+  const nameChanged = name.trim() !== (user.greeting_name ?? "");
+  const changed = timezone !== user.timezone || nameChanged;
   function submit(e: FormEvent) {
     e.preventDefault();
     save.mutate(
-      { timezone },
+      { timezone, greeting_name: name.trim() || null },
       {
         onSuccess: () => {
           setSaved(true);
@@ -505,6 +508,23 @@ function ProfileForm() {
         <dt>Session ends</dt>
         <dd>{session.data ? dateTime(session.data.expires_at) : ""}</dd>
       </dl>
+      <label className="field">
+        What should Home call you?
+        <input
+          type="text"
+          value={name}
+          maxLength={40}
+          autoComplete="nickname"
+          placeholder="No name"
+          onChange={(e) => {
+            setName(e.target.value);
+            setSaved(false);
+          }}
+        />
+        <span className="hint">
+          {name.trim() ? "" : "Empty: "}Home says “{greeting(new Date().getHours(), name)}”.
+        </span>
+      </label>
       <label className="field">
         Time zone
         <TimeZoneSelect

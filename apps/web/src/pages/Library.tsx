@@ -483,13 +483,40 @@ function Crumb({ to, label, onDrop, current }: { to: string; label: string; onDr
 }
 
 /** One course's material: its folders (optional, nestable) and the files and photos at the current level. */
-export function FolderBrowser({ courseId, folderId, href }: { courseId: string; folderId: string | null; href: (folderId: string | null) => string }) {
+/** Ids of every folder inside `id` (any depth). */
+export function descendants(folders: Folder[], id: string): string[] {
+  const out: string[] = [];
+  const walk = (parent: string) => {
+    for (const f of folders) {
+      if (f.parent_id === parent && !out.includes(f.id)) {
+        out.push(f.id);
+        walk(f.id);
+      }
+    }
+  };
+  walk(id);
+  return out;
+}
+
+export function FolderBrowser({
+  courseId,
+  folderId,
+  href,
+  addCategory,
+}: {
+  courseId: string;
+  folderId: string | null;
+  href: (folderId: string | null) => string;
+  /** Opened from "Add old paper": the upload starts as this kind and is scrolled into view. */
+  addCategory?: MaterialCategory;
+}) {
   const folders = useFolders(courseId);
   const sources = useSources(courseId, true);
   const { move, archive } = useSourceActions();
   const refresh = useRefreshLibrary();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [category, setCategory] = useState<MaterialCategory | "all">("all");
+  const scrolled = useRef(false);
   const [dialog, setDialog] = useState<"new" | "edit" | null>(null);
   const [target, setTarget] = useState("");
   const [status, setStatus] = useState<{ text: string; undo?: () => void } | null>(null);
@@ -516,9 +543,17 @@ export function FolderBrowser({ courseId, folderId, href }: { courseId: string; 
   const children = all
     .filter((f) => f.parent_id === (folderId ?? null) && (insideArchived || !f.archived))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const here = (sources.data ?? []).filter((s) => (s.folder_id ?? null) === (folderId ?? null) && !s.archived && (insideArchived || !s.hidden));
-  const counts = Object.fromEntries(CATEGORIES.map((c) => [c, here.filter((s) => s.category === c).length]));
-  const shown = category === "all" ? here : here.filter((s) => s.category === category);
+  const visible = (s: Source) => !s.archived && (insideArchived || !s.hidden);
+  const here = (sources.data ?? []).filter((s) => (s.folder_id ?? null) === (folderId ?? null) && visible(s));
+  // Everything under this place, subfolders included (owner 2026-11-23): "All 3" even when the files sit in folders.
+  const below = new Set(folderId ? descendants(all, folderId) : all.map((f) => f.id));
+  const inside = (sources.data ?? []).filter(
+    (s) => visible(s) && ((s.folder_id ?? null) === (folderId ?? null) || (s.folder_id !== null && below.has(s.folder_id))),
+  );
+  const inFolders = inside.length - here.length;
+  const counts = Object.fromEntries(CATEGORIES.map((c) => [c, inside.filter((s) => s.category === c).length]));
+  // No filter: this level only (folders show their own counts). A kind: every matching file below, with its folder.
+  const shown = category === "all" ? here : inside.filter((s) => s.category === category);
   const files = shown.filter((s) => s.kind !== "image");
   const images = shown.filter((s) => s.kind === "image");
   const choices = all.filter((f) => !f.hidden && f.id !== folderId).sort((a, b) => a.path.localeCompare(b.path));
@@ -585,7 +620,7 @@ export function FolderBrowser({ courseId, folderId, href }: { courseId: string; 
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div className="row" role="group" aria-label="Filter by kind">
           <button type="button" className="chip chip-filter" aria-pressed={category === "all"} onClick={() => setCategory("all")}>
-            All {here.length}
+            All {inside.length}
           </button>
           {CATEGORIES.filter((c) => counts[c]).map((c) => (
             <button key={c} type="button" className="chip chip-filter" aria-pressed={category === c} onClick={() => setCategory(c)}>
@@ -692,7 +727,14 @@ export function FolderBrowser({ courseId, folderId, href }: { courseId: string; 
           </button>
         </div>
       )}
-      {files.length > 0 && <SourceTable sources={files} selected={selected} onToggle={toggle} />}
+      {category === "all" && here.length === 0 && inFolders > 0 && (
+        <p className="small muted">
+          {inFolders === 1 ? "The file is in a folder above." : `All ${inFolders} files are in the folders above.`}
+        </p>
+      )}
+      {files.length > 0 && (
+        <SourceTable sources={files} selected={selected} onToggle={toggle} showFolder={category !== "all" && inFolders > 0} />
+      )}
       {images.length > 0 && (
         <Card title="Photos" meta={plural(images.length, "image")}>
           <Gallery images={images} selected={selected} onToggle={toggle} />
@@ -701,7 +743,7 @@ export function FolderBrowser({ courseId, folderId, href }: { courseId: string; 
           </p>
         </Card>
       )}
-      {here.length === 0 && children.length === 0 && (
+      {inside.length === 0 && children.length === 0 && (
         <Empty title={folderId ? "This folder is empty" : "No material yet"}>
           {folderId
             ? "Upload files here, or select files elsewhere and move them in (drag them onto the folder, or use Move to)."
@@ -712,9 +754,19 @@ export function FolderBrowser({ courseId, folderId, href }: { courseId: string; 
         <p className="tiny muted">Select files to move them into a folder or archive them; you can also drag them onto a folder or the path above.</p>
       )}
       {!insideArchived && (
-        <Card title={current ? `Add material to ${current.name}` : "Add material"}>
-          <Upload courseId={courseId} folderId={folderId} />
-        </Card>
+        <div
+          id="add-material"
+          ref={(el) => {
+            if (el && addCategory && !scrolled.current) {
+              scrolled.current = true;
+              el.scrollIntoView({ block: "start" });
+            }
+          }}
+        >
+          <Card title={current ? `Add material to ${current.name}` : "Add material"}>
+            <Upload key={addCategory ?? "material"} courseId={courseId} folderId={folderId} category={addCategory} />
+          </Card>
+        </div>
       )}
       {dialog && (
         <FolderDialog

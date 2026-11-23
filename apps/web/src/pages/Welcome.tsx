@@ -271,7 +271,12 @@ export function AssistantPicker({ value, mix, onChange, name = "assistant", comp
 export function useSaveProfile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { assistant?: AssistantChoice | null; assistant_mix?: AssistantKey[]; timezone?: string }) =>
+    mutationFn: (body: {
+      assistant?: AssistantChoice | null;
+      assistant_mix?: AssistantKey[];
+      timezone?: string;
+      greeting_name?: string | null;
+    }) =>
       request<User>("/settings/profile", { method: "PUT", json: body }),
     onSuccess: (user) => {
       qc.setQueryData<SessionInfo>(keys.session, (s) => (s ? { ...s, user } : s));

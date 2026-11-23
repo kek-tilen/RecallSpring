@@ -1,6 +1,6 @@
 # ADR-012 — Forms last, formulas in questions, a calmer home, Study in…, Chat folders, Plain and Ghost chats
 
-Status: accepted 2026-11-23 (owner in chat); rolled out in steps, see Rollout (step 1 done 2026-11-23). Extends ADR-010 and ADR-011.
+Status: accepted 2026-11-23 (owner in chat); rolled out in steps, see Rollout (steps 1 and 2 done 2026-11-23). Extends ADR-010 and ADR-011.
 
 ## Context
 
@@ -26,11 +26,15 @@ Using RecallSpring daily brought up five things that slow the learner down:
   the web app's source; it builds elements through the DOM (never `innerHTML`). Unsupported TeX stays visible as
   source text.
 
-### 2. A calmer home (variant A)
+### 2. A calmer home (variants A1 + A2)
 
-Top to bottom: a warm greeting by time of day with one sentence about today (the nearest exam and today's work);
-one next step as text with one button; a quiet "This week" row (upcoming dates, reviews today, focused time); the
-rest of today's home folded under "More". Typography only for now. No streaks or other pressure counters.
+A calm top in two columns: on the left a warm greeting by time of day, one sentence about today (the nearest exam
+and today's work), one next step as text with one button and the next two plan items; on the right "This week" (a
+strip of the next seven days with exam dates, reviews today, focused time). Below it "Today in detail", open by
+default and hideable: today's plan, exams and midterms, needs attention, recent activity, add material. The owner
+chose this over a folded "More" (variant A) because the folded page felt empty. The greeting can use a name the
+learner sets in Settings → Profile (none by default; `users.greeting_name`, migration 0026). No streaks or other pressure
+counters.
 
 ### 3. Study in… (Courses)
 

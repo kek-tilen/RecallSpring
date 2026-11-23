@@ -23,6 +23,7 @@ export interface User {
   timezone: string;
   assistant: AssistantChoice | null;
   assistant_mix?: AssistantKey[];
+  greeting_name?: string | null;
 }
 
 export interface SessionInfo {
@@ -72,6 +73,8 @@ export interface Group {
 export interface CourseSummary extends CourseInfo {
   group_path: string[];
   active_target: { id: string; kind: string; name: string; due_date: string; days_left: number; status: string } | null;
+  /** With no exam coming up: the latest one behind the learner. */
+  last_target?: { id: string; kind: string; name: string; due_date: string; days_left: number; status: string } | null;
   progress: Progress;
   sources: number;
   notes: number;
@@ -134,6 +137,9 @@ export interface PracticeLimit {
 
 export interface TargetProfile {
   id: string;
+  source_id?: string | null;
+  /** The old paper in RecallSpring the analysis came from; null when it was only shared in a chat. */
+  source?: { id: string; filename: string; removed: boolean } | null;
   item_types: { type: string; share: number }[];
   bloom_mix: Record<string, number>;
   topic_weights: { label: string; weight: number; concept_id?: string | null }[];

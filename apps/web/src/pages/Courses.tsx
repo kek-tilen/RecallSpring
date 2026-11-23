@@ -53,6 +53,11 @@ function CourseCard({ c }: { c: CourseSummary }) {
           <strong>{c.active_target.name}</strong> on {dateLabel(c.active_target.due_date)} ·{" "}
           {c.active_target.days_left >= 0 ? `${plural(c.active_target.days_left, "day")} left` : "date passed"}
         </div>
+      ) : c.last_target ? (
+        <div className="notice small">
+          <strong>{c.last_target.name}</strong> on {dateLabel(c.last_target.due_date)} · {LAST_STATUS[c.last_target.status] ?? "result not recorded"}
+          <span className="muted"> · no exam coming up</span>
+        </div>
       ) : (
         <div className="notice small muted">No exam or midterm set yet.</div>
       )}
@@ -155,6 +160,8 @@ function GroupBlock({ group, groups, courses, showArchived, depth }: {
     </section>
   );
 }
+
+const LAST_STATUS: Record<string, string> = { passed: "passed", failed: "not passed yet", cancelled: "cancelled" };
 
 export function CoursesPage() {
   const q = useCourseSummary();
