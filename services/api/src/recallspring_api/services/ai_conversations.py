@@ -17,8 +17,8 @@ from sqlalchemy.orm import Session
 
 from .. import clock
 from ..errors import ApiError
-from ..models import AiConversation, AiMessage, Course, User
-from . import chat_material, visual_blocks
+from ..models import AiConversation, AiGhostUsage, AiMessage, Course, User
+from . import chat_folders, chat_material, visual_blocks
 from .events import audit
 
 PROVIDER = "chatgpt"
@@ -134,13 +134,15 @@ def history(messages: list[AiMessage]) -> tuple[list[dict[str, Any]], bool]:
     return turns, len(turns) < len(usable)
 
 
-def _totals(rows: list[AiMessage]) -> dict[str, int]:
-    replies = [m for m in rows if m.role == "assistant"]
+def _totals(rows: list[AiMessage], ghost: list[AiGhostUsage] | None = None) -> dict[str, int]:
+    """Replies and tokens; ``ghost``: ghost chat replies, counted too (they keep only these numbers)."""
+    usages = [m.usage or {} for m in rows if m.role == "assistant"]
+    usages += [g.usage or {} for g in ghost or [] if g.outcome == "completed"]
     return {
-        "replies": len(replies),
-        "input_tokens": sum((m.usage or {}).get("input_tokens", 0) for m in replies),
-        "output_tokens": sum((m.usage or {}).get("output_tokens", 0) for m in replies),
-        "total_tokens": sum((m.usage or {}).get("total_tokens", 0) for m in replies),
+        "replies": len(usages),
+        "input_tokens": sum(u.get("input_tokens", 0) for u in usages),
+        "output_tokens": sum(u.get("output_tokens", 0) for u in usages),
+        "total_tokens": sum(u.get("total_tokens", 0) for u in usages),
     }
 
 
@@ -155,6 +157,8 @@ def conversation_view(db: Session, conv: AiConversation) -> dict[str, Any]:
         "course": {"id": str(course.id), "title": course.title}
         if course is not None and course.deleted_at is None
         else None,
+        "folder_id": str(conv.folder_id) if conv.folder_id else None,
+        "plain": conv.plain,
         "created_at": conv.created_at.isoformat(),
         "updated_at": conv.updated_at.isoformat(),
         "deleted_at": conv.deleted_at.isoformat() if conv.deleted_at else None,
@@ -187,6 +191,8 @@ def list_view(db: Session, user: User) -> dict[str, Any]:
         return {
             "id": str(c.id),
             "title": c.title,
+            "folder_id": str(c.folder_id) if c.folder_id else None,
+            "plain": c.plain,
             "created_at": c.created_at.isoformat(),
             "updated_at": c.updated_at.isoformat(),
             "deleted_at": c.deleted_at.isoformat() if c.deleted_at else None,
@@ -202,14 +208,30 @@ def list_view(db: Session, user: User) -> dict[str, Any]:
             )
         )
     )
+    ghost = list(
+        db.scalars(
+            select(AiGhostUsage).where(
+                AiGhostUsage.user_id == user.id, AiGhostUsage.created_at >= now - timedelta(days=30)
+            )
+        )
+    )
+    live = [c for c in convs if c.deleted_at is None]
+    per_folder: dict[uuid.UUID, int] = {}
+    for c in live:
+        if c.folder_id is not None:
+            per_folder[c.folder_id] = per_folder.get(c.folder_id, 0) + 1
     return {
-        "conversations": [summary(c) for c in convs if c.deleted_at is None],
+        "folders": chat_folders.list_view(db, user, per_folder),
+        "conversations": [summary(c) for c in live],
         "deleted": [
             summary(c) for c in convs if c.deleted_at is not None and c.deleted_at >= now - timedelta(days=RESTORE_DAYS)
         ],
         "usage": {
-            "last_24_hours": _totals([m for m in recent if m.created_at >= now - timedelta(days=1)]),
-            "last_30_days": _totals(recent),
+            "last_24_hours": _totals(
+                [m for m in recent if m.created_at >= now - timedelta(days=1)],
+                [g for g in ghost if g.created_at >= now - timedelta(days=1)],
+            ),
+            "last_30_days": _totals(recent, ghost),
         },
     }
 
@@ -249,16 +271,21 @@ def save_question(
     client_request_id: uuid.UUID,
     course_id: uuid.UUID | None = None,
     photo_ids: list[uuid.UUID] | None = None,
+    plain: bool = False,
 ) -> tuple[AiConversation, AiMessage]:
     """Save the learner's message (a new conversation when none is given; ``course_id`` makes it a study
-    conversation, checked by the caller). The caller commits before calling ChatGPT."""
+    conversation, checked by the caller; ``plain`` a plain chat without a course or tools). A new conversation about
+    a course goes into that course's folder when exactly one is linked to it. The caller commits before calling
+    ChatGPT."""
     now = clock.now()
     if conversation_id is None:
         conv = AiConversation(
             user_id=user.id,
             provider=PROVIDER,
             title=_title(text),
-            course_id=course_id,
+            course_id=None if plain else course_id,
+            plain=plain,
+            folder_id=chat_folders.folder_for_course(db, user, None if plain else course_id),
             created_at=now,
             updated_at=now,
         )
@@ -351,3 +378,60 @@ def set_deleted(db: Session, user: User, conversation_id: uuid.UUID, deleted: bo
         target_id=conv.id,
         request_id=request_id,
     )
+
+
+def record_ghost_usage(db: Session, user: User, model: str | None, usage: dict[str, Any] | None, outcome: str) -> None:
+    """A ghost chat reply leaves only this: the model and the token counts (ADR-012 §5)."""
+    db.add(
+        AiGhostUsage(user_id=user.id, model=model[:120] if model else None, usage=_usage(usage), outcome=outcome[:60])
+    )
+
+
+def keep_ghost(
+    db: Session,
+    user: User,
+    turns: list[dict[str, Any]],
+    course_id: uuid.UUID | None,
+    plain: bool,
+    request_id: str | None,
+) -> AiConversation:
+    """ "Keep this chat": a ghost chat becomes a normal saved conversation from now on, with the turns the page
+    still holds (the server kept none). Replies keep the model the page was told; token usage stays unknown."""
+    now = clock.now()
+    first = next(t["text"] for t in turns if t["role"] == "user")
+    conv = AiConversation(
+        user_id=user.id,
+        provider=PROVIDER,
+        title=_title(first),
+        course_id=None if plain else course_id,
+        plain=plain,
+        folder_id=chat_folders.folder_for_course(db, user, None if plain else course_id),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(conv)
+    db.flush()
+    for n, t in enumerate(turns, start=1):
+        db.add(
+            AiMessage(
+                user_id=user.id,
+                conversation_id=conv.id,
+                position=n,
+                role=t["role"],
+                text=t["text"],
+                model=(t.get("model") or None) if t["role"] == "assistant" else None,
+                created_at=now,
+                completed_at=now,
+            )
+        )
+    db.flush()
+    audit(
+        db,
+        actor_id=user.id,
+        action="ai.chatgpt_ghost_kept",
+        target_type="ai_conversation",
+        target_id=conv.id,
+        details={"turns": len(turns), "plain": plain, "course": course_id is not None},
+        request_id=request_id,
+    )
+    return conv

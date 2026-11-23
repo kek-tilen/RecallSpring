@@ -27,14 +27,14 @@ export function EventList({ rows, compact }: { rows: HistoryRow[]; compact?: boo
   if (rows.length === 0) return <p className="muted small">No activity yet.</p>;
   let lastDay = "";
   return (
-    <div>
+    <div className="event-list">
       {rows.map((r, i) => {
         const day = dayHeading(r.at);
         const showDay = !compact && day !== lastDay;
         lastDay = day;
         const to = entityLink(r);
         return (
-          <div key={`${r.at}-${i}`}>
+          <div key={`${r.at}-${i}`} className="event-row">
             {showDay && <div className="timeline-day">{day}</div>}
             <div className="event">
               <span className="t">{compact ? dayHeading(r.at) === "Today" ? timeOnly(r.at) : day.split(",")[0] : timeOnly(r.at)}</span>

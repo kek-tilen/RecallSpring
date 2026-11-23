@@ -87,7 +87,7 @@ export type StreamEvent =
   | { type: "saved"; conversation_id: string }
   | { type: "text"; text: string }
   | { type: "step"; step: unknown }
-  | { type: "done"; conversation: unknown }
+  | { type: "done"; conversation?: unknown; reply?: unknown }
   | { type: "error"; status: number; code: string; message: string; details?: Record<string, unknown> | null };
 
 /**
@@ -113,7 +113,7 @@ export async function streamRequest<T>(path: string, json: unknown, onEvent: (e:
     } catch {
       return;
     }
-    if (e.type === "done") result = { done: e.conversation as T };
+    if (e.type === "done") result = { done: (e.conversation ?? e.reply) as T };
     else if (e.type === "error") error = new ApiError(e.status, e.code, e.message, e.details ?? undefined);
     onEvent(e);
   };

@@ -33,9 +33,19 @@ from ..db import get_db, new_session
 from ..deps import Ctx, WriteCtx, csrf_ctx, current_ctx, write_ctx
 from ..errors import ApiError
 from ..models import AiMessage, Course, User
-from ..schemas import ChatGptConversationPatch, ChatGptMaterialIn, ChatGptMessageIn
+from ..schemas import (
+    ChatFolderIn,
+    ChatFolderMoveIn,
+    ChatFolderPatch,
+    ChatGptConversationPatch,
+    ChatGptMaterialIn,
+    ChatGptMessageIn,
+    GhostKeepIn,
+    GhostMessageIn,
+    GhostTurn,
+)
 from ..services import ai_conversations as conv_svc
-from ..services import chat_material, chat_tools, visual_blocks
+from ..services import chat_folders, chat_material, chat_tools, visual_blocks
 from ..services import photos as photo_svc
 from ..services.events import audit
 from ..services.ownership import owned
@@ -301,7 +311,8 @@ def _prepare(payload: ChatGptMessageIn, ctx: WriteCtx, db: Session) -> _Prepared
         raise _api_error(siwc.SiwcError("not_connected"))
     if not state["plan_usage"]:
         raise _api_error(siwc.SiwcError("plan_usage_not_enabled"))
-    course_id = payload.course_id if payload.conversation_id is None else None
+    plain = payload.plain and payload.conversation_id is None
+    course_id = payload.course_id if payload.conversation_id is None and not plain else None
     if course_id is not None:
         owned(db, Course, course_id, ctx.user.id)
     photo_ids = photo_svc.checked(db, ctx.user.id, payload.photo_ids, None)
@@ -314,6 +325,7 @@ def _prepare(payload: ChatGptMessageIn, ctx: WriteCtx, db: Session) -> _Prepared
         ctx.idempotency_key,
         course_id,
         photo_ids,
+        plain,
     )
     if payload.conversation_id is None and payload.source_ids:
         chat_material.set_chosen(db, ctx.user, conv, payload.source_ids, ctx.request_id)
@@ -328,7 +340,7 @@ def _prepare(payload: ChatGptMessageIn, ctx: WriteCtx, db: Session) -> _Prepared
         note = f"\n\n[{missing} attached image(s) could not be shown]" if missing else ""
         turns[-1] = {"role": "user", "text": payload.message + note, "images": images}
     db.commit()  # what is sent is recorded before the request; no transaction stays open while waiting
-    use_tools = payload.recallspring
+    use_tools = payload.recallspring and not conv.plain  # a plain chat never gets RecallSpring's tools
     parts = [TOOL_INSTRUCTIONS if use_tools else INSTRUCTIONS, MATH_HINT]
     if use_tools:
         parts.append(chat_tools.instructions(db, conv))
@@ -564,3 +576,241 @@ def disconnect(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> d
     audit(db, actor_id=ctx.user.id, action="ai.chatgpt_disconnected", details={"revoked_at_openai": revoked})
     db.commit()
     return {**siwc.status(ctx.user.id), "revoked": revoked}
+
+
+# --------------------------------------------------------------------------- Chat folders (ADR-012 §4)
+
+
+@router.post("/ai/chatgpt/folders")
+def create_folder(payload: ChatFolderIn, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """A folder, or a subfolder of a top-level folder (no deeper). Returns the conversation list with folders."""
+    chat_folders.create(db, ctx.user, payload.model_dump(), ctx.request_id)
+    db.commit()
+    return conv_svc.list_view(db, ctx.user)
+
+
+@router.patch("/ai/chatgpt/folders/{folder_id}")
+def change_folder(
+    folder_id: uuid.UUID, payload: ChatFolderPatch, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    chat_folders.change(db, ctx.user, folder_id, payload.model_dump(exclude_unset=True), ctx.request_id)
+    db.commit()
+    return conv_svc.list_view(db, ctx.user)
+
+
+@router.delete("/ai/chatgpt/folders/{folder_id}")
+def delete_folder(folder_id: uuid.UUID, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """After the learner confirmed it. Conversations move to the parent folder or to "No folder"; subfolders move up
+    to the top level; nothing is deleted but the folder (soft)."""
+    chat_folders.delete(db, ctx.user, folder_id, ctx.request_id)
+    db.commit()
+    return conv_svc.list_view(db, ctx.user)
+
+
+@router.put("/ai/chatgpt/conversations/{conversation_id}/folder")
+def move_conversation(
+    conversation_id: uuid.UUID, payload: ChatFolderMoveIn, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """ "Move to…" a folder, or out of any folder (null)."""
+    chat_folders.file_conversation(db, ctx.user, conversation_id, payload.folder_id, ctx.request_id)
+    db.commit()
+    return conv_svc.list_view(db, ctx.user)
+
+
+# --------------------------------------------------------------------------- ghost chats (ADR-012 §5)
+
+GHOST_PLAIN = (
+    "You are ChatGPT, used from RecallSpring, a study app the learner runs on their own computer. This is a ghost "
+    "chat: nothing of it is saved. Answer clearly and briefly, in the language the learner writes in."
+)
+
+
+def _ghost_history(turns: list[GhostTurn]) -> tuple[list[dict[str, Any]], bool]:
+    """The newest turns within the limits saved conversations use; (turns, whether older ones were left out)."""
+    out: list[dict[str, Any]] = []
+    chars = 0
+    for t in reversed(turns):
+        if len(out) >= conv_svc.MAX_TURNS_SENT or chars + len(t.text) > conv_svc.MAX_CHARS_SENT:
+            break
+        out.append({"role": t.role, "text": t.text})
+        chars += len(t.text)
+    out.reverse()
+    while out and out[0]["role"] != "user":
+        out.pop(0)
+    return out, len(out) < len(turns)
+
+
+def _ghost_tool_turn(
+    db: Session,
+    ctx: WriteCtx,
+    model: str,
+    instructions: str,
+    turns: list[dict[str, Any]],
+    course_id: uuid.UUID | None,
+    emit: Emit,
+) -> tuple[str, siwc.Reply, list[dict[str, Any] | None], list[dict[str, Any]]]:
+    """Like ``_tool_turn`` with the read-only ghost set; every call is rolled back and no step is stored."""
+    items = siwc.history_items(turns)
+    allowed = chat_tools.ghost_tools_for(course_id)
+    tools = chat_tools.definitions(allowed)
+    texts: list[str] = []
+    usages: list[dict[str, Any] | None] = []
+    steps: list[dict[str, Any]] = []
+    last: siwc.Reply | None = None
+    live = _Live(emit)
+    for _ in range(chat_tools.MAX_ROUNDS):
+        live.next_round()
+        out = siwc.respond(ctx.user.id, model, instructions, items, tools, live.text)
+        last = out
+        usages.append(out.usage)
+        if out.text.strip():
+            texts.append(out.text.strip())
+        if not out.calls:
+            return "\n\n".join(texts), out, usages, steps
+        items.extend(out.items)
+        for call in out.calls:
+            if len(steps) >= chat_tools.MAX_CALLS:
+                entry, output = chat_tools.refused(
+                    call, "too_many_calls", "Step limit for this message reached; answer with what you have."
+                )
+            else:
+                entry, output = chat_tools.run(db, ctx, out.model, uuid.uuid4(), call, course_id, allowed)
+            db.rollback()  # a ghost chat keeps nothing, whatever a read touched
+            entry = {**entry, "arguments": None}
+            steps.append(entry)
+            emit({"type": "step", "step": entry})
+            items.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
+    assert last is not None
+    live.next_round()
+    live.text(STOPPED_NOTE)
+    texts.append(STOPPED_NOTE)
+    return "\n\n".join(texts), last, usages, steps
+
+
+@router.post("/ai/chatgpt/ghost/stream")
+def ghost_stream(
+    payload: GhostMessageIn, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> StreamingResponse:
+    """A ghost chat turn (ADR-012 §5), a deliberate exception the learner chooses to "persist the learner's input
+    first": the page holds the conversation and sends it whole; the server passes it to ChatGPT (``store: false``)
+    and keeps nothing of it, neither in the database nor in logs, except the model and token usage
+    (``ai_ghost_usage``). With RecallSpring on it can only read (material, plan, notes). No attachments.
+
+    Events as ``/messages/stream``: ``text``, ``step``, then ``done`` with the reply (text, model, usage, visuals,
+    steps) or ``error``. Nothing is ``saved``."""
+    state = siwc.status(ctx.user.id)
+    if not state["connected"]:
+        raise _api_error(siwc.SiwcError("not_connected"))
+    if not state["plan_usage"]:
+        raise _api_error(siwc.SiwcError("plan_usage_not_enabled"))
+    course_id = None if payload.plain else payload.course_id
+    if course_id is not None:
+        owned(db, Course, course_id, ctx.user.id)
+    use_tools = payload.recallspring and not payload.plain
+    turns, trimmed = _ghost_history(payload.turns)
+    if use_tools:
+        parts = [TOOL_INSTRUCTIONS, MATH_HINT, chat_tools.ghost_instructions(db, ctx.user.id, course_id)]
+    else:
+        parts = [GHOST_PLAIN, MATH_HINT]
+    if payload.visuals:
+        parts.append(visual_blocks.INSTRUCTIONS)
+    instructions = "\n\n".join(parts)
+    db.rollback()  # nothing to keep; no transaction stays open while ChatGPT answers
+    events: queue.Queue[dict[str, Any] | None] = queue.Queue()
+    user_id, model, visuals = ctx.user.id, payload.model, payload.visuals
+
+    def work() -> None:
+        try:
+            with new_session() as wdb:
+                user = wdb.get(User, user_id)
+                assert user is not None
+                wctx = WriteCtx(
+                    user=user,
+                    session=ctx.session,
+                    request_id=ctx.request_id,
+                    client=chat_tools.CLIENT,
+                    model=model,
+                    idempotency_key=uuid.uuid4(),
+                    method="POST",
+                    path="/ai/chatgpt/ghost",
+                )
+                steps: list[dict[str, Any]] = []
+                try:
+                    if use_tools:
+                        text, result, usages, steps = _ghost_tool_turn(
+                            wdb, wctx, model, instructions, turns, course_id, events.put
+                        )
+                        usage = conv_svc.combine_usage(usages)
+                    else:
+                        result = siwc.reply(user_id, model, instructions, turns, _Live(events.put).text)
+                        text, usage = result.text, result.usage
+                except siwc.SiwcError as exc:
+                    wdb.rollback()
+                    conv_svc.record_ghost_usage(wdb, user, model, None, exc.code)
+                    wdb.commit()
+                    err = _api_error(exc, use_tools)
+                    events.put(
+                        {
+                            "type": "error",
+                            "status": err.status,
+                            "code": err.code,
+                            "message": err.message,
+                            "details": err.details,
+                        }
+                    )
+                    return
+                wdb.rollback()
+                conv_svc.record_ghost_usage(wdb, user, result.model, usage, "completed")
+                wdb.commit()
+                events.put(
+                    {
+                        "type": "done",
+                        "reply": {
+                            "text": text,
+                            "model": result.model,
+                            "usage": conv_svc._usage(usage),
+                            "visuals": visual_blocks.from_reply(text) if visuals else [],
+                            "steps": steps,
+                            "older_turns_not_sent": trimmed,
+                        },
+                    }
+                )
+        except Exception:
+            log.exception("Ghost chat reply failed")  # no content: the traceback names code, not the conversation
+            events.put(
+                {
+                    "type": "error",
+                    "status": 500,
+                    "code": "internal_error",
+                    "message": "Something went wrong while answering. Nothing was saved; your message is still here.",
+                    "details": None,
+                }
+            )
+        finally:
+            events.put(None)
+
+    context = contextvars.copy_context()
+    threading.Thread(target=context.run, args=(work,), name="chatgpt-ghost", daemon=True).start()
+
+    def lines() -> Iterator[str]:
+        while (event := events.get()) is not None:
+            yield json.dumps(event, default=str) + "\n"
+
+    return StreamingResponse(
+        lines(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/ai/chatgpt/ghost/keep")
+def keep_ghost(payload: GhostKeepIn, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """ "Keep this chat": the ghost chat the page holds becomes a normal saved conversation from now on."""
+    course_id = None if payload.plain else payload.course_id
+    if course_id is not None:
+        owned(db, Course, course_id, ctx.user.id)
+    conv = conv_svc.keep_ghost(
+        db, ctx.user, [t.model_dump() for t in payload.turns], course_id, payload.plain, ctx.request_id
+    )
+    db.commit()
+    return conv_svc.conversation_view(db, conv)

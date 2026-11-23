@@ -766,6 +766,40 @@ class ConnectorUsage(Base):
 # --------------------------------------------------------------------------- conversations with an AI provider
 
 
+class AiChatFolder(Base):
+    """The learner's folder for Chat conversations (ADR-012 §4): top level or one level of subfolders, never deeper
+    (refused by the server). Deleting is a soft delete; its conversations move to the parent or to "No folder"."""
+
+    __tablename__ = "ai_chat_folders"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ai_chat_folders.id"), index=True)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    icon: Mapped[str] = mapped_column(String(20), nullable=False, server_default="folder", default="folder")
+    color: Mapped[str | None] = mapped_column(String(7))
+    course_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courses.id"))
+    pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (CheckConstraint("parent_id IS NULL OR parent_id <> id", name="not_own_parent"),)
+
+
+class AiGhostUsage(Base):
+    """Token usage of one ghost chat reply (ADR-012 §5): the model and the counts only, never any text."""
+
+    __tablename__ = "ai_ghost_usage"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    model: Mapped[str | None] = mapped_column(String(120))
+    usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    outcome: Mapped[str] = mapped_column(String(60), nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+
 class AiConversation(Base):
     """A conversation the learner had with an AI provider from RecallSpring (today: ChatGPT in Settings). Kept
     after signing out at the provider; deleting is a soft delete the learner confirms (restorable)."""
@@ -778,6 +812,10 @@ class AiConversation(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     # Study mode (migration 0017): the course this conversation studies; null for a general chat.
     course_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("courses.id"))
+    # Migration 0027 (ADR-012): the Chat folder it is filed in (null: "No folder"), and a plain chat (no course,
+    # never RecallSpring's tools).
+    folder_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ai_chat_folders.id"), index=True)
+    plain: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

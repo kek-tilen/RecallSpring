@@ -2,9 +2,10 @@ import { PhotoStrip, SavedPhotos, usePhotos } from "../components/Photos";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { ApiError, get, request, streamRequest } from "../api";
+import { ApiError, get, request, streamRequest, type StreamEvent } from "../api";
 import { ChatGptSignIn, STATUS_KEY, useChatGptStatus } from "../components/ChatGpt";
 import { AttachDialog } from "../components/ChatAttach";
+import { FolderDialog, FolderIcon, MoveDialog, type ChatFolder } from "../components/ChatFolders";
 import { MaterialPicker, MAX_FILES, type ChosenFile } from "../components/ChatMaterial";
 import { Markdown, VISUAL_LANG, type Cites } from "../components/Markdown";
 import type { VisualResult } from "../components/Visual";
@@ -91,11 +92,15 @@ interface Conversation {
   totals: Totals;
   older_turns_not_sent: boolean;
   course: { id: string; title: string } | null;
+  folder_id: string | null;
+  plain: boolean;
 }
 
 interface ConversationSummary {
   id: string;
   title: string;
+  folder_id: string | null;
+  plain: boolean;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -103,6 +108,7 @@ interface ConversationSummary {
 }
 
 interface ConversationList {
+  folders: ChatFolder[];
   conversations: ConversationSummary[];
   deleted: ConversationSummary[];
   usage: { last_24_hours: Totals; last_30_days: Totals };
@@ -119,6 +125,36 @@ const VISUALS_STORE = "rs.chatgpt.visuals";
 const TOOLS_STORE = "rs.chatgpt.recallspring";
 const FULL_STORE = "rs.chat.fullpage";
 const CHAT_FOLDER = "Chat images";
+const OPEN_STORE = "rs.chat.folders.open";
+/** The value of the chat-kind choice for a plain chat (no course, no RecallSpring). */
+const PLAIN = "plain";
+
+/** A turn of a ghost chat: only this browser tab holds it (ADR-012 §5). */
+interface GhostTurn {
+  role: "user" | "assistant";
+  text: string;
+  at: string;
+  model?: string | null;
+  usage?: Usage | null;
+  visuals?: VisualResult[];
+  steps?: ToolStep[];
+}
+
+interface GhostChat {
+  turns: GhostTurn[];
+  course: string | null;
+  plain: boolean;
+  trimmed: boolean;
+}
+
+interface GhostReply {
+  text: string;
+  model: string;
+  usage: Usage | null;
+  visuals: VisualResult[];
+  steps: ToolStep[];
+  older_turns_not_sent: boolean;
+}
 
 const NOT_ANSWERED: Record<string, string> = {
   usage_limit: "your ChatGPT plan's usage limit was reached",
@@ -541,6 +577,61 @@ function Thread({
   );
 }
 
+function openFolders(): Set<string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OPEN_STORE) ?? "[]") as unknown;
+    return new Set(Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false" className={open ? "chev open" : "chev"}>
+      <path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M9 4h6l-1 6 4 3v2H6v-2l4-3zM12 15v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function NewFolderIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v6M9 13h6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function GhostIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M5 20V10a7 7 0 0 1 14 0v10l-2.5-2-2.3 2-2.2-2-2.2 2-2.3-2zM9.5 10h.01M14.5 10h.01"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function ConversationSide({
   list,
   currentId,
@@ -556,6 +647,8 @@ function ConversationSide({
 }) {
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
+  const [open, setOpen] = useState<Set<string>>(openFolders);
+  const [editing, setEditing] = useState<{ folder: ChatFolder | null; parentId: string | null } | null>(null);
   const restore = useMutation({
     mutationFn: (id: string) => request<ConversationList>(`/ai/chatgpt/conversations/${id}/restore`, { method: "POST" }),
     onSuccess: (l, id) => {
@@ -563,42 +656,144 @@ function ConversationSide({
       onPick(id);
     },
   });
+  function toggle(id: string) {
+    const next = new Set(open);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setOpen(next);
+    try {
+      localStorage.setItem(OPEN_STORE, JSON.stringify([...next]));
+    } catch {
+      /* the folders simply open closed next time */
+    }
+  }
+  const folders = list.folders ?? [];
+  const known = new Map(folders.map((f) => [f.id, f]));
+  const current = list.conversations.find((c) => c.id === currentId);
+  const currentFolder = current?.folder_id ? known.get(current.folder_id) : undefined;
+  const isOpen = (f: ChatFolder) => open.has(f.id) || f.id === currentFolder?.id || f.id === currentFolder?.parent_id;
   const q = query.trim().toLocaleLowerCase();
   const shown = q ? list.conversations.filter((c) => c.title.toLocaleLowerCase().includes(q)) : list.conversations;
+
+  const item = (c: ConversationSummary, where?: string) => (
+    <li key={c.id}>
+      <button
+        type="button"
+        className={c.id === currentId ? "chat-item active" : "chat-item"}
+        aria-current={c.id === currentId ? "true" : undefined}
+        onClick={() => onPick(c.id)}
+      >
+        <span className="chat-item-title">{c.title}</span>
+        <span className="tiny muted">
+          {where ? `${where} · ` : ""}
+          {dateTime(c.updated_at)} · {plural(c.replies, "reply", "replies")}
+        </span>
+      </button>
+    </li>
+  );
+
+  const folderRow = (f: ChatFolder, sub: boolean) => {
+    const kids = sub ? [] : folders.filter((k) => k.parent_id === f.id);
+    const convs = list.conversations.filter((c) => c.folder_id === f.id);
+    const expanded = isOpen(f);
+    const total = f.conversations + kids.reduce((n, k) => n + k.conversations, 0);
+    return (
+      <li key={f.id} className={sub ? "chat-folder sub" : "chat-folder"}>
+        <div className="chat-folder-row">
+          <button type="button" className="chat-folder-name" aria-expanded={expanded} onClick={() => toggle(f.id)}>
+            <Chevron open={expanded} />
+            <FolderIcon icon={f.icon} color={f.color} />
+            <span className="chat-folder-title">{f.name}</span>
+            {f.pinned && (
+              <span className="chat-folder-pin" title="Pinned">
+                <PinIcon />
+                <span className="sr-only">pinned</span>
+              </span>
+            )}
+            <span className="tiny muted chat-folder-count">{total}</span>
+          </button>
+          {!sub && (
+            <button
+              type="button"
+              className="chat-folder-act"
+              title="New subfolder"
+              aria-label={`New subfolder in ${f.name}`}
+              onClick={() => setEditing({ folder: null, parentId: f.id })}
+            >
+              +
+            </button>
+          )}
+          <button
+            type="button"
+            className="chat-folder-act"
+            title="Folder settings"
+            aria-label={`Settings of ${f.name}`}
+            onClick={() => setEditing({ folder: f, parentId: null })}
+          >
+            ⋯
+          </button>
+        </div>
+        {expanded && (
+          <ul className="chat-convs chat-folder-items">
+            {kids.map((k) => folderRow(k, true))}
+            {convs.map((c) => item(c))}
+            {kids.length === 0 && convs.length === 0 && (
+              <li className="tiny muted chat-folder-empty">Empty. Open a conversation and use “Move to…”.</li>
+            )}
+          </ul>
+        )}
+      </li>
+    );
+  };
+
+  const loose = list.conversations.filter((c) => !c.folder_id || !known.has(c.folder_id));
   return (
     <div className="stack" style={{ gap: 10 }}>
-      {canSend && (
-        <button type="button" className="btn primary" onClick={onNew}>
-          New conversation
+      <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+        {canSend && (
+          <button type="button" className="btn primary" style={{ flex: 1 }} onClick={onNew}>
+            New conversation
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn chat-new-folder"
+          title="New folder"
+          aria-label="New folder"
+          onClick={() => setEditing({ folder: null, parentId: null })}
+        >
+          <NewFolderIcon />
         </button>
-      )}
+      </div>
       {list.conversations.length > 4 && (
         <label className="field">
           <span className="sr-only">Search conversations</span>
           <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search conversations" />
         </label>
       )}
-      {list.conversations.length === 0 ? (
+      {list.conversations.length === 0 && folders.length === 0 ? (
         <p className="small muted" style={{ margin: 0 }}>No conversations yet.</p>
-      ) : (
+      ) : q ? (
         <ul className="chat-convs" aria-label="Conversations">
-          {shown.map((c) => (
-            <li key={c.id}>
-              <button
-                type="button"
-                className={c.id === currentId ? "chat-item active" : "chat-item"}
-                aria-current={c.id === currentId ? "true" : undefined}
-                onClick={() => onPick(c.id)}
-              >
-                <span className="chat-item-title">{c.title}</span>
-                <span className="tiny muted">
-                  {dateTime(c.updated_at)} · {plural(c.replies, "reply", "replies")}
-                </span>
-              </button>
-            </li>
-          ))}
+          {shown.map((c) => item(c, c.folder_id ? known.get(c.folder_id)?.name : undefined))}
           {shown.length === 0 && <li className="small muted">No conversation matches.</li>}
         </ul>
+      ) : (
+        <>
+          {folders.length > 0 && (
+            <ul className="chat-convs chat-folders" aria-label="Folders">
+              {folders.filter((f) => f.parent_id === null).map((f) => folderRow(f, false))}
+            </ul>
+          )}
+          {loose.length > 0 && (
+            <>
+              {folders.length > 0 && <div className="tiny muted chat-loose-label">No folder</div>}
+              <ul className="chat-convs" aria-label={folders.length > 0 ? "Conversations without a folder" : "Conversations"}>
+                {loose.map((c) => item(c))}
+              </ul>
+            </>
+          )}
+        </>
       )}
       {list.deleted.length > 0 && (
         <details>
@@ -620,14 +815,24 @@ function ConversationSide({
           {restore.error && <ErrorNote error={restore.error} />}
         </details>
       )}
+      <FolderDialog<ConversationList>
+        open={editing !== null}
+        folder={editing?.folder ?? null}
+        parentId={editing?.parentId ?? null}
+        folders={folders}
+        onClose={() => setEditing(null)}
+        onSaved={(l) => qc.setQueryData(LIST_KEY, l)}
+      />
     </div>
   );
 }
 
-function TitleBar({ conv, busy }: { conv: Conversation; busy: boolean }) {
+function TitleBar({ conv, busy, folders }: { conv: Conversation; busy: boolean; folders: ChatFolder[] }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const folder = conv.folder_id ? folders.find((f) => f.id === conv.folder_id) : undefined;
   const [title, setTitle] = useState(conv.title);
   const [confirming, setConfirming] = useState(false);
   const rename = useMutation({
@@ -669,6 +874,13 @@ function TitleBar({ conv, busy }: { conv: Conversation; busy: boolean }) {
         <>
           <div style={{ minWidth: 0 }}>
             <h2 className="chat-title">{conv.title}</h2>
+            {folder && (
+              <span className="tiny chat-in-folder">
+                <FolderIcon icon={folder.icon} color={folder.color} size={14} /> {folder.name}
+              </span>
+            )}
+            {folder && <span className="tiny"> · </span>}
+            {conv.plain && <span className="tiny muted">Plain chat · </span>}
             {conv.course && (
               <span className="tiny">
                 Studying <Link to={`/courses/${conv.course.id}`}>{conv.course.title}</Link>
@@ -693,6 +905,9 @@ function TitleBar({ conv, busy }: { conv: Conversation; busy: boolean }) {
             >
               Rename
             </button>
+            <button type="button" className="btn small ghost" onClick={() => setMoving(true)} disabled={busy}>
+              Move to…
+            </button>
             <button type="button" className="btn small ghost" onClick={() => setConfirming(true)} disabled={busy}>
               Delete
             </button>
@@ -700,6 +915,14 @@ function TitleBar({ conv, busy }: { conv: Conversation; busy: boolean }) {
         </>
       )}
       {rename.error && <ErrorNote error={rename.error} />}
+      <MoveDialog<ConversationList>
+        open={moving}
+        conversationId={conv.id}
+        current={conv.folder_id}
+        folders={folders}
+        onClose={() => setMoving(false)}
+        onMoved={(l) => qc.setQueryData(LIST_KEY, l)}
+      />
       <Confirm
         open={confirming}
         title="Delete this conversation?"
@@ -799,6 +1022,8 @@ function Composer({
   onMaterial,
   onAttach,
   photoCourse,
+  noAttachments = false,
+  noTools = false,
 }: {
   canSend: boolean;
   models: Model[];
@@ -816,6 +1041,10 @@ function Composer({
   onAttach: () => void;
   /** The course pasted or dropped images are saved in (null: a planning chat, images need a course). */
   photoCourse: string | null;
+  /** A ghost chat: no files, no images (ADR-012 §5). */
+  noAttachments?: boolean;
+  /** A plain chat: never RecallSpring's tools. */
+  noTools?: boolean;
 }) {
   const [text, setText] = useState("");
   const photos = usePhotos(photoCourse, CHAT_FOLDER);
@@ -858,7 +1087,7 @@ function Composer({
         onClick={(e) => {
           if (e.target === e.currentTarget) box.current?.focus();
         }}
-        {...photos.dropProps}
+        {...(noAttachments ? {} : photos.dropProps)}
       >
         {reading.length > 0 && (
           <div className="tiny muted" role="status">
@@ -896,13 +1125,15 @@ function Composer({
             maxLength={4000}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKey}
-            onPaste={photos.onPaste}
+            onPaste={noAttachments ? undefined : photos.onPaste}
             placeholder={placeholder}
             disabled={!canSend}
             aria-describedby="composer-hint"
           />
         </label>
         <div className="composer-bar">
+          {!noAttachments && (
+          <>
           <button
             type="button"
             className="composer-icon"
@@ -924,6 +1155,9 @@ function Composer({
           >
             <ClipIcon />
           </button>
+          </>
+          )}
+          {!noTools && (
           <button
             type="button"
             className="composer-pill"
@@ -934,6 +1168,7 @@ function Composer({
             <BookIcon />
             RecallSpring
           </button>
+          )}
           <button
             type="button"
             className="composer-pill"
@@ -969,6 +1204,47 @@ function Composer({
   );
 }
 
+/** A ghost chat shown with the same thread as a saved one; nothing of it exists outside this tab. */
+function ghostConversation(g: GhostChat, model: string): Conversation {
+  const messages: AiMessage[] = g.turns.map((t, i) => ({
+    id: `ghost-${i}`,
+    position: i + 1,
+    role: t.role,
+    text: t.text,
+    created_at: t.at,
+    completed_at: t.at,
+    model_requested: t.role === "user" ? model : null,
+    model: t.model ?? null,
+    response_id: null,
+    account: null,
+    usage: t.usage ?? null,
+    duration_ms: null,
+    error_code: null,
+    visuals: t.visuals ?? [],
+    citations: {},
+    context: [],
+    tool_calls: t.steps ?? [],
+    photo_ids: [],
+  }));
+  const at = g.turns[0]?.at ?? new Date().toISOString();
+  return {
+    id: "ghost",
+    title: "Ghost chat",
+    created_at: at,
+    updated_at: at,
+    deleted_at: null,
+    messages,
+    material: [],
+    totals: { replies: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+    older_turns_not_sent: g.trimmed,
+    course: null,
+    folder_id: null,
+    plain: g.plain,
+  };
+}
+
+const LEAVE_GHOST = "Leave the ghost chat? It is not saved and will be gone.";
+
 export function ChatPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -991,9 +1267,13 @@ export function ChatPage() {
   const [model, setModel] = useState(() => remembered());
   const [visuals, setVisuals] = useState(() => remembered(VISUALS_STORE) !== "off");
   const [tools, setTools] = useState(() => remembered(TOOLS_STORE) !== "off");
-  // Study mode for a new conversation: the course ChatGPT starts from ("" = a planning conversation).
+  // What a new conversation is for: a course to study, "" = planning (all courses), PLAIN = a plain chat.
   const [studyCourse, setStudyCourse] = useState("");
-  const courses = useQuery({ queryKey: keys.courses, queryFn: () => get<Course[]>("/courses"), enabled: tools && !currentId });
+  const courses = useQuery({ queryKey: keys.courses, queryFn: () => get<Course[]>("/courses"), enabled: !currentId });
+  // Ghost (ADR-012 §5): the switch for a new conversation, and the ghost chat itself once it has started.
+  const [ghostOn, setGhostOn] = useState(false);
+  const [ghost, setGhost] = useState<GhostChat | null>(null);
+  const [ending, setEnding] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   // Full page: no menu and no list beside the thread; the conversations open as a drawer (owner 2026-11-22).
   const [full, setFull] = useState(() => remembered(FULL_STORE) === "on");
@@ -1010,6 +1290,24 @@ export function ChatPage() {
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [full, sideOpen]);
+  const ghostTurns = ghost?.turns.length ?? 0;
+  useEffect(() => {
+    // Closing or reloading the tab ends a ghost chat; the browser asks first.
+    if (!ghostTurns) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [ghostTurns]);
+  useEffect(() => {
+    // Opening a saved conversation ends the ghost chat (the learner was asked when it had turns).
+    if (currentId) {
+      setGhost(null);
+      setGhostOn(false);
+    }
+  }, [currentId]);
   const [picking, setPicking] = useState(false);
   const [attaching, setAttaching] = useState(false);
   // Files chosen before a new conversation's first message (an existing one keeps them on the server).
@@ -1018,9 +1316,16 @@ export function ChatPage() {
   const names = new Map(available.map((m) => [m.slug, m.display_name]));
   const chosen = available.some((m) => m.slug === model) ? model : (available[0]?.slug ?? "");
   const current = currentId ? (conv.data ?? null) : null;
-  const material = current ? current.material : currentId ? [] : draft;
+  const ghostActive = !currentId && (ghostOn || !!ghost);
+  const plainMode = currentId ? !!current?.plain : ghost ? ghost.plain : studyCourse === PLAIN;
+  const newCourse = !plainMode && tools && studyCourse && studyCourse !== PLAIN ? studyCourse : null;
+  const material = ghostActive ? [] : current ? current.material : currentId ? [] : draft;
 
   const [live, setLive] = useState<LiveReply | null>(null);
+  const onStream = (e: StreamEvent) => {
+    if (e.type === "text") setLive((l) => ({ text: (l?.text ?? "") + e.text, steps: l?.steps ?? [] }));
+    else if (e.type === "step") setLive((l) => ({ text: l?.text ?? "", steps: [...(l?.steps ?? []), e.step as ToolStep] }));
+  };
   const send = useMutation({
     mutationFn: (input: string | { text: string; photoIds: string[] }) => {
       const { text, photoIds } = typeof input === "string" ? { text: input, photoIds: [] } : input;
@@ -1031,14 +1336,11 @@ export function ChatPage() {
         message: text,
         photo_ids: photoIds,
         visuals,
-        recallspring: tools,
-        ...(currentId ? {} : { source_ids: draft.map((f) => f.id), course_id: tools && studyCourse ? studyCourse : null }),
+        recallspring: tools && !plainMode,
+        ...(currentId ? {} : { source_ids: draft.map((f) => f.id), course_id: newCourse, plain: plainMode }),
       };
       // The reply is shown as it arrives; the saved conversation replaces it when it is complete.
-      return streamRequest<Conversation>("/ai/chatgpt/messages/stream", body, (e) => {
-        if (e.type === "text") setLive((l) => ({ text: (l?.text ?? "") + e.text, steps: l?.steps ?? [] }));
-        else if (e.type === "step") setLive((l) => ({ text: l?.text ?? "", steps: [...(l?.steps ?? []), e.step as ToolStep] }));
-      });
+      return streamRequest<Conversation>("/ai/chatgpt/messages/stream", body, onStream);
     },
     onSettled: () => setLive(null),
     onSuccess: (c) => {
@@ -1063,6 +1365,59 @@ export function ChatPage() {
       }
     },
   });
+  // A ghost chat turn: the whole conversation goes along; the server keeps none of it.
+  const ghostSend = useMutation({
+    mutationFn: async (text: string) => {
+      const g: GhostChat = ghost ?? { turns: [], course: newCourse, plain: plainMode, trimmed: false };
+      setLive({ text: "", steps: [] });
+      const turns = [...g.turns.map((t) => ({ role: t.role, text: t.text })), { role: "user", text }];
+      const reply = await streamRequest<GhostReply>(
+        "/ai/chatgpt/ghost/stream",
+        { model: chosen, turns, course_id: g.course, plain: g.plain, recallspring: tools && !g.plain, visuals },
+        onStream,
+      );
+      return { reply, g, text };
+    },
+    onSettled: () => setLive(null),
+    onSuccess: ({ reply, g, text }) => {
+      const at = new Date().toISOString();
+      setGhost({
+        ...g,
+        trimmed: reply.older_turns_not_sent,
+        turns: [
+          ...g.turns,
+          { role: "user", text, at, steps: reply.steps },
+          {
+            role: "assistant",
+            text: reply.text.trim() ? reply.text : "(No text in this reply.)",
+            at,
+            model: reply.model,
+            usage: reply.usage,
+            visuals: reply.visuals,
+          },
+        ],
+      });
+      void qc.invalidateQueries({ queryKey: LIST_KEY, exact: true }); // usage counts
+    },
+  });
+  const keep = useMutation({
+    mutationFn: () =>
+      request<Conversation>("/ai/chatgpt/ghost/keep", {
+        method: "POST",
+        json: {
+          turns: ghost!.turns.map((t) => ({ role: t.role, text: t.text, model: t.model ?? null })),
+          course_id: ghost!.course,
+          plain: ghost!.plain,
+        },
+      }),
+    onSuccess: (c) => {
+      qc.setQueryData([...LIST_KEY, c.id], c);
+      void qc.invalidateQueries({ queryKey: LIST_KEY, exact: true });
+      setGhost(null);
+      setGhostOn(false);
+      navigate(`/chat/${c.id}`, { replace: true });
+    },
+  });
   const saveMaterial = useMutation({
     mutationFn: (ids: string[]) =>
       request<Conversation>(`/ai/chatgpt/conversations/${currentId}/material`, { method: "PUT", json: { source_ids: ids } }),
@@ -1083,13 +1438,31 @@ export function ChatPage() {
     }
   }
 
+  /** Leaving a ghost chat with turns discards it, so ask first. */
+  function leaveGhost(): boolean {
+    if (ghostTurns && !window.confirm(LEAVE_GHOST)) return false;
+    setGhost(null);
+    return true;
+  }
+
   function pick(id: string) {
+    if (!leaveGhost()) return;
     setSideOpen(false);
     send.reset();
+    ghostSend.reset();
     navigate(`/chat/${id}`);
   }
 
   const usage = list.data?.usage;
+  const busy = send.isPending || ghostSend.isPending || keep.isPending;
+  const shownConv = ghostActive ? (ghost ? ghostConversation(ghost, chosen) : null) : current;
+  const pendingText = ghostSend.isPending
+    ? (ghostSend.variables ?? null)
+    : send.isPending && send.variables !== undefined
+      ? typeof send.variables === "string"
+        ? send.variables
+        : send.variables.text
+      : null;
 
   return (
     <div className={full ? "chat-page full" : "chat-page"}>
@@ -1106,12 +1479,12 @@ export function ChatPage() {
         <div style={{ minWidth: 0 }} className="chat-top-text">
           <h1>Chat</h1>
           <p className="tiny muted" style={{ margin: 0 }}>
-            ChatGPT on your own plan{s?.connected && s.email ? ` (${s.email})` : ""}. Conversations are saved here ·{" "}
-            <Link to="/settings#chatgpt">Sign-in and privacy</Link>
+            ChatGPT on your own plan{s?.connected && s.email ? ` (${s.email})` : ""}. Conversations are saved here, ghost chats
+            are not · <Link to="/settings#chatgpt">Sign-in and privacy</Link>
           </p>
         </div>
         {usage && (
-          <span className="tiny muted" title="As ChatGPT reports it. Your plan's remaining limit: chatgpt.com/settings/usage">
+          <span className="tiny muted" title="As ChatGPT reports it, ghost chats included. Your plan's remaining limit: chatgpt.com/settings/usage">
             Last 24 h: {totalsLine(usage.last_24_hours)} · 30 days: {totalsLine(usage.last_30_days)}
           </span>
         )}
@@ -1144,12 +1517,15 @@ export function ChatPage() {
           {list.data ? (
             <ConversationSide
               list={list.data}
-              currentId={currentId}
+              currentId={ghostActive ? null : currentId}
               onPick={pick}
               onNew={() => {
+                if (!leaveGhost()) return;
                 setSideOpen(false);
                 setDraft([]);
                 send.reset();
+                ghostSend.reset();
+                setGhostOn(false);
                 navigate("/chat/new");
               }}
               canSend={canSend}
@@ -1161,25 +1537,58 @@ export function ChatPage() {
           )}
         </aside>
 
-        <section className="chat-main" aria-label="Conversation">
+        <section className={ghostActive ? "chat-main is-ghost" : "chat-main"} aria-label="Conversation">
           {current ? (
-            <TitleBar key={current.id} conv={current} busy={send.isPending} />
+            <TitleBar key={current.id} conv={current} busy={busy} folders={list.data?.folders ?? []} />
+          ) : ghost ? (
+            <div className="chat-head chat-ghost-bar">
+              <div style={{ minWidth: 0 }}>
+                <h2 className="chat-title">
+                  <GhostIcon /> Ghost chat
+                </h2>
+                <span className="tiny muted">
+                  Lives only in this tab and is not saved. {ghost.plain ? "Plain chat." : "It can read your RecallSpring but writes nothing."}
+                </span>
+              </div>
+              <span className="row" style={{ gap: 4 }}>
+                <button type="button" className="btn small" onClick={() => keep.mutate()} disabled={busy}>
+                  Keep this chat
+                </button>
+                <button type="button" className="btn small ghost" onClick={() => setEnding(true)} disabled={busy}>
+                  End
+                </button>
+              </span>
+              {keep.error && <ErrorNote error={keep.error} />}
+            </div>
           ) : (
             <div className="chat-head">
-              <h2 className="chat-title">New conversation</h2>
-              {tools && (courses.data?.length ?? 0) > 0 && (
+              <h2 className="chat-title">{ghostOn ? "New ghost chat" : "New conversation"}</h2>
+              <span className="row" style={{ gap: 10 }}>
                 <label className="chat-study small">
-                  Study
+                  <span className="sr-only">What this chat is for</span>
                   <select value={studyCourse} onChange={(e) => setStudyCourse(e.target.value)}>
                     <option value="">Planning (all courses)</option>
-                    {courses.data!.map((c) => (
+                    {(courses.data ?? []).map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.title}
+                        Study: {c.title}
                       </option>
                     ))}
+                    <option value={PLAIN}>Plain chat (no RecallSpring)</option>
                   </select>
                 </label>
-              )}
+                <label className="chat-ghost-switch small" title="Nothing of a ghost chat is saved; it lives only in this tab">
+                  <input type="checkbox" checked={ghostOn} onChange={(e) => setGhostOn(e.target.checked)} />
+                  <GhostIcon />
+                  Ghost
+                </label>
+              </span>
+            </div>
+          )}
+          {ghostOn && !ghost && (
+            <div className="notice small chat-ghost-note">
+              <GhostIcon /> Ghost chat: it lives only in this tab; RecallSpring does not save it and it is not added to your ChatGPT history.
+              {plainMode ? "" : " It can read your material, plan and notes but writes nothing (no questions, grades or notes)."} No
+              attachments. Close the tab or press End to discard it, or Keep this chat to save it from then on.
             </div>
           )}
           {currentId && conv.isPending ? (
@@ -1192,18 +1601,19 @@ export function ChatPage() {
             </div>
           ) : (
             <Thread
-              conv={current}
+              conv={shownConv}
               names={names}
-              pending={send.isPending && send.variables !== undefined ? (typeof send.variables === "string" ? send.variables : send.variables.text) : null}
-              live={send.isPending ? live : null}
-              onFormSaved={canSend && chosen ? (text, photoIds) => send.mutate({ text, photoIds: photoIds ?? [] }) : null}
+              pending={pendingText}
+              live={busy ? live : null}
+              onFormSaved={!ghostActive && canSend && chosen ? (text, photoIds) => send.mutate({ text, photoIds: photoIds ?? [] }) : null}
             />
           )}
           <div className="chat-foot">
-            {current?.older_turns_not_sent && (
+            {shownConv?.older_turns_not_sent && (
               <div className="notice small">Long conversation: only the newest messages are sent to ChatGPT. Start a new one for a new topic.</div>
             )}
             {send.error && <ErrorNote error={send.error} />}
+            {ghostSend.error && <ErrorNote error={ghostSend.error} />}
             {models.error && <ErrorNote error={models.error} />}
             {!picking && saveMaterial.error && <ErrorNote error={saveMaterial.error} />}
             <Composer
@@ -1214,9 +1624,11 @@ export function ChatPage() {
                 setModel(slug);
                 remember(slug);
               }}
-              busy={send.isPending}
-              onSend={(text, photoIds) => send.mutateAsync({ text, photoIds })}
-              photoCourse={current?.course?.id ?? (studyCourse || null)}
+              busy={busy}
+              onSend={(text, photoIds) => (ghostActive ? ghostSend.mutateAsync(text) : send.mutateAsync({ text, photoIds }))}
+              photoCourse={current?.course?.id ?? newCourse}
+              noAttachments={ghostActive}
+              noTools={plainMode}
               visuals={visuals}
               onVisuals={(on) => {
                 setVisuals(on);
@@ -1239,11 +1651,13 @@ export function ChatPage() {
               placeholder={
                 !canSend
                   ? "Sign in with ChatGPT to write"
-                  : current
-                    ? "Write a message"
-                    : studyCourse && tools
-                      ? "Write e.g. “Start studying”"
-                      : "Start a new conversation"
+                  : ghostActive
+                    ? "Write a message (not saved)"
+                    : current
+                      ? "Write a message"
+                      : newCourse
+                        ? "Write e.g. “Start studying”"
+                        : "Start a new conversation"
               }
             />
           </div>
@@ -1251,7 +1665,7 @@ export function ChatPage() {
       </div>
       <AttachDialog
         open={attaching}
-        courseId={current ? (current.course?.id ?? null) : tools && studyCourse ? studyCourse : null}
+        courseId={current ? (current.course?.id ?? null) : newCourse}
         onClose={() => setAttaching(false)}
         onAttached={attach}
       />
@@ -1269,6 +1683,21 @@ export function ChatPage() {
           }
         }}
       />
+      <Confirm
+        open={ending}
+        title="End the ghost chat?"
+        confirmLabel="End and discard"
+        danger
+        onConfirm={() => {
+          setGhost(null);
+          setGhostOn(false);
+          setEnding(false);
+          ghostSend.reset();
+        }}
+        onClose={() => setEnding(false)}
+      >
+        <p>It was never saved, so it cannot be recovered. Use Keep this chat instead to save it.</p>
+      </Confirm>
     </div>
   );
 }

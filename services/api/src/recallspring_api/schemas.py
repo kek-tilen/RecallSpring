@@ -202,10 +202,94 @@ class ChatGptMessageIn(BaseModel):
     recallspring: bool = False
     # Only for a new conversation: study mode for this course (ChatGPT starts from its study context and plan).
     course_id: uuid.UUID | None = None
+    # Only for a new conversation: a plain chat (ADR-012 §5), no course and never RecallSpring's tools.
+    plain: bool = False
 
 
 class ChatGptConversationPatch(BaseModel):
     title: str = Field(min_length=1, max_length=200)
+
+
+class ChatFolderIn(BaseModel):
+    """A Chat folder (ADR-012 §4); ``parent_id`` makes it a subfolder of a top-level folder."""
+
+    name: str = Field(min_length=1, max_length=60)
+    parent_id: uuid.UUID | None = None
+    icon: str = Field(default="folder", max_length=20)
+    color: str | None = Field(default=None, max_length=7, description="#rrggbb; null: the default colour")
+    course_id: uuid.UUID | None = None
+    pinned: bool = False
+
+
+class ChatFolderPatch(BaseModel):
+    """Only the fields sent are changed; ``parent_id``, ``color`` and ``course_id`` may be set to null."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    parent_id: uuid.UUID | None = None
+    icon: str | None = Field(default=None, max_length=20)
+    color: str | None = Field(default=None, max_length=7)
+    course_id: uuid.UUID | None = None
+    pinned: bool | None = None
+
+
+class ChatFolderMoveIn(BaseModel):
+    """ "Move to…": a folder, or null for "No folder"."""
+
+    folder_id: uuid.UUID | None
+
+
+class GhostTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    text: str = Field(min_length=1, max_length=40_000)
+    model: str | None = Field(default=None, max_length=120)
+
+    @field_validator("text")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("empty turn")
+        return value
+
+
+def _ghost_turns(turns: list[GhostTurn]) -> list[GhostTurn]:
+    for t in turns:
+        if t.role == "user" and len(t.text) > 4000:
+            raise ValueError("a message is at most 4000 characters")
+    if not any(t.role == "user" for t in turns):
+        raise ValueError("a ghost chat starts with the learner's message")
+    return turns
+
+
+class GhostMessageIn(BaseModel):
+    """A ghost chat turn (ADR-012 §5): the page holds the whole conversation and sends it with every message; the
+    server keeps none of it. The last turn is the learner's new message."""
+
+    model: str = Field(min_length=1, max_length=120)
+    turns: list[GhostTurn] = Field(min_length=1, max_length=120)
+    course_id: uuid.UUID | None = None
+    plain: bool = False
+    recallspring: bool = True
+    visuals: bool = True
+
+    @field_validator("turns")
+    @classmethod
+    def _turns(cls, turns: list[GhostTurn]) -> list[GhostTurn]:
+        if turns[-1].role != "user":
+            raise ValueError("the last turn is the learner's new message")
+        return _ghost_turns(turns)
+
+
+class GhostKeepIn(BaseModel):
+    """ "Keep this chat": save the ghost chat the page holds as a normal conversation."""
+
+    turns: list[GhostTurn] = Field(min_length=1, max_length=120)
+    course_id: uuid.UUID | None = None
+    plain: bool = False
+
+    @field_validator("turns")
+    @classmethod
+    def _turns(cls, turns: list[GhostTurn]) -> list[GhostTurn]:
+        return _ghost_turns(turns)
 
 
 class ChatGptMaterialIn(BaseModel):

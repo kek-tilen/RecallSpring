@@ -1,6 +1,6 @@
 # ADR-012 — Forms last, formulas in questions, a calmer home, Study in…, Chat folders, Plain and Ghost chats
 
-Status: accepted 2026-11-23 (owner in chat); rolled out in steps, see Rollout (steps 1 and 2 done 2026-11-23). Extends ADR-010 and ADR-011.
+Status: accepted 2026-11-23 (owner in chat); rolled out in steps, see Rollout (steps 1 to 4 done 2026-11-23). Extends ADR-010 and ADR-011.
 
 ## Context
 
@@ -55,6 +55,10 @@ conversation; "Copy only" is offered too.
 - A new conversation goes to a course's folder automatically only when exactly one folder is linked to that course.
 - Deleting a folder never deletes conversations: after confirmation they move to the parent folder or to "No
   folder".
+- Agreed 2026-11-23 by mockup: 16 icons (folder, book, school, flask, function, code, shield, globe, language,
+  palette, scale, heart, bulb, calendar, star, chat) and 8 colours (grey, teal, blue, violet, rose, red, amber,
+  green) plus Custom; deleting a top-level folder moves its subfolders to the top level. Courses have no colour of
+  their own yet, so a linked folder keeps the learner's colour for now.
 
 ### 5. Plain chat and Ghost chat (Chat only)
 
