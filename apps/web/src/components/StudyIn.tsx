@@ -66,7 +66,7 @@ function remembered(): AssistantKey | null {
 export function StudyIn({ course }: { course: { id: string; title: string } }) {
   const navigate = useNavigate();
   const status = useAssistants();
-  const chosen = useSession().data?.user.assistant;
+  const chosen = useSession().data?.user?.assistant;
   const offered = offeredAssistants(status.data, chosen);
   const [last, setLast] = useState<AssistantKey | null>(() => remembered());
   const [open, setOpen] = useState(false);

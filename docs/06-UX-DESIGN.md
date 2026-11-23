@@ -46,6 +46,11 @@ All text/action contrast must meet WCAG 2.2 AA; change tones as needed.
 ### Exams that are behind the learner (owner 2026-11-23)
 
 - Marking an exam **Passed** or **Cancelled** when its course is in focus and has no other exam coming up asks: "<course> is in focus until <date>. … End the focus now?" with `Keep until <date>` and `End focus`. Failed does not ask (a retake usually follows). Ending it is the same audited change as `End focus` on the course.
+- **Sections open and close** (owner 2026-11-23): on Courses every university, faculty and semester with something in
+  it, `Not filed`, `Interests` (when there are some) and `Archived` (when something is in it) has a heading button
+  with an arrow (`aria-expanded`). Closed, it shows what it holds ("2 courses", "1 interest", "3 items"); closing a
+  university hides everything inside. Closed sections are remembered on the device; Edit, Add inside and Archive stay
+  usable while closed.
 - **Study in…** (ADR-012 §3, 2026-11-23): each active course card has `Study in…`, which always opens a menu (owner
   2026-11-23: a choice every time, never a default launch; the last one used is marked `last used` and focused): the
   learner's connected assistants (else the welcome page's choice or mix, else

@@ -14,11 +14,59 @@ import {
 } from "../components/organise";
 import { NewCourseDialog, RecentlyDeletedCourses } from "../components/CourseForms";
 import { StudyIn } from "../components/StudyIn";
-import { Async, Confirm, Empty, ErrorNote, PageHead, StudyMeter } from "../components/ui";
+import { Async, Chevron, Confirm, Empty, ErrorNote, PageHead, StudyMeter } from "../components/ui";
 import { dateLabel, plural } from "../format";
 import { useArchived, useCourseSummary, useGroups } from "../queries";
 import { ArchivedCourses } from "./Archived";
 import type { CourseSummary, Group } from "../types";
+
+/** Sections the learner closed on Courses (group IDs, "loose", "interests", "archived"), remembered on the device. */
+export const COLLAPSED_STORE = "rs.courses.collapsed";
+
+function readCollapsed(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_STORE) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function useCollapse(id: string): [boolean, () => void] {
+  const [closed, setClosed] = useState(() => readCollapsed().has(id));
+  function toggle() {
+    const all = readCollapsed();
+    if (closed) all.delete(id);
+    else all.add(id);
+    try {
+      localStorage.setItem(COLLAPSED_STORE, JSON.stringify([...all]));
+    } catch {
+      /* only a convenience */
+    }
+    setClosed(!closed);
+  }
+  return [closed, toggle];
+}
+
+/** The heading of a section that opens and closes; ``shut`` is what it holds, shown while closed. */
+function SectionToggle({ open, onToggle, children, shut }: { open: boolean; onToggle: () => void; children: React.ReactNode; shut: string }) {
+  return (
+    <>
+      <button type="button" className="group-toggle" aria-expanded={open} onClick={onToggle}>
+        <Chevron open={open} />
+        {children}
+      </button>
+      {!open && <span className="small muted group-shut">{shut}</span>}
+    </>
+  );
+}
+
+/** Courses in a group and everything inside it. */
+function coursesInside(group: Group, groups: Group[], courses: CourseSummary[], showArchived: boolean): number {
+  const own = courses.filter((c) => c.group_id === group.id && (showArchived || c.status !== "archived")).length;
+  return groups
+    .filter((g) => g.parent_id === group.id && (showArchived || g.status === "active"))
+    .reduce((n, g) => n + coursesInside(g, groups, courses, showArchived), own);
+}
 
 function CourseCard({ c }: { c: CourseSummary }) {
   const [editing, setEditing] = useState(false);
@@ -99,12 +147,24 @@ function GroupBlock({ group, groups, courses, showArchived, depth }: {
   const own = courses.filter((c) => c.group_id === group.id && (showArchived || c.status !== "archived"));
   const archived = group.status === "archived";
   const Heading = depth === 0 ? "h2" : "h3";
+  const [closed, toggle] = useCollapse(group.id);
+  const filled = children.length > 0 || own.length > 0;
+  const open = !filled || !closed;
   return (
     <section className={`group ${archived ? "archived" : ""}`} aria-label={`${KIND_LABEL[group.kind]} ${group.name}`}>
       <div className="group-head">
         <Heading>
-          <span className="kind">{KIND_LABEL[group.kind]}</span>
-          {group.name}
+          {filled ? (
+            <SectionToggle open={open} onToggle={toggle} shut={plural(coursesInside(group, groups, courses, showArchived), "course")}>
+              <span className="kind">{KIND_LABEL[group.kind]}</span>
+              {group.name}
+            </SectionToggle>
+          ) : (
+            <>
+              <span className="kind">{KIND_LABEL[group.kind]}</span>
+              {group.name}
+            </>
+          )}
           {archived && <span className="chip">Archived</span>}
         </Heading>
         <div className="row">
@@ -127,7 +187,7 @@ function GroupBlock({ group, groups, courses, showArchived, depth }: {
         </div>
       </div>
       {archive.error && !confirm && <ErrorNote error={archive.error} />}
-      {(children.length > 0 || own.length > 0) && (
+      {filled && open && (
         <div className="group-children">
           {own.length > 0 && (
             <div className="grid cols-2">
@@ -174,6 +234,10 @@ export function CoursesPage() {
   const [creating, setCreating] = useState(false);
   const [addingInterest, setAddingInterest] = useState(false);
   const [addingCourse, setAddingCourse] = useState(false);
+  const [looseClosed, toggleLoose] = useCollapse("loose");
+  const [interestsClosed, toggleInterests] = useCollapse("interests");
+  const [archiveClosed, toggleArchive] = useCollapse("archived");
+  const archivedCount = archived.data ? archived.data.groups.length + archived.data.courses.length : 0;
   return (
     <div className="page">
       <PageHead
@@ -181,7 +245,7 @@ export function CoursesPage() {
         sub="Organised by university, faculty and semester, plus your own interests. Each shows its next exam or goal and progress."
       >
         <a href="#archived" className="btn ghost">
-          Archived{archived.data ? ` (${archived.data.groups.length + archived.data.courses.length})` : ""}
+          Archived{archived.data ? ` (${archivedCount})` : ""}
         </a>
         <button type="button" className="btn primary" onClick={() => setAddingCourse(true)}>
           New course
@@ -219,33 +283,48 @@ export function CoursesPage() {
                   {roots.length > 0 && (
                     <div className="group-head">
                       <h2>
-                        <span className="kind">Not filed</span>
+                        <SectionToggle open={!looseClosed} onToggle={toggleLoose} shut={plural(loose.length, "course")}>
+                          <span className="kind">Not filed</span>
+                        </SectionToggle>
                       </h2>
                     </div>
                   )}
-                  <div className="grid cols-2">
-                    {loose.map((c) => (
-                      <CourseCard key={c.id} c={c} />
-                    ))}
-                  </div>
+                  {(roots.length === 0 || !looseClosed) && (
+                    <div className="grid cols-2">
+                      {loose.map((c) => (
+                        <CourseCard key={c.id} c={c} />
+                      ))}
+                    </div>
+                  )}
                 </section>
               )}
               <section className="group" aria-label="Interests">
                 <div className="group-head">
                   <h2>
-                    <span className="kind">Interests</span>
-                    Outside university
+                    {interests.length > 0 ? (
+                      <SectionToggle open={!interestsClosed} onToggle={toggleInterests} shut={plural(interests.length, "interest")}>
+                        <span className="kind">Interests</span>
+                        Outside university
+                      </SectionToggle>
+                    ) : (
+                      <>
+                        <span className="kind">Interests</span>
+                        Outside university
+                      </>
+                    )}
                   </h2>
                   <button type="button" className="btn small ghost" onClick={() => setAddingInterest(true)}>
                     Add interest
                   </button>
                 </div>
                 {interests.length > 0 ? (
-                  <div className="grid cols-2">
-                    {interests.map((c) => (
-                      <CourseCard key={c.id} c={c} />
-                    ))}
-                  </div>
+                  !interestsClosed && (
+                    <div className="grid cols-2">
+                      {interests.map((c) => (
+                        <CourseCard key={c.id} c={c} />
+                      ))}
+                    </div>
+                  )
                 ) : (
                   <p className="small muted">
                     Learn something in your free time, without an exam: data analysis, machine learning, a language.
@@ -261,16 +340,27 @@ export function CoursesPage() {
       <section id="archived" className="group" aria-label="Archived" style={{ marginTop: 28 }}>
         <div className="group-head">
           <h2>
-            <span className="kind">Archived</span>
-            Put away, nothing deleted
+            {archivedCount > 0 ? (
+              <SectionToggle open={!archiveClosed} onToggle={toggleArchive} shut={plural(archivedCount, "item")}>
+                <span className="kind">Archived</span>
+                Put away, nothing deleted
+              </SectionToggle>
+            ) : (
+              <>
+                <span className="kind">Archived</span>
+                Put away, nothing deleted
+              </>
+            )}
           </h2>
           <Link to="/library/archived" className="btn small ghost">
             Archived folders and files
           </Link>
         </div>
-        <Async q={archived} lines={2}>
-          {(view) => <ArchivedCourses view={view} compact />}
-        </Async>
+        {(archivedCount === 0 || !archiveClosed) && (
+          <Async q={archived} lines={2}>
+            {(view) => <ArchivedCourses view={view} compact />}
+          </Async>
+        )}
       </section>
       <RecentlyDeletedCourses />
       {creating && <GroupDialog open onClose={() => setCreating(false)} />}

@@ -9,7 +9,7 @@ import { FolderDialog, FolderIcon, MoveDialog, type ChatFolder } from "../compon
 import { MaterialPicker, MAX_FILES, type ChosenFile } from "../components/ChatMaterial";
 import { Markdown, VISUAL_LANG, type Cites } from "../components/Markdown";
 import type { VisualResult } from "../components/Visual";
-import { Confirm, ErrorNote, Loading } from "../components/ui";
+import { Chevron, Confirm, ErrorNote, Loading } from "../components/ui";
 import { dateTime, plural } from "../format";
 import { keys } from "../queries";
 import type { Course } from "../types";
@@ -584,14 +584,6 @@ function openFolders(): Set<string> {
   } catch {
     return new Set();
   }
-}
-
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false" className={open ? "chev open" : "chev"}>
-      <path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
 }
 
 function PinIcon() {

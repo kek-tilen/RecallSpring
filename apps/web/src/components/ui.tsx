@@ -30,6 +30,15 @@ export function Card({ title, meta, children, tint, action, id, level = 2 }: {
   );
 }
 
+/** A small arrow that points right when closed and down when open (styles.css `.chev`). */
+export function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false" className={open ? "chev open" : "chev"}>
+      <path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="empty">

@@ -1751,6 +1751,34 @@ pre.template {
   overflow-wrap: anywhere;
 }
 
+/* Courses: a section heading that opens and closes (owner 2026-11-23). */
+.group-toggle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.group-toggle .chev {
+  align-self: center;
+}
+
+.group-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.group-shut {
+  font-weight: 400;
+}
+
 .kind {
   font-size: 0.72rem;
   text-transform: uppercase;
