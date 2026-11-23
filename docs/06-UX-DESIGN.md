@@ -149,7 +149,9 @@ Implemented (2026-11-21, ADR-008):
     conversations go (the parent folder or No folder; subfolders to the top level); no conversation is deleted.
   - **Plain and Ghost chats** (ADR-012 §5, owner 2026-11-23): a new conversation's choice offers `Planning (all
     courses)`, `Study: <course>` and `Plain chat (no RecallSpring)`, which hides the RecallSpring switch and is
-    marked `Plain chat` in the title bar. The `Ghost` switch next to it works with all three: a note says the chat
+    marked `Plain chat` in the title bar. The `Ghost` button next to it (a small ghost, no checkbox; owner
+    2026-11-23: on hover its eyes look right, up and left in a loop and its hem flutters, none with reduced
+    motion; when on, the ghost is filled with ink and its eyes turn light, `aria-pressed`) works with all three: a note says the chat
     lives only in this tab and is not saved, reads but writes nothing, and takes no attachments (the `+` and
     paperclip buttons and pasting images are gone). The thread gets a faint diagonal pattern; the bar shows
     `Keep this chat` (saves it as a normal conversation from then on) and `End` (asks, then discards). Leaving it

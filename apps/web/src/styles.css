@@ -2444,7 +2444,7 @@ tr.selected td {
   }
 }
 
-.folder-icon {
+.chat-folder-icon {
   flex: none;
 }
 
@@ -2566,11 +2566,103 @@ tr.selected td {
 }
 
 /* Ghost chats (ADR-012 §5): a quiet dashed frame says nothing here is kept. */
-.chat-ghost-switch {
+.ghost-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 5px 10px 5px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--ink);
+  font: inherit;
   cursor: pointer;
+}
+
+.ghost-toggle:hover {
+  background: var(--surface);
+}
+
+.ghost-toggle[aria-pressed="true"] {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  font-weight: 600;
+}
+
+/* The ghost: outlined when off; filled with ink and light eyes when on (owner 2026-11-23). */
+.ghost-mark {
+  flex: none;
+  overflow: visible;
+}
+
+.ghost-mark .ghost-body {
+  fill: none;
+  stroke: currentColor;
+}
+
+.ghost-mark .ghost-eyes {
+  fill: currentColor;
+}
+
+.ghost-mark.on .ghost-body {
+  fill: currentColor;
+}
+
+.ghost-mark.on .ghost-eyes {
+  fill: var(--surface-elevated);
+}
+
+/* Hover: the eyes look right, back, up, back, left, back, in a loop; the hem flutters. */
+@media (prefers-reduced-motion: no-preference) {
+  .ghost-toggle:hover .ghost-eyes,
+  .ghost-toggle:focus-visible .ghost-eyes {
+    animation: ghost-look 3.2s ease-in-out infinite;
+  }
+
+  .ghost-toggle:hover .ghost-body,
+  .ghost-toggle:focus-visible .ghost-body {
+    animation: ghost-hem 0.9s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes ghost-look {
+  0%,
+  6% {
+    transform: translate(0, 0);
+  }
+  14%,
+  24% {
+    transform: translate(2.2px, 0);
+  }
+  32%,
+  38% {
+    transform: translate(0, 0);
+  }
+  46%,
+  56% {
+    transform: translate(0, -1.8px);
+  }
+  64%,
+  70% {
+    transform: translate(0, 0);
+  }
+  78%,
+  88% {
+    transform: translate(-2.2px, 0);
+  }
+  96%,
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes ghost-hem {
+  from {
+    d: path("M5 20V11a7 7 0 0 1 14 0v9q-1.17-1.6-2.33 0t-2.33 0t-2.34 0t-2.34 0t-2.33 0t-2.33 0z");
+  }
+  to {
+    d: path("M5 20V11a7 7 0 0 1 14 0v9q-1.17 1.6-2.33 0t-2.33 0t-2.34 0t-2.34 0t-2.33 0t-2.33 0z");
+  }
 }
 
 .chat-main.is-ghost .chat-scroll {
@@ -2578,7 +2670,8 @@ tr.selected td {
 }
 
 .chat-ghost-bar .chat-title {
-  display: inline-flex;
+  display: flex;
+  margin-bottom: 2px;
   align-items: center;
   gap: 6px;
 }

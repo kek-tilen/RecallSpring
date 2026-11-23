@@ -68,7 +68,7 @@ export function FolderIcon({ icon, color, size = 18 }: { icon: string; color?: s
       strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
-      className="folder-icon"
+      className="chat-folder-icon"
     >
       {paths.map((d) => (
         <path key={d} d={d} />

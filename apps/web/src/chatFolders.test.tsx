@@ -190,7 +190,11 @@ describe("Plain and Ghost chats (ADR-012 §5)", () => {
     const sent: { method: string; path: string; body: unknown }[] = [];
     serve(sent);
     show("/chat/new");
-    fireEvent.click(await screen.findByRole("checkbox", { name: /Ghost/ }));
+    const toggle = await screen.findByRole("button", { name: "Ghost" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(toggle.querySelector(".ghost-mark.on")).toBeTruthy(); // the ghost fills when on
     expect(screen.getByText(/lives only in this tab; RecallSpring does not save it/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Choose material" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Upload files" })).toBeNull();

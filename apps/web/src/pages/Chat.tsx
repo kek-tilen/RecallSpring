@@ -617,17 +617,28 @@ function NewFolderIcon() {
   );
 }
 
-export function GhostIcon() {
+/** The ghost: a round head with a wavy hem. ``active`` fills it (eyes turn light); on hover of a `.ghost-toggle` the
+ * eyes look right, up and left and the hem flutters (styles.css, none with reduced motion). */
+export function GhostIcon({ active = false, size = 16 }: { active?: boolean; size?: number }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+      className={active ? "ghost-mark on" : "ghost-mark"}
+    >
       <path
-        d="M5 20V10a7 7 0 0 1 14 0v10l-2.5-2-2.3 2-2.2-2-2.2 2-2.3-2zM9.5 10h.01M14.5 10h.01"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
+        className="ghost-body"
+        d="M5 20V11a7 7 0 0 1 14 0v9q-1.17-1.6-2.33 0t-2.33 0t-2.34 0t-2.34 0t-2.33 0t-2.33 0z"
+        strokeWidth="1.7"
         strokeLinejoin="round"
       />
+      <g className="ghost-eyes">
+        <ellipse cx="9.6" cy="11.2" rx="1.15" ry="1.55" />
+        <ellipse cx="14.4" cy="11.2" rx="1.15" ry="1.55" />
+      </g>
     </svg>
   );
 }
@@ -1544,7 +1555,7 @@ export function ChatPage() {
             <div className="chat-head chat-ghost-bar">
               <div style={{ minWidth: 0 }}>
                 <h2 className="chat-title">
-                  <GhostIcon /> Ghost chat
+                  <GhostIcon active size={18} /> Ghost chat
                 </h2>
                 <span className="tiny muted">
                   Lives only in this tab and is not saved. {ghost.plain ? "Plain chat." : "It can read your RecallSpring but writes nothing."}
@@ -1576,11 +1587,16 @@ export function ChatPage() {
                     <option value={PLAIN}>Plain chat (no RecallSpring)</option>
                   </select>
                 </label>
-                <label className="chat-ghost-switch small" title="Nothing of a ghost chat is saved; it lives only in this tab">
-                  <input type="checkbox" checked={ghostOn} onChange={(e) => setGhostOn(e.target.checked)} />
-                  <GhostIcon />
+                <button
+                  type="button"
+                  className="ghost-toggle small"
+                  aria-pressed={ghostOn}
+                  title={ghostOn ? "Ghost is on: nothing of this chat will be saved" : "Ghost chat: nothing of it is saved; it lives only in this tab"}
+                  onClick={() => setGhostOn(!ghostOn)}
+                >
+                  <GhostIcon active={ghostOn} size={20} />
                   Ghost
-                </label>
+                </button>
               </span>
             </div>
           )}
