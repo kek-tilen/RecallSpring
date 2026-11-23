@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:mcp-math": "vite build -c vite.mcp-math.config.ts",
     "typecheck": "tsc -b",
     "test": "vitest run"
   },

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { CopyButton } from "../components/Copy";
 import { AwaitingGrade, QuizForm } from "../components/QuizForm";
+import { MathText } from "../components/Markdown";
 import { Async, Card, Empty, GradeChip, PageHead } from "../components/ui";
 import { ATTEMPT_KIND, dateLabel, dateTime, gradedBy, plural } from "../format";
 import { courseTitles, useCourses, useQuiz, useQuizzes } from "../queries";
@@ -78,7 +79,7 @@ function Item({ item, submitted }: { item: QuizItemView; submitted: boolean }) {
     <li className="stack" style={{ gap: 10 }}>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
         <strong>
-          {item.position}. {item.prompt}
+          {item.position}. <MathText text={item.prompt} />
         </strong>
         <span className="small muted">
           {submitted && item.earned !== null && item.earned !== undefined ? `${item.earned} / ` : ""}
@@ -93,7 +94,9 @@ function Item({ item, submitted }: { item: QuizItemView; submitted: boolean }) {
             return (
               <li key={o.key} className={[correct ? "correct" : "", mine ? "picked" : ""].join(" ")}>
                 <span className="key">{o.key}</span>
-                <span style={{ flex: 1 }}>{o.text}</span>
+                <span style={{ flex: 1 }}>
+                  <MathText text={o.text} />
+                </span>
                 {mine && <span className="chip">Your answer</span>}
                 {correct && <span className="chip good">Correct</span>}
               </li>
@@ -129,7 +132,9 @@ function Item({ item, submitted }: { item: QuizItemView; submitted: boolean }) {
           </summary>
           <ul className="small">
             {item.expected_points.map((p, i) => (
-              <li key={i}>{p}</li>
+              <li key={i}>
+                <MathText text={p} />
+              </li>
             ))}
           </ul>
         </details>

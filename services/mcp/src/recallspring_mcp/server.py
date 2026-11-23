@@ -111,6 +111,10 @@ Start of every study session in a course:
 When a reply gives feedback on the learner's work but nothing was saved to RecallSpring, say so in one line:
 "Nothing was saved to RecallSpring."
 
+FORMS LAST: write your explanation first and open a form (open_answer_form, open_quiz, open_summary_form,
+open_explanation_form) as the very last step of your message. Write nothing after the form; the learner's next
+message continues.
+
 Building the library (only when the learner asks): create_course; import_file for a PDF, Word (.docx),
 PowerPoint (.pptx), Excel (.xlsx), OpenDocument (.odt/.odp/.ods), Markdown or text, CSV/TSV, subtitles (.srt/.vtt),
 Jupyter notebook (.ipynb), LaTeX (.tex) or source code file, or a photo (.png/.jpg/.webp) on this computer (it goes
@@ -219,6 +223,18 @@ APPEND = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempoten
 # ---------------------------------------------------------------- answer form (MCP Apps)
 
 
+# ADR-012: apps draw a form where the tool is called, so the form must close the message.
+FORM_LAST = " The form ends your message: write nothing after it."
+
+
+def form_html(name: str) -> str:
+    """A form's HTML with RecallSpring's math script (math.js, built from the web app: npm run build:mcp-math)
+    inlined, so formulas in questions are drawn as math without loading anything (ADR-012)."""
+    pkg = resources.files("recallspring_mcp")
+    html = pkg.joinpath(name).read_text(encoding="utf-8")
+    return html.replace("/*RS_MATH*/", pkg.joinpath("math.js").read_text(encoding="utf-8").replace("</", "<\\/"))
+
+
 @apps.tool(resource_uri=FORM_URI, annotations=READ, title="Show answer form")
 async def open_answer_form(
     question_id: str, session_id: str | None = None, ctx: Context | None = None
@@ -248,7 +264,7 @@ async def open_answer_form(
     text = (
         f"Showing the answer form for question {q['id']} (Bloom {q['bloom_level']}):\n{q['prompt']}\n\n"
         "Wait for the learner to submit. If the form does not appear, ask the question in chat and save the "
-        "answer with submit_chat_answer."
+        "answer with submit_chat_answer." + FORM_LAST
     )
     return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=data)
 
@@ -281,7 +297,7 @@ async def submit_answer_from_form(
 
 apps.add_html_resource(
     FORM_URI,
-    resources.files("recallspring_mcp").joinpath("answer_form.html").read_text(encoding="utf-8"),
+    form_html("answer_form.html"),
     name="answer-form",
     title="RecallSpring answer form",
     description="Answer a RecallSpring practice question; the exact text is saved before grading.",
@@ -316,7 +332,10 @@ async def open_quiz(quiz_id: str, ctx: Context | None = None) -> CallToolResult:
         text = f"Simulation '{form['title']}' was already submitted; its results are shown."
     else:
         limit = f", {form['time_limit_minutes']} min" if form["time_limit_minutes"] else ""
-        text = f"Showing simulation '{form['title']}' ({len(form['items'])} questions{limit}). Wait for the learner."
+        text = (
+            f"Showing simulation '{form['title']}' ({len(form['items'])} questions{limit}). Wait for the learner."
+            + FORM_LAST
+        )
     return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=form)
 
 
@@ -361,7 +380,7 @@ async def open_summary_form(
     text = (
         f"Showing the summary form for '{title}' ({', '.join(terms)}). Wait for the learner; then read their summary "
         "(get_notes) and say what is correct, wrong or missing compared with the material (with page citations; not "
-        "a grade), then ask 2-3 short check questions on this part."
+        "a grade), then ask 2-3 short check questions on this part." + FORM_LAST
     )
     return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=data)
 
@@ -387,7 +406,7 @@ async def save_learning_summary(
 
 apps.add_html_resource(
     SUMMARY_URI,
-    resources.files("recallspring_mcp").joinpath("summary_form.html").read_text(encoding="utf-8"),
+    form_html("summary_form.html"),
     name="summary",
     title="RecallSpring learning summary",
     description="Summarise what you just studied in your own words; saved exactly as your note.",
@@ -427,7 +446,7 @@ async def open_explanation_form(
         return CallToolResult(content=[TextContent(type="text", text=text)], structured_content={**data, "link": link})
     text = (
         f"Showing the explanation form for '{term}'. Wait for the learner; when they say it is saved, "
-        "get_explanation and record_explanation_feedback (correct, missing, wrong; not a grade)."
+        "get_explanation and record_explanation_feedback (correct, missing, wrong; not a grade)." + FORM_LAST
     )
     return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=data)
 
@@ -447,7 +466,7 @@ async def save_explanation_version(
 
 apps.add_html_resource(
     EXPLANATION_URI,
-    resources.files("recallspring_mcp").joinpath("explanation_form.html").read_text(encoding="utf-8"),
+    form_html("explanation_form.html"),
     name="explanation",
     title="RecallSpring Concept-to-Clarity",
     description="Explain a concept in your own words; each save is a new version, kept exactly.",
@@ -457,7 +476,7 @@ apps.add_html_resource(
 
 apps.add_html_resource(
     QUIZ_URI,
-    resources.files("recallspring_mcp").joinpath("quiz_form.html").read_text(encoding="utf-8"),
+    form_html("quiz_form.html"),
     name="quiz",
     title="RecallSpring kolokvij simulation",
     description="Answer a kolokvij simulation; drafts are saved and answers stored exactly before grading.",

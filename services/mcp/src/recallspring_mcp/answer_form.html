@@ -39,6 +39,9 @@
   #status.error { color: var(--danger); }
   .hint { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  math { font-size: 1.05em; }
+  .math-raw { font-family: ui-monospace, Consolas, monospace; font-size: .92em; }
+  .m-bold { font-weight: 700; }
 </style>
 </head>
 <body>
@@ -60,6 +63,14 @@
   </div>
   <p id="status" role="status" aria-live="polite"></p>
 </main>
+<script>/*RS_MATH*/</script>
+<script>
+// Formulas in question text are drawn by RecallSpring's own renderer (inlined above; DOM only, no HTML parsing).
+function mathText(target, text) {
+  if (window.RecallSpringMath) window.RecallSpringMath.render(target, text);
+  else target.textContent = text;
+}
+</script>
 <script>
 (() => {
   "use strict";
@@ -99,7 +110,7 @@
     if (!q || !q.question_id) return;
     question = q;
     sessionId = q.session_id || null;
-    ui.prompt.textContent = q.prompt || "Question";
+    mathText(ui.prompt, q.prompt || "Question");
     ui.eyebrow.textContent = "RecallSpring · Bloom level " + (q.bloom_level || "?");
     if (q.already_answered) {
       saved = true;

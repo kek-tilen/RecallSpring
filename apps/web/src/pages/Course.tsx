@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Fragment, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { get } from "../api";
+import { MathText } from "../components/Markdown";
 import { Async, BandChip, BandMeter, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip, StudyMeter } from "../components/ui";
 import { CourseDialog, CourseDot, FocusControl, groupPath } from "../components/organise";
 import { TargetDialog } from "../components/TargetDialog";
@@ -563,7 +564,7 @@ export function AnswersTab({ courseId }: { courseId: string }) {
                         title="Show your answer and the grade explanation"
                       >
                         <span aria-hidden="true">{open === a.attempt_id ? "▾ " : "▸ "}</span>
-                        {a.question}
+                        <MathText text={a.question} />
                       </button>
                       {a.quiz_id && (
                         <div className="tiny">

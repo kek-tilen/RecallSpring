@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { get, newKey, request } from "../api";
 import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
+import { MathText } from "../components/Markdown";
 import { Async, Card, ErrorNote, GradeChip, PageHead } from "../components/ui";
 import { dateTime } from "../format";
 import { keys } from "../queries";
@@ -133,7 +134,7 @@ export function ChatSentAnswer({ questionId }: { questionId: string }) {
               Question · Bloom {q.bloom_level}
             </p>
             <p className="pre" style={{ margin: 0, fontWeight: 600 }}>
-              {q.prompt}
+              <MathText text={q.prompt} />
             </p>
             {attempt.error && <ErrorNote error={attempt.error} />}
             {a && (
@@ -217,7 +218,7 @@ function AnswerForm({ q, sessionId, onSaved }: {
           Question · Bloom {q.bloom_level}
         </p>
         <p className="pre" style={{ margin: 0, fontWeight: 600 }}>
-          {q.prompt}
+          <MathText text={q.prompt} />
         </p>
         {savedText !== null ? (
           <div className="chat-form-answer pre" aria-label="Your answer">
@@ -263,7 +264,7 @@ function AnswerForm({ q, sessionId, onSaved }: {
         {...photos.dropProps}
       >
         <p id="answer-prompt" className="pre" style={{ margin: 0, fontWeight: 600 }}>
-          {q.prompt}
+          <MathText text={q.prompt} />
         </p>
         {q.rubric && (
           <p className="notice small" style={{ margin: 0 }}>

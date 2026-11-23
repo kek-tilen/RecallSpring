@@ -55,6 +55,9 @@
   .result.wrong { border-left: 4px solid var(--danger); }
   .score { font-size: 17px; font-weight: 700; margin: 12px 0 0; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  math { font-size: 1.05em; }
+  .math-raw { font-family: ui-monospace, Consolas, monospace; font-size: .92em; }
+  .m-bold { font-weight: 700; }
 </style>
 </head>
 <body>
@@ -72,6 +75,14 @@
     <span id="status" class="status" role="status" aria-live="polite"></span>
   </div>
 </main>
+<script>/*RS_MATH*/</script>
+<script>
+// Formulas in question text are drawn by RecallSpring's own renderer (inlined above; DOM only, no HTML parsing).
+function mathText(target, text) {
+  if (window.RecallSpringMath) window.RecallSpringMath.render(target, text);
+  else target.textContent = text;
+}
+</script>
 <script>
 (() => {
   "use strict";
@@ -139,7 +150,10 @@
       card.dataset.qid = item.question_id;
       const q = el("p", "q");
       q.appendChild(el("span", "num", `${idx + 1}.`));
-      q.appendChild(document.createTextNode(item.prompt + " "));
+      const promptText = el("span", "prompt");
+      mathText(promptText, item.prompt);
+      q.appendChild(promptText);
+      q.appendChild(document.createTextNode(" "));
       q.appendChild(el("span", "pts", `(${item.points} pt${item.points === 1 ? "" : "s"})`));
       q.id = `prompt-${item.question_id}`;
       card.appendChild(q);
@@ -152,7 +166,9 @@
           input.type = "radio"; input.name = `q-${item.question_id}`; input.value = opt.key;
           input.checked = saved.option === opt.key;
           label.appendChild(input);
-          label.appendChild(el("span", "", `${opt.key}) ${opt.text}`));
+          const optText = el("span", "");
+          mathText(optText, `${opt.key}) ${opt.text}`);
+          label.appendChild(optText);
           group.appendChild(label);
         });
         card.appendChild(group);

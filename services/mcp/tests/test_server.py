@@ -18,6 +18,8 @@ from recallspring_mcp.server import FORM_URI, INSTRUCTIONS, mcp
 
 pytestmark = pytest.mark.anyio
 
+MATHML_NS = "http://www.w3.org/1998/Math/MathML"
+
 
 @pytest.fixture
 def anyio_backend() -> str:
@@ -79,7 +81,8 @@ async def test_answer_form_resource_is_self_contained_and_safe() -> None:
     assert caps.extensions and "io.modelcontextprotocol/ui" in caps.extensions
     assert content.mime_type == "text/html;profile=mcp-app"
     html = content.text
-    assert "<script src" not in html and "http://" not in html and "https://" not in html
+    assert "<script src" not in html and "https://" not in html
+    assert "http://" not in html.replace(MATHML_NS, "")  # the MathML namespace name is not a request
     assert "innerHTML" not in html and "eval(" not in html
     assert '"ui/initialize"' in html and '"submit_answer_from_form"' in html
 
@@ -124,6 +127,7 @@ async def test_open_answer_form_returns_question_without_rubric(api: FakeApi) ->
         "already_answered": False,
     }
     assert "Compare A and B." in text_of(result) and "expected" not in text_of(result).lower()
+    assert text_of(result).endswith("The form ends your message: write nothing after it.")  # ADR-012
 
 
 async def test_learner_material_is_wrapped_and_cannot_close_its_wrapper(api: FakeApi) -> None:
@@ -309,7 +313,8 @@ async def test_every_ui_tool_is_registered_with_its_resource() -> None:
 async def test_quiz_form_is_self_contained_and_text_only() -> None:
     async with Client(mcp) as client:
         html = (await client.read_resource("ui://recallspring/quiz")).contents[0].text
-    assert "<script src" not in html and "http://" not in html and "https://" not in html
+    assert "<script src" not in html and "https://" not in html
+    assert "http://" not in html.replace(MATHML_NS, "")  # the MathML namespace name is not a request
     assert "innerHTML" not in html and "eval(" not in html
     assert '"submit_quiz"' in html and '"save_quiz_draft"' in html and "Submit for grading" in html
 
@@ -476,7 +481,8 @@ async def test_simulations_to_grade_and_organising_courses(api: FakeApi) -> None
 async def test_summary_form_is_self_contained_and_text_only() -> None:
     async with Client(mcp) as client:
         html = (await client.read_resource("ui://recallspring/summary")).contents[0].text
-    assert "<script src" not in html and "http://" not in html and "https://" not in html
+    assert "<script src" not in html and "https://" not in html
+    assert "http://" not in html.replace(MATHML_NS, "")  # the MathML namespace name is not a request
     assert "innerHTML" not in html and '"save_learning_summary"' in html and "Skip writing" in html
 
 
@@ -622,7 +628,8 @@ EXPLANATION = {
 async def test_explanation_form_is_self_contained_and_text_only() -> None:
     async with Client(mcp) as client:
         html = (await client.read_resource("ui://recallspring/explanation")).contents[0].text
-    assert "<script src" not in html and "http://" not in html and "https://" not in html
+    assert "<script src" not in html and "https://" not in html
+    assert "http://" not in html.replace(MATHML_NS, "")  # the MathML namespace name is not a request
     assert "innerHTML" not in html and '"save_explanation_version"' in html and "Start from my last version" in html
 
 
@@ -704,3 +711,16 @@ async def test_instructions_cover_answers_and_notes_given_in_the_chat() -> None:
     assert "ask once per session whether answers given in the chat should count" in text
     assert "transcribe it word for word" in text and "save_chat_note, only after they confirm" in text
     assert '"Nothing was saved to RecallSpring."' in text
+    assert (
+        "open a form (open_answer_form, open_quiz, open_summary_form, open_explanation_form) as the very last" in text
+    )
+
+
+async def test_forms_draw_formulas_with_the_inlined_math_script() -> None:
+    async with Client(mcp) as client:
+        answer = (await client.read_resource("ui://recallspring/answer-form")).contents[0].text
+        quiz = (await client.read_resource("ui://recallspring/quiz")).contents[0].text
+    for html in (answer, quiz):
+        assert "/*RS_MATH*/" not in html and "RecallSpringMath" in html and "createElementNS" in html
+        assert "innerHTML" not in html and html.count("<script>") == html.count("</script>") == 3  # nothing broke out
+    assert "mathText(ui.prompt" in answer and "mathText(promptText, item.prompt)" in quiz

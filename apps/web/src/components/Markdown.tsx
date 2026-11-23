@@ -316,6 +316,11 @@ function List({
   );
 }
 
+/** Plain text (a question, an expected point, an option) with its formulas drawn as math (ADR-012). */
+export function MathText({ text }: { text: string }) {
+  return <>{inline(text, "mt")}</>;
+}
+
 export function Markdown({
   text,
   visuals,

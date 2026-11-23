@@ -4,6 +4,7 @@ import { get, newKey, request } from "../api";
 import { GRADE_LABEL, gradeLabel } from "../format";
 import { keys } from "../queries";
 import type { AssessmentDetail, AttemptDetail } from "../types";
+import { MathText } from "./Markdown";
 import { Async, ErrorNote } from "./ui";
 
 /**
@@ -151,7 +152,7 @@ function SelfAssessForm({ v, onDone }: { v: SelfCheckView; onDone?: () => void }
           <li key={i}>
             <fieldset className="self-point">
               <legend className="small">
-                {i + 1}. {point}
+                {i + 1}. <MathText text={point} />
               </legend>
               <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
                 {STATES.map((s) => (

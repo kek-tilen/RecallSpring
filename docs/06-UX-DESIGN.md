@@ -127,6 +127,9 @@ Implemented (2026-11-21, ADR-008):
     term), accents, `\left…\right`, Greek letters and the usual symbols, `\text`, `\mathbb`, cases, matrices and
     aligned rows. A formula using anything else is shown as its source text, never guessed; prices such as "$5 and
     $10" stay text. Chat tells ChatGPT to write formulas this way; notes' Preview shows them too.
+    Question text, expected points and choice options are drawn the same way wherever a question is shown (answer
+    pages and Chat forms, simulations, self-assessment, history; ADR-012, `MathText`). A turn's forms in Chat
+    always come under all of its text.
   - **Visuals** (owner decision 2026-11-21): a `Visuals` switch in the composer (on by default, remembered on this device) lets ChatGPT add up to two diagrams per reply. They are drawn by `components/Visual.tsx` from data the server checked; only six kinds exist: a top-to-bottom process flow (a loop back is dashed), a concept map (the most linked idea in the middle), a comparison table, a timeline, a line/bar/scatter chart (with its data table) and a slider over one of four built-in formulas (straight line, exponential decay, parabola, unit circle). Each has its title, an `Illustrative example` label when numbers are examples (always for ChatGPT charts), the line "Drawn by RecallSpring from data ChatGPT sent · not checked against your material" and a `Text description` (the alt text, also the SVG's accessible name). A block that fails the checks says "This visual could not be shown: <reason>", keeps the text answer, and shows what was sent as plain text.
   - Under each reply is one quiet line: model and version, time, duration and tokens. Clicking it shows the model chosen, the model that answered, the exact time, input (cached) / output (reasoning) / total tokens, the account and the response ID.
   - A message that got no reply says why. The header shows usage over the last 24 hours and 30 days.

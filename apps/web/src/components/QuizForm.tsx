@@ -5,6 +5,7 @@ import { plural } from "../format";
 import type { QuizView } from "../types";
 import { CopyButton } from "./Copy";
 import { useAssistant } from "../assistant";
+import { MathText } from "./Markdown";
 import { Confirm, ErrorNote } from "./ui";
 
 type Answer = { option?: string | null; text?: string | null; dont_know?: boolean; guessing?: boolean };
@@ -144,7 +145,7 @@ export function QuizForm({ quiz }: { quiz: QuizView }) {
           <div key={item.question_id} className="quiz-q">
             <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
               <strong id={`q-${item.question_id}`}>
-                {item.position}. {item.prompt}
+                {item.position}. <MathText text={item.prompt} />
               </strong>
               <span className="small muted nowrap">{plural(item.points, "point")}</span>
             </div>
@@ -159,7 +160,7 @@ export function QuizForm({ quiz }: { quiz: QuizView }) {
                       onChange={() => change(item.question_id, { option: o.key, dont_know: false })}
                     />
                     <span>
-                      <strong>{o.key}</strong> {o.text}
+                      <strong>{o.key}</strong> <MathText text={o.text} />
                     </span>
                   </label>
                 ))}

@@ -17,7 +17,7 @@ recallspring-mcp = "recallspring_mcp.server:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-recallspring_mcp = ["answer_form.html", "quiz_form.html", "summary_form.html", "explanation_form.html"]
+recallspring_mcp = ["answer_form.html", "quiz_form.html", "summary_form.html", "explanation_form.html", "math.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

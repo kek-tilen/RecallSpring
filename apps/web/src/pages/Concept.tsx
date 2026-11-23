@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router";
+import { MathText } from "../components/Markdown";
 import { ClarityPanel } from "../components/Clarity";
 import { Async, BandChip, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip } from "../components/ui";
 import { ATTEMPT_KIND, CAPTURED_VIA, DIFFICULTY_SOURCE, STUDY_SOURCE, dateLabel, dateTime, gradedBy, plural, relativeDay } from "../format";
@@ -64,7 +65,9 @@ export function ConceptPage() {
                                 <GradeChip grade={a.grade} status={a.assessment_status} />
                               )}
                             </div>
-                            {a.question && <div style={{ fontWeight: 600 }}>{a.question}</div>}
+                            {a.question && <div style={{ fontWeight: 600 }}>
+                                <MathText text={a.question} />
+                              </div>}
                             <div className="answer pre">{a.kind === "answer" ? a.answer : ATTEMPT_KIND[a.kind] ?? a.kind}</div>
                             {a.feedback && (
                               <div className="feedback">

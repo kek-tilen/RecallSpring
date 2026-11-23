@@ -217,6 +217,7 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
 - Concept-to-Clarity (C2C), when I want to explain a concept in my own words: open_explanation_form, wait, then
   get_explanation and record_explanation_feedback (correct, missing, wrong, with section IDs you read). Not a grade;
   never rewrite my explanation or write one for me.
+- Explain first and open a form as the very last step of your message; write nothing after it.
 - These tools may give you a RecallSpring link instead of a form. Give me the link and wait. When I say I am done,
   read my answer with get_answer (one question) or get_quiz_results (a simulation) and grade it with
   record_assessment(s). Never answer for me and never reveal expected points before I answered.
