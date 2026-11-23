@@ -72,7 +72,6 @@ export function StudyIn({ course }: { course: { id: string; title: string } }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const box = useRef<HTMLDivElement>(null);
-  const primary = last && offered.includes(last) ? last : offered.length === 1 ? offered[0]! : null;
 
   useEffect(() => {
     if (!open) return;
@@ -119,29 +118,10 @@ export function StudyIn({ course }: { course: { id: string; title: string } }) {
 
   return (
     <div className="study-in" ref={box}>
-      <div className="study-in-buttons">
-        {primary ? (
-          <button type="button" className="btn small primary" onClick={() => void study(primary)}>
-            Study in {LABEL[primary]}
-          </button>
-        ) : (
-          <button type="button" className="btn small primary" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-            Study in…
-          </button>
-        )}
-        {primary && (
-          <button
-            type="button"
-            className="btn small study-in-more"
-            aria-haspopup="menu"
-            aria-expanded={open}
-            aria-label={`Other ways to study ${course.title}`}
-            onClick={() => setOpen(!open)}
-          >
-            ▾
-          </button>
-        )}
-      </div>
+      {/* Always a choice, never a default launch (owner 2026-11-23); the last one used is only marked. */}
+      <button type="button" className="btn small primary" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        Study in…
+      </button>
       {open && (
         <div
           className="study-in-menu"
@@ -152,7 +132,7 @@ export function StudyIn({ course }: { course: { id: string; title: string } }) {
           }}
         >
           {offered.map((k) => (
-            <button key={k} type="button" role="menuitem" autoFocus={k === offered[0]} onClick={() => void study(k)}>
+            <button key={k} type="button" role="menuitem" autoFocus={k === (last && offered.includes(last) ? last : offered[0])} onClick={() => void study(k)}>
               {LABEL[k]}
               {k === last && <span className="muted tiny"> · last used</span>}
             </button>

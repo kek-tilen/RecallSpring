@@ -2452,15 +2452,6 @@ tr.selected td {
   position: relative;
 }
 
-.study-in-buttons {
-  display: inline-flex;
-  gap: 4px;
-}
-
-.study-in-more {
-  padding-inline: 8px;
-}
-
 .study-in-menu {
   position: absolute;
   z-index: 20;

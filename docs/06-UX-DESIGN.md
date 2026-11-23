@@ -46,12 +46,13 @@ All text/action contrast must meet WCAG 2.2 AA; change tones as needed.
 ### Exams that are behind the learner (owner 2026-11-23)
 
 - Marking an exam **Passed** or **Cancelled** when its course is in focus and has no other exam coming up asks: "<course> is in focus until <date>. … End the focus now?" with `Keep until <date>` and `End focus`. Failed does not ask (a retake usually follows). Ending it is the same audited change as `End focus` on the course.
-- **Study in…** (ADR-012 §3, 2026-11-23): each active course card has `Study in <last choice>` (or `Study in…` the
-  first time) and `▾` for the others: the learner's connected assistants (else the welcome page's choice or mix, else
+- **Study in…** (ADR-012 §3, 2026-11-23): each active course card has `Study in…`, which always opens a menu (owner
+  2026-11-23: a choice every time, never a default launch; the last one used is marked `last used` and focused): the
+  learner's connected assistants (else the welcome page's choice or mix, else
   all four) and `Copy the start message only`. Chat opens a new conversation with the course chosen; Claude Desktop and
   Codex open a new chat with "Let's study <course> (course_id …)" in the composer, never sent; Antigravity copies it
   with a note to open the course's study folder. The message is always copied as well, for an existing conversation;
-  a short status line says what happened. The last choice is remembered on the device.
+  a short status line says what happened.
 - A course card with no exam coming up shows the latest one behind the learner ("1. Kolokvij on 23 Nov · passed · no exam coming up"; failed reads "not passed yet", a date gone without a result "result not recorded") instead of "No exam or midterm set yet".
 
 ### Old paper next to its analysis (owner 2026-11-23)

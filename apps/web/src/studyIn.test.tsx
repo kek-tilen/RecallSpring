@@ -67,8 +67,12 @@ describe("Study in… (ADR-012 §3)", () => {
     expect(writeText).toHaveBeenCalledWith(text);
     expect(await screen.findByRole("status")).toHaveProperty("textContent", expect.stringContaining("ready to send"));
     expect(localStorage.getItem(STUDY_IN_STORE)).toBe("claude");
-    // the remembered choice becomes the main button, the others stay in the menu
-    expect(screen.getByRole("button", { name: "Study in Claude Desktop" })).toBeTruthy();
+    // the remembered choice is only marked: the button still opens the menu, nothing starts by itself
+    open.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Study in…" }));
+    expect(open).not.toHaveBeenCalled();
+    expect(screen.getByRole("menuitem", { name: /Claude Desktop.*last used/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Chat (ChatGPT)" })).toBeTruthy();
   });
 
   it("Codex gets its documented prompt link; Chat opens a new conversation for the course", async () => {
@@ -80,7 +84,7 @@ describe("Study in… (ADR-012 §3)", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: "Codex" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith(`codex://new?prompt=${encodeURIComponent(startMessage(COURSE))}`));
 
-    fireEvent.click(screen.getByRole("button", { name: "Other ways to study Biology 101" }));
+    fireEvent.click(screen.getByRole("button", { name: "Study in…" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /Chat \(ChatGPT\)/ }));
     expect(await screen.findByText("at /chat/new?course=k1")).toBeTruthy();
     expect(localStorage.getItem(STUDY_IN_STORE)).toBe("chatgpt");
@@ -92,10 +96,11 @@ describe("Study in… (ADR-012 §3)", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     show();
-    // one assistant: it is the main button straight away
-    fireEvent.click(await screen.findByRole("button", { name: "Study in Antigravity" }));
+    // even with one assistant the learner chooses from the menu
+    fireEvent.click(screen.getByRole("button", { name: "Study in…" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Antigravity" }));
     expect(await screen.findByRole("status")).toHaveProperty("textContent", expect.stringContaining("study folder in Antigravity"));
-    fireEvent.click(screen.getByRole("button", { name: "Other ways to study Biology 101" }));
+    fireEvent.click(screen.getByRole("button", { name: "Study in…" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy the start message only" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
     expect(open).not.toHaveBeenCalled();
