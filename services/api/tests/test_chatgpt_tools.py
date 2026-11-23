@@ -466,3 +466,41 @@ def test_concept_to_clarity_in_a_study_conversation(owner_api: Api, fake: ToolFa
     [fb] = owner_api.get(f"/concepts/{cid}/explanation").json()["versions"][0]["feedback"]
     assert fb["grader"]["model"] == MODEL and fb["wrong"] == ["It runs in the cytoplasm"]
     assert "grade" not in fb
+
+
+def test_notes_from_the_chat_and_simulation_results_in_a_study_conversation(owner_api: Api, fake: ToolFake) -> None:
+    """ADR-011: ChatGPT saves a note the learner confirmed (marked transcribed); get_answer also reads a simulation's
+    results, so the study set stays within MAX_TOOLS."""
+    sign_in(owner_api, fake)
+    ids = owner_api.course_with_question()
+    key = str(uuid.uuid4())
+    the_note = {
+        "course_id": ids["course_id"],
+        "title": "Notes from my notebook",
+        "text": "Exploit: koda, ki ranljivost [?] izvede.",
+        "transcribed_from_photo": True,
+        "client_request_id": key,
+    }
+    fake.rounds = [
+        calls(
+            1,
+            ("n1", "save_chat_note", the_note),
+            ("a1", "get_answer", {"quiz_id": str(uuid.uuid4())}),
+            ("a2", "get_answer", {}),
+        ),
+        reply_events("Saved your notes.", 2),
+    ]
+    r = send(owner_api, "Yes, save them", course_id=ids["course_id"])
+    assert r.status_code == 200, r.text
+    [space] = fake.bodies()[0]["tools"]
+    names = {t["name"] for t in space["tools"]}
+    assert "save_chat_note" in names and "get_quiz_results" not in names and len(names) <= chat_tools.MAX_TOOLS
+    instructions = fake.bodies()[0]["instructions"]
+    assert "Nothing was saved to RecallSpring." in instructions and "word for word" in instructions
+    out = outputs(fake.bodies()[1])
+    assert out["n1"]["ok"] and out["n1"]["result"]["captured_via"] == "assistant_transcription"
+    assert out["a1"]["error"] == "not_found" and out["a2"]["error"] == "invalid_arguments"
+    step = r.json()["messages"][0]["tool_calls"][0]
+    assert step["summary"] == "Saved your note “Notes from my notebook”" and step["writes"]
+    [n] = owner_api.get("/notes", course_id=ids["course_id"]).json()
+    assert n["body"] == the_note["text"] and n["captured_via"] == "assistant_transcription"

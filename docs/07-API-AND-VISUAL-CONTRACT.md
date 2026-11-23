@@ -108,6 +108,7 @@ Prefix `/api/v1`. JSON UTF-8; bearer app session via secure HttpOnly cookie, CSR
 | POST | `/concepts/{id}/explanation/versions` | `{text ≤ 20 000, source learner/discuss, from_attempt_id?, client_request_id}` (owner session + CSRF, or connector): a new version saved exactly; idempotent by `client_request_id`; `from_attempt_id` copies that answer's exact text (`422 attempt_not_for_concept` when the question is not about this concept); `422 empty_explanation`; audited `explanation.version_saved` without the text; 201 with the view |
 | DELETE | `/explanation-versions/{id}` | Soft delete after the learner confirmed (owner session + CSRF); audited; returns the view |
 | POST | `/explanation-versions/{id}/restore` | Restore within 30 days (`409 restore_expired` after); audited; returns the view |
+| POST | `/connector/notes` | ADR-011: a note or summary the learner gave in an assistant chat, saved after they confirmed it `{course_id, title, text, concept_ids? (≤ 20, then a learning summary: they become studied), transcribed_from_photo, client_request_id}`; `captured_via = assistant_transcription`; idempotent; `422 empty_note`; 201 `{note_id, saved_at, captured_via, concepts}`. Notes views carry `captured_via` (`app_ui`, `summary_form`, `assistant_transcription`) |
 | GET | `/health/live` | Liveness, no secrets |
 | GET | `/health/ready` | DB and storage checks, restricted if exposed |
 
@@ -171,6 +172,7 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `open_explanation_form` | UI | MCP App `ui://recallspring/explanation` (last version with its missing / wrong points, live word count); link to `/explain?concept=` when the app cannot show forms. In RecallSpring's Chat the form kind `explanation` |
 | `save_explanation_version` | append, app-only | Called by the form: exact text as a new version, idempotent by `client_request_id` |
 | `record_explanation_feedback` | append | `POST /connector/explanation-versions/{id}/feedback` `{correct, missing, wrong (≤ 10 points of ≤ 500 characters), evidence_refs, feedback}`: not a grade; unknown sections dropped (`dropped_refs`); the grader is the calling assistant and the model it reported. ChatGPT's study tool set has these three instead of `record_assessment`, `update_study_target` and `record_exam_profile` (planning set), staying within 20 tools |
+| `save_chat_note` | append | ADR-011: `POST /connector/notes` after the learner confirmed: their chat text exactly, or a word-for-word transcription of their photo (`[?]` unreadable) with their corrections; labelled as transcribed. `submit_chat_answer` also saves chat answers when the learner said that chat answers count. In ChatGPT's Chat, `get_answer` also takes `quiz_id` (a simulation's results) instead of a separate `get_quiz_results` |
 
 `search_sources` skips archived material and material in archived folders; `get_course_outline` still lists it with `hidden: true` (its sections stay readable by ID, so earlier citations keep working) and lists the course's visible folders as paths, so Claude can use the learner's own names.
 

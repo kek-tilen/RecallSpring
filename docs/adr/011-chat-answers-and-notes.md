@@ -1,6 +1,6 @@
 # ADR-011 — Answers and notes given in the chat
 
-Status: accepted 2026-11-23 (owner in chat); not implemented yet. Extends ADR-004 (Claude connector), ADR-006
+Status: accepted 2026-11-23 (owner in chat); implemented 2026-11-23. Extends ADR-004 (Claude connector), ADR-006
 (learning first) and ADR-010 (ways to practise).
 
 ## Context
@@ -38,6 +38,9 @@ the conversation history.
   in RecallSpring, where the learner can see it.
 - When they do not count: feedback in the chat only.
 - The answer form stays the first choice; this is for answers already written in the chat.
+- In RecallSpring's own Chat (ChatGPT) the answer form is always shown under the message, so a chat answer that
+  should count is pasted into that form (`open_answer_form`), which saves the learner's exact words; Chat has no
+  `submit_chat_answer`.
 
 ### 3. Notes and summaries from the chat (new tool)
 
@@ -45,7 +48,8 @@ the conversation history.
   transcribed, saved only after the learner confirmed it.
 - **Transcription of a photo:** word for word, without corrections or additions; unreadable words marked `[?]`. Before
   saving, the assistant shows the transcription and asks once whether it is correct; the learner's corrections are
-  applied exactly. The note is labelled "Transcribed by the assistant from a photo — check it".
+  applied exactly. The note is labelled "Transcribed by your assistant from a chat or a photo: check it against
+  your original" (on the note, and "Transcribed" in the list).
 - The photo itself cannot be passed through the connector. The assistant offers the Library link so the learner can
   upload the original and link it to the note.
 - **Summary of a learning chunk:** with `concept_ids`, the note is saved the same way as from the summary form (the
@@ -69,8 +73,10 @@ transcription label on such notes. Downgrade drops the column.
 ## Interfaces (outline; details in docs/07 when implemented)
 
 - Connector `POST /connector/notes` `{course_id, title, text, concept_ids?, transcribed_from_photo, client_request_id}`:
-  idempotent, audited without the text; `concept_ids` must be concepts of the course.
-- MCP `save_chat_note`; the ChatGPT Chat tool set gets it within its limit of 20 tools.
+  idempotent; recorded as a `note.created` learning event (origin `chat` or `chat_photo`) without the text;
+  `concept_ids` must be concepts of the course.
+- MCP `save_chat_note`. In the ChatGPT Chat study set `save_chat_note` takes the place of `get_quiz_results`:
+  `get_answer` reads a simulation's results with `quiz_id`, so the set stays within its limit of 20 tools.
 - Instructions (MCP server, Chat, Codex and Antigravity setup): sections 1, 2 and 4; `submit_chat_answer` is no longer
   "fallback only".
 

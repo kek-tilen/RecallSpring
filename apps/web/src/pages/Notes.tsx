@@ -63,6 +63,11 @@ export function NoteList({ courseId, titles }: { courseId?: string; titles?: Rec
                       <Link to={`/notes/${n.id}`} style={{ fontWeight: 600 }}>
                         {n.title}
                       </Link>
+                      {n.captured_via === "assistant_transcription" && (
+                        <span className="chip" style={{ marginLeft: 8 }} title={TRANSCRIBED}>
+                          Transcribed
+                        </span>
+                      )}
                       <div className="small muted" style={{ maxWidth: "60ch", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {plain(n.body).slice(0, 160) || "Empty"}
                       </div>
@@ -391,6 +396,8 @@ function Revisions({ noteId }: { noteId: string }) {
   );
 }
 
+const TRANSCRIBED = "Transcribed by your assistant from a chat or a photo: check it against your original.";
+
 export function NotePage() {
   const { noteId = "" } = useParams();
   const q = useQuery({ queryKey: ["note", noteId], queryFn: () => get<Note>(`/notes/${noteId}`), staleTime: Infinity });
@@ -403,6 +410,7 @@ export function NotePage() {
           <>
             <PageHead
               title="Note"
+              sub={note.captured_via === "assistant_transcription" ? TRANSCRIBED : undefined}
               crumbs={[
                 { to: "/notes", label: "Notes" },
                 { to: `/courses/${note.course_id}?tab=notes`, label: titles[note.course_id] ?? "Course" },

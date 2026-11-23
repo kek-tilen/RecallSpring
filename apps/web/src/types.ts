@@ -653,6 +653,8 @@ export interface Note {
   created_at: string;
   references?: NoteRef[];
   deleted_at?: string | null;
+  /** assistant_transcription: an assistant copied it from a chat or transcribed a photo (ADR-011) */
+  captured_via?: "app_ui" | "summary_form" | "assistant_transcription";
 }
 
 export interface NoteRevision {

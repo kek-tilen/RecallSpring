@@ -40,6 +40,9 @@ const NOTE = {
   deleted_at: null,
 };
 
+// ADR-011: a note an assistant transcribed from a chat or a photo
+const TRANSCRIBED = { ...NOTE, id: "n2", title: "From my notebook", captured_via: "assistant_transcription" };
+
 const SOURCES = [
   { id: PDF, course_id: "k2", filename: "atp.pdf", kind: "pdf", folder: null, uploaded_at: "2026-11-20T10:00:00Z" },
   { id: PIC, course_id: "k1", filename: "cell.png", kind: "image", folder: "Drawings", uploaded_at: "2026-11-19T10:00:00Z" },
@@ -62,7 +65,9 @@ function routeFetch(sent: { method: string; path: string; body: unknown }[]) {
     if (path === "/notes/n1/revisions") return json(200, []);
     if (path === "/notes/deleted") return json(200, [{ ...NOTE, deleted_at: "2026-11-22T08:00:00Z" }]);
     if (path === "/notes/n1/restore") return json(200, NOTE);
-    if (path === "/notes") return json(200, []);
+    if (path === "/notes/n2") return json(200, TRANSCRIBED);
+    if (path === "/notes/n2/revisions") return json(200, []);
+    if (path === "/notes") return json(200, [TRANSCRIBED]);
     return json(404, { code: "not_found", message: `unexpected ${method} ${path}` });
   });
 }
@@ -146,6 +151,15 @@ describe("Notes editor", () => {
     const confirm = screen.getAllByRole("button", { name: "Delete note" }).at(-1)!;
     fireEvent.click(confirm);
     await waitFor(() => expect(sent).toEqual([{ method: "DELETE", path: "/notes/n1", body: null }]));
+  });
+
+  it("labels notes an assistant transcribed, in the list and on the note", async () => {
+    routeFetch([]);
+    show("/notes");
+    expect((await screen.findByText("Transcribed")).getAttribute("title")).toMatch(/check it against your original/);
+    cleanup();
+    show("/notes/n2");
+    expect(await screen.findByText(/Transcribed by your assistant from a chat or a photo/)).toBeTruthy();
   });
 
   it("lists recently deleted notes with Restore", async () => {

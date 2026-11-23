@@ -44,6 +44,7 @@ def note_view(db: Session, note: Note, refs: list[dict[str, Any]] | None = None)
         created_at=note.created_at,
         references=refs,  # type: ignore[arg-type]
         deleted_at=note.deleted_at,
+        captured_via=note.captured_via,  # type: ignore[arg-type]
     ).model_dump(mode="json")
 
 

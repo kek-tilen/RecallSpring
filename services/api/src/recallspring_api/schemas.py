@@ -538,6 +538,7 @@ class NoteOut(BaseModel):
     created_at: datetime
     references: list[NoteRefOut] = []
     deleted_at: datetime | None = None
+    captured_via: Literal["app_ui", "summary_form", "assistant_transcription"] = "app_ui"
 
 
 class NoteRevisionOut(BaseModel):
@@ -862,6 +863,26 @@ class LearningSummaryIn(BaseModel):
     concept_ids: list[uuid.UUID] = Field(min_length=1, max_length=20)
     title: str = Field(min_length=1, max_length=200)
     text: str = Field(default="", max_length=200_000, description="The learner's own summary, exactly as typed")
+    client_request_id: uuid.UUID
+
+
+class ChatNoteIn(BaseModel):
+    """A note or summary from an assistant chat, saved only after the learner confirmed it (ADR-011)."""
+
+    course_id: uuid.UUID
+    title: str = Field(min_length=1, max_length=200)
+    text: str = Field(
+        min_length=1,
+        max_length=200_000,
+        description="Exactly as the learner wrote it in the chat, or a word-for-word transcription of their photo "
+        "(unreadable words as [?]), with the learner's corrections",
+    )
+    concept_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Only for the summary of a learning chunk: these become studied",
+    )
+    transcribed_from_photo: bool = False
     client_request_id: uuid.UUID
 
 

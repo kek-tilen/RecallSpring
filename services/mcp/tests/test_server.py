@@ -670,3 +670,37 @@ async def test_instructions_explain_concept_to_clarity() -> None:
     text = " ".join(INSTRUCTIONS.split())
     assert "CONCEPT-TO-CLARITY" in text and "never rewrite their explanation" in text
     assert "not a grade and does not affect reviews" in text
+
+
+async def test_a_note_from_the_chat_is_sent_exactly_with_its_key(api: FakeApi) -> None:
+    api.route("POST", "/notes", 201, {"note_id": "n1", "captured_via": "assistant_transcription", "concepts": []})
+    text = "• Ranljivost" + chr(10) + "  ◦ šibkost [?]"
+    async with Client(mcp) as client:
+        await client.call_tool(
+            "save_chat_note",
+            {
+                "course_id": "k1",
+                "title": "Zvezek",
+                "text": text,
+                "transcribed_from_photo": True,
+                "client_request_id": "c0ffee00-0000-4000-8000-0000000000dd",
+            },
+        )
+    [sent] = api.requests
+    assert json.loads(sent.content) == {
+        "course_id": "k1",
+        "title": "Zvezek",
+        "text": text,
+        "concept_ids": [],
+        "transcribed_from_photo": True,
+        "client_request_id": "c0ffee00-0000-4000-8000-0000000000dd",
+    }
+    assert sent.headers["Idempotency-Key"] == "c0ffee00-0000-4000-8000-0000000000dd"
+
+
+async def test_instructions_cover_answers_and_notes_given_in_the_chat() -> None:
+    text = " ".join(INSTRUCTIONS.split())
+    assert "Never state these from the conversation history" in text
+    assert "ask once per session whether answers given in the chat should count" in text
+    assert "transcribe it word for word" in text and "save_chat_note, only after they confirm" in text
+    assert '"Nothing was saved to RecallSpring."' in text

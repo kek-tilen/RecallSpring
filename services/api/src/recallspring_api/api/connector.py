@@ -49,6 +49,7 @@ from ..models import (
 from ..schemas import (
     AssessmentBatchIn,
     AvailabilityIn,
+    ChatNoteIn,
     ConnectorAssessmentIn,
     ConnectorAttemptIn,
     ConnectorConceptsIn,
@@ -91,6 +92,7 @@ from ..services import targets as target_svc
 from ..services.courses import ensure_new_title
 from ..services.events import audit, learning_event
 from ..services.learning import effective_status, mark, require_studied, save_summary
+from ..services.learning import save_chat_note as save_chat_note_svc
 from ..services.note_refs import references as note_references
 from ..services.ownership import course_alive, owned
 from ..services.planner import today_plan
@@ -320,6 +322,7 @@ def notes(
             "topic_id": str(n.syllabus_item_id) if n.syllabus_item_id else None,
             "revision": n.revision,
             "saved_at": n.saved_at.isoformat(),
+            "captured_via": n.captured_via,
             "body": n.body[:limit],
             "truncated": len(n.body) > limit,
             # Files the note links as [name](source:<id>): the source_id works with get_source_status,
@@ -1067,6 +1070,30 @@ def save_learning_summary(
         concept_ids=payload.concept_ids,
         title=payload.title,
         text=payload.text,
+        client_request_id=payload.client_request_id,
+        request_id=ctx.request_id,
+    )
+    db.flush()
+    return commit_with_response(db, ctx, payload, 201, body)
+
+
+@router.post("/notes", status_code=201)
+def save_chat_note(
+    payload: ChatNoteIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """A note or summary the learner gave in the chat, saved only after they confirmed it (ADR-011). Marked as
+    transcribed by the assistant; with concept_ids it is a learning summary and those concepts become studied."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    owned(db, Course, payload.course_id, ctx.user.id)
+    body = save_chat_note_svc(
+        db,
+        ctx.user,
+        course_id=payload.course_id,
+        title=payload.title,
+        text=payload.text,
+        concept_ids=payload.concept_ids,
+        from_photo=payload.transcribed_from_photo,
         client_request_id=payload.client_request_id,
         request_id=ctx.request_id,
     )

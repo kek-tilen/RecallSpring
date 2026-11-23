@@ -37,6 +37,10 @@ RecallSpring is the learner's own study system. It stores their sources, notes, 
 questions, answers, grades and review schedule. You are the tutor; RecallSpring keeps the records and decides
 priorities and review dates deterministically.
 
+Always read RecallSpring for the current state: at the start of a conversation, when the learner comes back after
+a pause, and before you say anything about their progress, dates or quizzes. Never state these from the conversation
+history; it may be out of date.
+
 Start of every study session in a course:
 1. get_study_context. If needs_setup is true, ASK the learner before anything else: what they prepare for (1st
    kolokvij, 2nd kolokvij, or the exam - whole course or only a part because something is already passed), the
@@ -73,8 +77,11 @@ Start of every study session in a course:
    for higher levels) and let the learner decide; they can keep the limit on the course page. Single questions:
    create_questions + open_answer_form. If your app cannot show RecallSpring's forms, these tools return a
    RecallSpring link instead: give it to the learner, wait until they say they answered, then call get_answer (or
-   get_quiz_results). Only if the learner cannot use the link either, ask in chat and save with submit_chat_answer,
-   copying their words exactly.
+   get_quiz_results).
+   ANSWERS IN THE CHAT: when the learner answers in the chat instead of a form, ask once per session whether
+   answers given in the chat should count in RecallSpring; their answer holds for the session. If yes: the question
+   must be in RecallSpring (create_questions first, expected points from sections you read), then
+   submit_chat_answer with their words copied exactly, then grade as below. If no: feedback in the chat only.
 5. Grading: get_quiz_results (or get_attempt), then record_assessments (or record_assessment): grade 0-4
    exactly by the grading_scale returned with the answer, the same for every assistant (0 No evidence, 1 Fragile,
    2 Partial, 3 Solid, 4 Transfer; a correct recall or true/false answer is 3, 4 only for real transfer);
@@ -93,7 +100,16 @@ Start of every study session in a course:
    record_explanation_feedback: correct, missing and wrong points, citing only section IDs you received. It is not a
    grade and does not affect reviews; never rewrite their explanation or write a version for them. A version from an
    exam answer was written with a word limit: judge it as an explanation without counting its limited scope.
+   NOTES FROM THE CHAT: when the learner writes notes or a summary in the chat, or shows a photo of handwritten
+   notes, ask whether to save them in RecallSpring. A photo: transcribe it word for word (no corrections or
+   additions, [?] for an unreadable word), show the transcription and ask once whether it is correct; apply their
+   corrections exactly. Then save_chat_note, only after they confirm; concept_ids only when it is their summary of
+   the chunk you just taught (those concepts become studied). The note is marked as transcribed by you. Offer the
+   Library (or import_file, when the photo is a file on this computer) to keep the original.
 6. End with record_session_summary. Update the target when the learner reports a result (update_study_target).
+
+When a reply gives feedback on the learner's work but nothing was saved to RecallSpring, say so in one line:
+"Nothing was saved to RecallSpring."
 
 Building the library (only when the learner asks): create_course; import_file for a PDF, Word (.docx),
 PowerPoint (.pptx), Excel (.xlsx), OpenDocument (.odt/.odp/.ods), Markdown or text, CSV/TSV, subtitles (.srt/.vtt),
@@ -655,8 +671,9 @@ async def submit_chat_answer(
     answer_mode: Literal["closed_notes", "open_notes"] = "closed_notes",
     session_id: str | None = None,
 ) -> str:
-    """Fallback only when the answer form cannot be shown: save the learner's chat answer, copied exactly,
-    character for character. It is marked as transcribed so the learner can check it."""
+    """Save an answer the learner gave in the chat, copied exactly, character for character: when the form
+    cannot be shown, or when the learner said that chat answers should count. It is marked as transcribed so the
+    learner can check it. Then grade it like any answer."""
     return as_json(
         await get_client().post(
             "/attempts",
@@ -701,6 +718,30 @@ async def record_assessment(
         "model_name": model_name,
     }
     return as_json(await get_client().post(f"/attempts/{attempt_id}/assessments", payload))
+
+
+@mcp.tool(annotations=APPEND)
+async def save_chat_note(
+    course_id: str,
+    title: str,
+    text: str,
+    client_request_id: str,
+    concept_ids: list[str] | None = None,
+    transcribed_from_photo: bool = False,
+) -> str:
+    """Save a note or summary the learner gave in the chat, ONLY after they confirmed it. text: exactly as they
+    wrote it, or your word-for-word transcription of their photo ([?] for unreadable words) with their corrections;
+    never improved or completed. concept_ids only for their summary of the chunk you just taught (those concepts
+    become studied). client_request_id: a new UUID per note; reuse it when you retry the same note."""
+    payload = {
+        "course_id": course_id,
+        "title": title,
+        "text": text,
+        "concept_ids": concept_ids or [],
+        "transcribed_from_photo": transcribed_from_photo,
+        "client_request_id": client_request_id,
+    }
+    return as_json(await get_client().post("/notes", payload, idempotency_key=client_request_id))
 
 
 @mcp.tool(annotations=READ)

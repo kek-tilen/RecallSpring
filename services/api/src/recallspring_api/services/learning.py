@@ -114,9 +114,12 @@ def save_summary(
     text: str,
     client_request_id: uuid.UUID,
     request_id: str,
+    captured_via: str = "summary_form",
+    origin: str = "learning_summary",
 ) -> dict[str, Any]:
     """End of a learning chunk: store the learner's own summary exactly (as a note) and mark the concepts studied.
-    An empty summary still marks them studied (the learner chose to skip writing)."""
+    An empty summary still marks them studied (the learner chose to skip writing). ``captured_via`` says who wrote
+    the text down (the summary form, or an assistant that copied it from the chat; ADR-011)."""
     concepts = concepts_of_course(db, user.id, course_id, concept_ids)
     note = None
     if text.strip():
@@ -132,6 +135,7 @@ def save_summary(
                 revision=1,
                 saved_at=now,
                 created_at=now,
+                captured_via=captured_via,
             )
             db.add(note)
             db.flush()
@@ -146,12 +150,44 @@ def save_summary(
                 entity_type="note",
                 entity_id=note.id,
                 event_type="note.created",
-                payload={"origin": "learning_summary"},
+                payload={"origin": origin},
                 request_id=request_id,
             )
     marked = mark(db, user, concepts, "studied", "session", request_id)
     return {
         "note_id": str(note.id) if note else None,
         "saved_at": note.saved_at.isoformat() if note else None,
+        "captured_via": note.captured_via if note else None,
         "concepts": marked,
     }
+
+
+def save_chat_note(
+    db: Session,
+    user: User,
+    *,
+    course_id: uuid.UUID,
+    title: str,
+    text: str,
+    concept_ids: list[uuid.UUID],
+    from_photo: bool,
+    client_request_id: uuid.UUID,
+    request_id: str,
+) -> dict[str, Any]:
+    """A note or summary the learner gave in an assistant chat, saved after they confirmed it (ADR-011): the text as
+    the assistant copied or transcribed it, marked ``assistant_transcription``. With concepts it is the summary of a
+    learning chunk (those concepts become studied); without, an ordinary note."""
+    if not text.strip():
+        raise ApiError(422, "empty_note", "There is no text to save.")
+    return save_summary(
+        db,
+        user,
+        course_id=course_id,
+        concept_ids=concept_ids,
+        title=title,
+        text=text,
+        client_request_id=client_request_id,
+        request_id=request_id,
+        captured_via="assistant_transcription",
+        origin="chat_photo" if from_photo else "chat",
+    )

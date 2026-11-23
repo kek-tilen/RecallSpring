@@ -611,8 +611,14 @@ class Note(Base):
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # app_ui: typed in RecallSpring; summary_form: the summary form; assistant_transcription: an assistant copied it
+    # from the chat or a photo (ADR-011), shown with a label so the learner checks it
+    captured_via: Mapped[str] = mapped_column(String(30), nullable=False, server_default=text("'app_ui'"))
 
-    __table_args__ = (UniqueConstraint("user_id", "client_note_id", name="uq_notes_user_client_note"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "client_note_id", name="uq_notes_user_client_note"),
+        CheckConstraint("captured_via IN ('app_ui','summary_form','assistant_transcription')", name="captured_via"),
+    )
 
 
 class NoteRevision(Base):
