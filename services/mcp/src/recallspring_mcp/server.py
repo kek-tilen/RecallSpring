@@ -55,6 +55,18 @@ Start of every study session in a course:
    and where they are on the paper, item types, Bloom mix, what you could not read) and ask whether it matches
    what they know about the exam. On their yes confirm_exam_profile; on a correction record it again. Every
    topic names the course concepts that cover it (create_concepts first if needed) or not_in_material.
+   NOT IN THE MATERIAL: when a topic on the paper, or a detail of one (e.g. a command's flag the material never
+   explains), is not in the material, you may look it up on the web if this app gives you web search; otherwise say
+   so and keep it not_in_material. Prefer primary sources (official documentation, the standard, the tool's
+   manual). Say plainly that it is not from the course material, give the links, explain why it seems to matter for
+   this exam (where it is on the paper) and ASK whether to add it. Only on their yes: add_web_source
+   (learner_agreed=true), create_concepts from its sections, then record_exam_profile again with those concepts for
+   the topic and ask for the confirmation again. On no the topic stays not_in_material. Whenever you teach or quiz
+   it later, say it comes from the web.
+   WHY THIS PLAN: when get_study_context has explain_plan.now true (the first session for this exam, or its analysis
+   changed) and whenever the learner asks why, call get_plan_rationale and explain it in a few lines before you
+   start: what the paper shows, how today covers it, what is left out and the limits it lists. Rephrase it, but
+   never add claims it does not contain; cite the paper (question or page) for anything else about it.
 2. get_study_plan (course_id for one course, none for an overview across courses) and propose a session within the
    learner's available time. Passed material is maintenance only; the active target has priority. When the exam is
    within about two weeks, also call get_exam_readiness (course_id) and build the session on its next_steps:
@@ -557,6 +569,17 @@ async def get_exam_readiness(target_id: str | None = None, course_id: str | None
 
 
 @mcp.tool(annotations=READ)
+async def get_plan_rationale(target_id: str) -> str:
+    """Why this plan for one kolokvij or exam (target_id from get_study_context), computed by RecallSpring without a
+    model: the exam analysis and whether the learner confirmed it, its topics by points with their concepts and
+    states (from_web: added from the web at the learner's request), coverage weighted by points, the Bloom mix on the
+    paper against what was practised, today's items tied to their topics, order_rules (how the planner orders work),
+    the time check and limits (what this basis cannot say). Show it when get_study_context's explain_plan.now is true
+    and whenever the learner asks why: a few lines in your own words, never claims it does not contain."""
+    return as_json(await get_client().get(f"/targets/{target_id}/rationale"))
+
+
+@mcp.tool(annotations=READ)
 async def get_weekly_review(weeks_ago: int = 0) -> str:
     """Weekly review (Monday to Sunday, 0 = this week): activity, graded answers and the average grade with its
     trend, study time (only sessions closed with record_session_summary count), overdue reviews and the exams in
@@ -985,6 +1008,36 @@ async def add_text_source(
     folder: optional library folder path inside the course ("Lectures / Week 3"), created when missing."""
     payload = {"course_id": course_id, "title": title, "text": text, "format": format}
     source = await get_client().post("/sources/text", payload | ({"folder": folder} if folder else {}))
+    return as_json(await _wait_for_extraction(source["id"]))
+
+
+class WebLink(BaseModel):
+    url: str = Field(description="the http(s) page you read")
+    title: str | None = Field(default=None, max_length=200, description="the page's title")
+
+
+@mcp.tool(annotations=APPEND)
+async def add_web_source(
+    course_id: str,
+    title: str,
+    text: str,
+    links: list[WebLink],
+    learner_agreed: bool,
+    folder: str | None = None,
+) -> str:
+    """Only after the learner said yes in this conversation (learner_agreed=true): save what you read on the web for
+    something on an old paper that the course material does not cover (a topic, a command's flag, an option). Saved
+    apart from the material as "From the web - <title>" with the pages it came from (1-10 links) and a note that it
+    is not from the course material. text: Markdown with only what those pages say, citing them. Then create_concepts
+    from its sections and record_exam_profile again with those concepts for the topic."""
+    payload = {
+        "course_id": course_id,
+        "title": title,
+        "text": text,
+        "links": [link.model_dump() for link in links],
+        "learner_agreed": learner_agreed,
+    }
+    source = await get_client().post("/sources/web", payload | ({"folder": folder} if folder else {}))
     return as_json(await _wait_for_extraction(source["id"]))
 
 

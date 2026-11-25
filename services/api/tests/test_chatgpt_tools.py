@@ -20,8 +20,9 @@ from recallspring_api.db import new_session
 from recallspring_api.models import AuditEvent
 from recallspring_api.services import chat_tools
 
-from .conftest import Api
+from .conftest import Api, ConnectorApi
 from .test_chatgpt_signin import FakeOpenAI, reply_events, sign_in
+from .test_planning_and_simulations import course_with_concepts, target
 
 MODEL = "gpt-test-2026-11-01"
 
@@ -504,3 +505,20 @@ def test_notes_from_the_chat_and_simulation_results_in_a_study_conversation(owne
     assert step["summary"] == "Saved your note “Notes from my notebook”" and step["writes"]
     [n] = owner_api.get("/notes", course_id=ids["course_id"]).json()
     assert n["body"] == the_note["text"] and n["captured_via"] == "assistant_transcription"
+
+
+def test_chatgpt_reads_why_this_plan_through_readiness(owner_api: Api, conn: ConnectorApi, fake: ToolFake) -> None:
+    sign_in(owner_api, fake)
+    course, _ = course_with_concepts(owner_api, conn, ["Port scanning"])
+    target(conn, course, "1. kolokvij", "2026-12-20", [])
+    fake.rounds = [
+        calls(1, ("c1", "get_exam_readiness", {"course_id": course, "why": True})),
+        reply_events("Here is why.", 2),
+    ]
+    r = send(owner_api, "Why this plan?")
+    assert r.status_code == 200, r.text
+    out = outputs(fake.bodies()[1])["c1"]
+    assert out["ok"] is True and out["result"]["policy_version"] == "rationale-v1"
+    assert "explain_plan.now" in fake.bodies()[0]["instructions"]
+    [step] = r.json()["messages"][0]["tool_calls"]
+    assert step["summary"] == "Read why this plan"

@@ -18,6 +18,7 @@ from ..models import (
     ReviewState,
     Source,
     SourceSection,
+    StudySession,
     StudyTarget,
     StudyTargetScope,
     SyllabusItem,
@@ -368,6 +369,38 @@ def target_view(db: Session, target: StudyTarget, today: date) -> dict[str, Any]
     }
 
 
+def _explain_plan(db: Session, course: Course, active: StudyTarget | None) -> dict[str, Any] | None:
+    """Whether the assistant should show "Why this plan" without being asked (ADR-013 §3): at the first study session
+    for this exam and after its analysis changed, i.e. when no session of this course was finished since then.
+    Otherwise only when the learner asks."""
+    if active is None:
+        return None
+
+    def finished_since(when: datetime) -> bool:
+        found = db.scalar(
+            select(StudySession.id)
+            .where(
+                StudySession.course_id == course.id,
+                StudySession.ended_at.is_not(None),
+                StudySession.started_at >= when,
+            )
+            .limit(1)
+        )
+        return found is not None
+
+    profile = latest_profile(db, active.id)
+    since = max(active.created_at, profile.created_at) if profile else active.created_at
+    if finished_since(since):
+        return {"now": False, "why": "Only when the learner asks why, or asks about the plan."}
+    changed = profile is not None and finished_since(active.created_at)
+    return {
+        "now": True,
+        "why": "The exam analysis changed since the last session." if changed else "First study session for this exam.",
+        "how": "Call get_plan_rationale (ChatGPT in Chat: get_exam_readiness with why=true) and explain it in a few "
+        "lines before you start.",
+    }
+
+
 def study_context(db: Session, course: Course, today: date, style_percent: int = 75) -> dict[str, Any]:
     """Everything Claude needs at the start of a study session in one course, including whether to ask the
     learner what they are preparing for."""
@@ -404,6 +437,7 @@ def study_context(db: Session, course: Course, today: date, style_percent: int =
             for q in quizzes
         ],
         "learning": _learning_counts(db, active) if active else None,
+        "explain_plan": _explain_plan(db, course, active),
         "rules": [
             "Learn first: concepts that are not_studied are taught (explain, then the learner summarises in the "
             "summary form) before any practice or simulation. RecallSpring refuses practice on unstudied concepts "

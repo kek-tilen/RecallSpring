@@ -219,6 +219,7 @@ def source_view(db: Session, source: Source, folders: Tree | None = None) -> dic
         section_count=count or 0,
         uploaded_at=source.uploaded_at,
         parsed_at=source.parsed_at,
+        web_links=source.web_links or [],
     ).model_dump(mode="json")
 
 

@@ -530,6 +530,25 @@ class ConnectorSourceTextIn(SourceTextIn):
     folder: str | None = Field(default=None, max_length=600)
 
 
+class WebLinkIn(BaseModel):
+    url: str = Field(min_length=8, max_length=2000, pattern=r"^https?://[^\s]+$")
+    title: str | None = Field(default=None, max_length=200)
+
+
+class WebSourceIn(BaseModel):
+    """Content an assistant read on the web for something on an old paper the material does not cover (ADR-013 §5).
+    Only after the learner agreed; saved apart from the course material, with the pages it came from."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    course_id: uuid.UUID
+    title: str = Field(min_length=1, max_length=160)
+    text: str = Field(min_length=1, max_length=100_000)
+    links: list[WebLinkIn] = Field(min_length=1, max_length=10)
+    learner_agreed: bool
+    folder: str | None = Field(default=None, max_length=600)
+
+
 class SourceOut(BaseModel):
     id: uuid.UUID
     course_id: uuid.UUID
@@ -556,6 +575,7 @@ class SourceOut(BaseModel):
     section_count: int
     uploaded_at: datetime
     parsed_at: datetime | None
+    web_links: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class SectionOut(BaseModel):

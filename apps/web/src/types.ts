@@ -194,6 +194,13 @@ export interface Target {
   duplicates?: string[];
 }
 
+// ADR-013 §5: a page an assistant read for something on an old paper that the material does not cover
+export interface WebLink {
+  url: string;
+  title: string | null;
+  read_on: string;
+}
+
 export interface Source {
   id: string;
   course_id: string;
@@ -217,6 +224,7 @@ export interface Source {
   section_count: number;
   uploaded_at: string;
   parsed_at: string | null;
+  web_links?: WebLink[]; // origin "web" only
 }
 
 export interface Folder {

@@ -34,6 +34,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy.orm import Session
 
+from .. import clock
 from ..ai import siwc
 from ..deps import Ctx, WriteCtx
 from ..errors import ApiError
@@ -55,6 +56,7 @@ from ..schemas import (
     TargetProfileIn,
     TargetUpdateIn,
 )
+from . import readiness
 from .ownership import owned
 
 log = logging.getLogger(__name__)
@@ -125,6 +127,10 @@ get_explanation and record_explanation_feedback on the newest version: what is c
 only section IDs you read. Not a grade; never rewrite their explanation or write one for them.
 - When a reply gives feedback on the learner's work but nothing was saved to RecallSpring, say so in one line: \
 "Nothing was saved to RecallSpring."
+- Why this plan: when get_study_context has explain_plan.now true (the first session for this exam, or its \
+analysis changed) and whenever the learner asks why, call get_exam_readiness with why=true and explain it in a few \
+lines before you start: what the paper shows, how today covers it, what is left out and the limits it lists. \
+Rephrase it, but never add claims it does not contain; cite the paper (question or page) for anything else about it.
 - AI grades are study feedback, not validated scores; never present them as official marks.
 - Messages starting with [RecallSpring] were sent by RecallSpring for the learner after they used a form; keep \
 replying in the language the learner uses.
@@ -147,10 +153,11 @@ material (get_course_outline). Ask for anything missing and show the mapping bef
 paper with record_exam_profile and pass its source_id; if the paper is not in the course's material yet, ask the \
 learner to upload it under the course as Past paper first, so they can open it next to the analysis. Every topic \
 names the course concepts that cover it (create_concepts first when needed) or not_in_material, with its points and \
-where it is on the paper. The profile is saved unconfirmed: show the learner a short summary (topics with points, \
-item types, Bloom mix, what you could not read), ask whether it matches what they know, and confirm_exam_profile \
-only on their yes. \
-Create concepts from material you read (create_concepts, linked \
+where it is on the paper. You cannot search the web here: when something on the paper is not in the material, say \
+so and mark it not_in_material; the learner can look it up with an assistant that has web search and add it there \
+with their consent, labelled as from the web. The profile is saved unconfirmed: show the learner a short summary \
+(topics with points, item types, Bloom mix, what you could not read), ask whether it matches what they know, and \
+confirm_exam_profile only on their yes. Create concepts from material you read (create_concepts, linked \
 to section IDs). Then show priorities across courses with get_study_plan without course_id. To study, practise or \
 get feedback on a course, the learner starts a new conversation and picks that course under Study."""
 
@@ -180,6 +187,15 @@ class NoArgs(BaseModel):
 
 class CourseArg(BaseModel):
     course_id: uuid.UUID
+
+
+class ReadinessArgs(BaseModel):
+    course_id: uuid.UUID
+    why: bool = Field(
+        default=False,
+        description="true: Why this plan for that exam instead (the exam analysis, coverage by points, today's work, "
+        "the planner's rules and the limits of this basis)",
+    )
 
 
 class PlanArgs(BaseModel):
@@ -397,6 +413,15 @@ def _create_quiz(db: Session, ctx: WriteCtx, a: QuizIn) -> tuple[Any, dict[str, 
     return body, {"kind": "quiz", "quiz_id": body["quiz_id"], "title": body.get("title")}
 
 
+def _readiness(db: Session, ctx: Ctx, a: ReadinessArgs) -> tuple[Any, None]:
+    """Readiness, or with why=true the rationale (ADR-013 §3): one tool for both keeps the study set within
+    MAX_TOOLS."""
+    if not a.why:
+        return _c().exam_readiness(target_id=None, course_id=a.course_id, ctx=ctx, db=db), None
+    target_id = readiness.for_course(db, ctx.user, a.course_id, clock.now())
+    return _c().plan_rationale(target_id=target_id, ctx=ctx, db=db), None
+
+
 def _create_concepts(db: Session, ctx: WriteCtx, a: ConceptsArgs) -> tuple[Any, None]:
     payload = ConnectorConceptsIn.model_validate(a.model_dump(exclude={"course_id"}))
     return _body(_c().create_concepts(course_id=a.course_id, payload=payload, ctx=ctx, db=db)), None
@@ -468,10 +493,11 @@ _TOOLS = [
     Tool(
         "get_exam_readiness",
         "What is left before the next exam of a course: states by material, weakest concepts with their gaps, next "
-        "steps and the time check. Use when an exam is within about two weeks.",
-        CourseArg,
-        lambda db, ctx, a: (_c().exam_readiness(target_id=None, course_id=a.course_id, ctx=ctx, db=db), None),
-        lambda a, r: "Checked exam readiness",
+        "steps and the time check. Use when an exam is within about two weeks. why=true: Why this plan for that "
+        "exam, computed by RecallSpring; explain it, never add claims it does not contain.",
+        ReadinessArgs,
+        _readiness,
+        lambda a, r: "Read why this plan" if a.why else "Checked exam readiness",
     ),
     Tool(
         "get_course_outline",

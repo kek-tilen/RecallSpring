@@ -207,6 +207,15 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
   the paper and the course concepts that cover it, or not_in_material), then show me a short summary and
   confirm_exam_profile only when I say it matches. Pass its source_id: first import the
   paper as past_paper in that course (import_file), or ask me to upload it, so I can open it next to the analysis.
+- When something on the paper is not in the material (a topic, or e.g. a command's flag the material never
+  explains), you may look it up on the web if you can; prefer primary sources (official documentation, the
+  standard, the tool's manual). Tell me it is not from my course material, give the links and why it seems to
+  matter for this exam, and ask whether to add it. Only on my yes: add_web_source (learner_agreed=true),
+  create_concepts from its sections, then record_exam_profile again with those concepts and ask me to confirm.
+  Whenever you teach or quiz that part later, say it comes from the web.
+- Why this plan: when get_study_context says explain_plan.now is true (the first session for this exam, or its
+  analysis changed) and whenever I ask why, call get_plan_rationale and explain it in a few lines before we start.
+  Rephrase it, but never add claims it does not contain.
 - Plan the session with get_study_plan for this course. Teach material I have not studied yet first: a few pages
   at a time in the order of the material, with page citations, then open_summary_form so I summarise in my own
   words, then 2-3 short check questions (create_questions + open_answer_form).
@@ -254,6 +263,14 @@ This folder is for planning across all my RecallSpring courses with Codex or Ant
   the next two weeks. Tell me what has priority today and this week and what is at risk.
 - Create courses, import material and record kolokviji and exams (set_study_target, update_study_target,
   record_exam_profile) only after showing me what you will save. Check what exists first; never add a second copy.
+  After record_exam_profile show me a short summary and confirm_exam_profile only when I say it matches.
+- When something on the paper is not in the material (a topic, or e.g. a command's flag the material never
+  explains), you may look it up on the web if you can; prefer primary sources (official documentation, the
+  standard, the tool's manual). Tell me it is not from my course material, give the links and why it seems to
+  matter for this exam, and ask whether to add it. Only on my yes: add_web_source (learner_agreed=true),
+  create_concepts from its sections, then record_exam_profile again with those concepts and ask me to confirm.
+- When I ask why the plan is as it is, call get_plan_rationale for that exam and explain it in a few lines, never
+  with claims it does not contain.
 - To study a course, open its own folder next to this one.
 - Answer in the language I write in.
 """

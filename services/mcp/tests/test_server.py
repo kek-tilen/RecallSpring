@@ -781,3 +781,31 @@ async def test_exam_profile_v2_is_passed_through_and_confirmed_separately(api: F
     assert json.loads(api.requests[1].content) == {"profile_id": "p1"}
     assert "only on their yes" in tools["record_exam_profile"].description
     assert "confirm_exam_profile" in instructions and "not_in_material" in instructions
+
+
+async def test_plan_rationale_and_web_sources_are_passed_through(api: FakeApi) -> None:
+    api.route("GET", "/targets/t1/rationale", 200, {"policy_version": "rationale-v1", "limits": []})
+    api.route("POST", "/sources/web", 201, {"id": "s9", "parse_state": "pending"})
+    api.route("GET", "/sources/s9", 200, {"id": "s9", "origin": "web", "parse_state": "ready", "sections": []})
+    async with Client(mcp) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        rationale = await client.call_tool("get_plan_rationale", {"target_id": "t1"})
+        source = await client.call_tool(
+            "add_web_source",
+            {
+                "course_id": "c1",
+                "title": "nmap -A",
+                "text": "-A enables OS detection, version detection, script scanning and traceroute.",
+                "links": [{"url": "https://nmap.org/book/man-misc-options.html", "title": "Nmap reference"}],
+                "learner_agreed": True,
+            },
+        )
+        instructions = client.instructions or ""
+    assert json.loads(rationale.content[0].text)["policy_version"] == "rationale-v1"
+    assert json.loads(source.content[0].text)["origin"] == "web"
+    sent = json.loads(api.requests[1].content)
+    assert sent["learner_agreed"] is True and sent["links"][0]["url"].startswith("https://nmap.org/")
+    assert "folder" not in sent
+    assert "Only after the learner said yes" in tools["add_web_source"].description
+    assert tools["get_plan_rationale"].annotations.read_only_hint is True
+    assert "explain_plan.now" in instructions and "ASK whether to add it" in instructions

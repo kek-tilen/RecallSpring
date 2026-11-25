@@ -539,6 +539,8 @@ class Source(Base):
     parsed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = _updated()
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # origin "web" (ADR-013 §5): the pages the content was read from, [{url, title, read_on}]
+    web_links: Mapped[list[Any]] = _json_list()
 
     __table_args__ = (
         Index("ix_sources_user_sha256", "user_id", "sha256"),
@@ -547,7 +549,7 @@ class Source(Base):
             "'odt','odp','ods','csv','subtitles','notebook','code','latex')",
             name="kind",
         ),
-        CheckConstraint("origin IN ('upload','paste','import')", name="origin"),
+        CheckConstraint("origin IN ('upload','paste','import','web')", name="origin"),
         CheckConstraint("category IN ('material','notes','exercises','past_paper','chat','other')", name="category"),
         CheckConstraint(
             "parse_state IN ('pending','processing','ready','needs_attention','failed')", name="parse_state"

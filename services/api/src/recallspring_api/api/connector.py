@@ -81,6 +81,7 @@ from ..schemas import (
     TargetIn,
     TargetProfileIn,
     TargetUpdateIn,
+    WebSourceIn,
 )
 from ..services import assistants, bloom, check_first, focus, overview, readiness, week
 from ..services import attempts as attempt_svc
@@ -106,7 +107,7 @@ from .attempts import save_attempt
 from .questions import _add_question, _course_concepts, question_view
 from .reviews import _item as review_item
 from .settings import apply_study_settings
-from .sources import handle_paste, handle_upload
+from .sources import handle_paste, handle_upload, handle_web
 
 router = APIRouter(prefix="/connector", tags=["connector"])
 
@@ -713,6 +714,16 @@ def add_text_source(
         folder = folder_svc.resolve_path(db, ctx.user, payload.course_id, payload.folder, ctx.request_id)
         payload = payload.model_copy(update={"folder_id": folder.id if folder else None})
     return handle_paste(payload, ctx, db)
+
+
+@router.post("/sources/web", status_code=201)
+def add_web_source(
+    payload: WebSourceIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Only after the learner agreed: what you read on the web for something on an old paper that the course
+    material does not cover, saved apart from the material with the pages it came from (ADR-013 §5)."""
+    folder = folder_svc.resolve_path(db, ctx.user, payload.course_id, payload.folder, ctx.request_id)
+    return handle_web(payload, ctx, db, folder.id if folder else None)
 
 
 @router.post("/sources", status_code=201)

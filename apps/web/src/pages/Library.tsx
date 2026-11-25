@@ -157,6 +157,7 @@ export function SourceTable({
                   {s.filename}
                 </Link>
                 {s.duplicate_of_id && <div className="tiny muted">Same file as another upload</div>}
+                {s.origin === "web" && <div className="tiny muted">From the web, not your course material</div>}
               </td>
               <td className="small nowrap">{CATEGORY_LABEL[s.category] ?? s.category}</td>
               {titles && <td className="small">{titles[s.course_id] ?? ""}</td>}
@@ -883,6 +884,50 @@ function FolderSelect({ source }: { source: Source }) {
   );
 }
 
+const VIA: Record<string, string> = { paste: "Pasted text", import: "Imported from ChatGPT", web: "From the web" };
+
+/** Only http(s) links are shown as links; anything else is shown as text. */
+function webHref(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/** ADR-013 §5: content an assistant read on the web at the learner's request, kept apart from the course material. */
+export function WebOrigin({ source }: { source: Source }) {
+  if (source.origin !== "web") return null;
+  const links = source.web_links ?? [];
+  return (
+    <div className="notice small" role="note">
+      <strong>From the web, not your course material.</strong> Your assistant added this at your request for something
+      on an old paper that your material does not cover. Your professor may expect it differently.
+      {links.length > 0 && (
+        <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+          {links.map((link, i) => {
+            const href = webHref(link.url);
+            const label = link.title || link.url;
+            return (
+              <li key={i} style={{ overflowWrap: "anywhere" }}>
+                {href ? (
+                  <a href={href} target="_blank" rel="noopener noreferrer">
+                    {label}
+                  </a>
+                ) : (
+                  label
+                )}
+                <span className="muted"> · read on {dateLabel(link.read_on)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Details({ s }: { s: Source }) {
   return (
     <Card title="Details">
@@ -902,7 +947,7 @@ function Details({ s }: { s: Source }) {
         <dt>Added</dt>
         <dd>{dateTime(s.uploaded_at)}</dd>
         <dt>Via</dt>
-        <dd>{s.origin === "paste" ? "Pasted text" : s.origin === "import" ? "Imported from ChatGPT" : "File upload"}</dd>
+        <dd>{VIA[s.origin] ?? "File upload"}</dd>
         {s.parsed_at && (
           <>
             <dt>Extracted</dt>
@@ -1031,6 +1076,11 @@ export function SourcePage() {
                 </div>
               )}
               {archive.error && <ErrorNote error={archive.error} />}
+              {s.origin === "web" && (
+                <div style={{ marginBottom: 16 }}>
+                  <WebOrigin source={s} />
+                </div>
+              )}
               <div className="split">
                 <div className="stack">
                   {s.parse_message && <div className={s.parse_state === "failed" ? "notice bad" : "notice warn"}>{s.parse_message}</div>}

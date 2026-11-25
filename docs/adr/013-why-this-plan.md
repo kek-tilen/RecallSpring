@@ -1,7 +1,7 @@
 # ADR-013 — Why this plan: a confirmed exam profile, coverage and an honest rationale
 
 Status: accepted 2026-11-25 (owner in chat; owner feedback after real use: "the learner must be able to trust that the
-agent knows what it is doing"). Rolled out in steps, see Rollout (steps 1-2 done 2026-11-25). Extends ADR-005 (study targets,
+agent knows what it is doing"). Rolled out in steps, see Rollout (steps 1-3 done 2026-11-25). Extends ADR-005 (study targets,
 plan v1, simulations) and the exam readiness in `docs/05`.
 
 ## Context
@@ -96,8 +96,8 @@ reliable sources show it matters for the kind of questions on the paper.
   **not from the course material**, with the links it used.
 - It explains why it seems important for this exam (where such questions appear on the paper, what the sources
   say), then **asks** whether to add it. Nothing is added on its own.
-- On yes: the content is saved as a separate source, origin `web`, titled "From the web: …", with each URL and the
-  date it was read. The concepts created for it link only to that source, so every later citation, question and
+- On yes: the content is saved as a separate source, origin `web`, titled "From the web - …" (a file name, so no
+  colon), with each URL and the date it was read. The concepts created for it link only to that source, so every later citation, question and
   grade shows it comes from the web and not from the professor's material. The paper's topic then names those
   concepts and keeps a `from_web` mark.
 - On no: the topic stays `not_in_material`.
@@ -118,6 +118,9 @@ Each step with tests and docs:
    **Done 2026-11-25** (`services/rationale.py`).
 3. MCP tool and instructions; ChatGPT in Chat tool; Codex / Antigravity folder text; web sources for
    topics not in the material (§5: source origin `web` with URLs, `from_web` topics, consent first).
+   **Done 2026-11-25** (migration 0029; MCP `get_plan_rationale` and `add_web_source`; `explain_plan` in the study
+   context; ChatGPT in Chat reads the rationale as `get_exam_readiness` with `why: true` to stay within 20 tools,
+   and has no web search; Library labels web sources and lists their links).
 4. Web: Readiness section, Home `Why?` link, profile confirmation.
 
 ## Consequences

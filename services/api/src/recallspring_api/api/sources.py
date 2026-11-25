@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import clock
 from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
@@ -37,10 +38,11 @@ from ..schemas import (
     SourcesArchiveIn,
     SourcesMoveIn,
     SourceTextIn,
+    WebSourceIn,
 )
 from ..services import folders as folder_svc
 from ..services import sources as svc
-from ..services.events import learning_event
+from ..services.events import audit, learning_event
 from ..services.ownership import owned
 
 router = APIRouter(tags=["sources"])
@@ -170,6 +172,57 @@ def handle_paste(payload: SourceTextIn, ctx: WriteCtx, db: Session) -> JSONRespo
         request_id=ctx.request_id,
         folder_id=payload.folder_id,
     )
+    return commit_with_response(db, ctx, payload, 201, svc.source_view(db, source))
+
+
+WEB_PREFIX = "From the web - "
+
+
+def handle_web(payload: WebSourceIn, ctx: WriteCtx, db: Session, folder_id: uuid.UUID | None) -> JSONResponse:
+    """Content an assistant read on the web, saved apart from the course material (ADR-013 §5): origin ``web``, a
+    file name starting "From the web", a note at the top saying so, and the pages it came from."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    if not payload.learner_agreed:
+        raise ApiError(
+            422,
+            "learner_not_asked",
+            "Ask the learner first whether to add this from the web, and save it only after they agree.",
+        )
+    owned(db, Course, payload.course_id, ctx.user.id)
+    today = clock.now().date().isoformat()
+    links = [{"url": link.url, "title": link.title, "read_on": today} for link in payload.links]
+    lines = [f"> **From the web, not from your course material.** Added on {today} after you agreed.", ">"]
+    lines += [f"> - {link['title'] + ': ' if link['title'] else ''}{link['url']}" for link in links]
+    filename = sanitize_filename(WEB_PREFIX + payload.title.replace("/", "-").replace("\\", "-"))
+    if not filename.lower().endswith(".md"):
+        filename = f"{filename[:252]}.md"
+    tmp, sha256, size = spool_bytes(("\n".join(lines) + "\n\n" + payload.text).encode("utf-8"))
+    source = svc.create_source(
+        db,
+        user=ctx.user,
+        course_id=payload.course_id,
+        tmp=tmp,
+        sha256=sha256,
+        size=size,
+        filename=filename,
+        kind="markdown",
+        mime="text/markdown",
+        origin="web",
+        request_id=ctx.request_id,
+        folder_id=folder_id,
+    )
+    source.web_links = links
+    audit(
+        db,
+        actor_id=ctx.user.id,
+        action="source.web_added",
+        target_type="source",
+        target_id=source.id,
+        details={"links": [link["url"] for link in links]},
+        request_id=ctx.request_id,
+    )
+    db.flush()
     return commit_with_response(db, ctx, payload, 201, svc.source_view(db, source))
 
 

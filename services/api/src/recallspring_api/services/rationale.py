@@ -21,11 +21,14 @@ from sqlalchemy.orm import Session
 from ..models import (
     Attempt,
     Concept,
+    ConceptSource,
     Course,
     Question,
     QuestionConcept,
     Quiz,
     ReviewState,
+    Source,
+    SourceSection,
     StudyTarget,
     TargetProfile,
     User,
@@ -96,6 +99,22 @@ def _profile_topics(profile: TargetProfile | None) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def _web_only(db: Session, concept_ids: set[str]) -> set[str]:
+    """Concepts whose linked material is all from the web (ADR-013 §5)."""
+    if not concept_ids:
+        return set()
+    rows = db.execute(
+        select(ConceptSource.concept_id, Source.origin)
+        .join(SourceSection, SourceSection.id == ConceptSource.section_id)
+        .join(Source, Source.id == SourceSection.source_id)
+        .where(ConceptSource.concept_id.in_([uuid.UUID(c) for c in concept_ids]), Source.deleted_at.is_(None))
+    ).all()
+    origins: dict[str, set[str]] = {}
+    for cid, origin in rows:
+        origins.setdefault(str(cid), set()).add(origin)
+    return {cid for cid, found in origins.items() if found == {"web"}}
 
 
 def _status(t: dict[str, Any], concepts: list[dict[str, Any]]) -> str:
@@ -176,6 +195,7 @@ def rationale(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
     raw_topics = _profile_topics(profile)
     named = {cid for t in raw_topics for cid in t["concept_ids"]}
     outside = _states(db, user, {uuid.UUID(c) for c in named - set(in_scope)}, now)
+    web_only = _web_only(db, named)
 
     topics = []
     for t in raw_topics:
@@ -206,6 +226,8 @@ def rationale(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
                 "weight": t.get("weight", 1.0),
                 "not_in_material": t["not_in_material"],
                 "unmapped": t["unmapped"],
+                # added from the web at the learner's request: every concept of the topic is backed by web sources
+                "from_web": bool(concepts) and all(c["id"] in web_only for c in concepts),
                 "status": status,
                 "concepts": concepts,
                 "counts": counts,
@@ -335,6 +357,13 @@ def _limits(
             )
         if profile.unreadable:
             add("unreadable", f"Your assistant could not read: {_listed([str(u) for u in profile.unreadable])}.")
+    web = [t["label"] for t in topics if t.get("from_web")]
+    if web:
+        add(
+            "from_web",
+            f"Added from the web at your request, not from your course material: {_listed(web)}. Your professor may "
+            "expect it differently.",
+        )
     not_in = [t for t in topics if t["not_in_material"]]
     if not_in:
         names = [t["label"] + (f" ({t['points']:g} points)" if t["points"] else "") for t in not_in]
