@@ -257,6 +257,16 @@ def confirm_profile(
             "the learner's reason.",
             {"not_looked_at": missing},
         )
+    unproven = evidence_gaps(db, profile)["missing"] if via == "assistant" else []
+    if unproven:
+        raise ApiError(
+            409,
+            "evidence_missing",
+            "Say for every file of a paper what shows that it belongs to it (papers[].evidence: why and strength): "
+            + ", ".join(m["filename"] for m in unproven)
+            + ". Record the profile again; ask the learner about every file whose evidence is weak.",
+            {"evidence_missing": unproven},
+        )
     if profile.confirmed_at is None:
         profile.confirmed_at = now
         profile.confirmed_via = via
@@ -302,6 +312,39 @@ def _covered(profile: TargetProfile) -> set[str]:
             ids.update(str(i) for i in [p.get("source_id"), *(p.get("extra_source_ids") or [])] if i)
     ids.update(str(s.get("source_id")) for s in profile.skipped_papers or [] if isinstance(s, dict))
     return ids
+
+
+def _paper_files(db: Session, paper: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every file of a paper in RecallSpring, the first one first, with the stated reason it belongs to the paper."""
+    given = {str(e.get("source_id")): e for e in paper.get("evidence") or [] if isinstance(e, dict)}
+    out = []
+    for source_id in [paper.get("source_id"), *(paper.get("extra_source_ids") or [])]:
+        ref = _source_ref(db, source_id)
+        if ref is not None:
+            e = given.get(str(source_id)) or {}
+            out.append({**ref, "why": e.get("why"), "strength": e.get("strength")})
+    return out
+
+
+def evidence_gaps(db: Session, profile: TargetProfile) -> dict[str, list[dict[str, Any]]]:
+    """Files of the analysed papers without a stated reason why they belong to the paper (missing), and those whose
+    reason is only inferred (weak), owner 2026-11-25."""
+    missing: list[dict[str, Any]] = []
+    weak: list[dict[str, Any]] = []
+    for p in profile.papers or []:
+        if not isinstance(p, dict):
+            continue
+        given = {str(e.get("source_id")): e for e in p.get("evidence") or [] if isinstance(e, dict)}
+        for source_id in [p.get("source_id"), *(p.get("extra_source_ids") or [])]:
+            ref = _source_ref(db, source_id)
+            if ref is None:
+                continue
+            e = given.get(str(source_id))
+            if e is None:
+                missing.append(ref)
+            elif e.get("strength") == "weak":
+                weak.append({**ref, "why": e.get("why")})
+    return {"missing": missing, "weak": weak}
 
 
 def papers_not_looked_at(db: Session, profile: TargetProfile) -> list[dict[str, Any]]:
@@ -356,11 +399,7 @@ def profile_view(db: Session, profile: TargetProfile | None) -> dict[str, Any] |
             {
                 **p,
                 "source": _source_ref(db, p.get("source_id")),
-                "files": [
-                    ref
-                    for ref in (_source_ref(db, i) for i in [p.get("source_id"), *(p.get("extra_source_ids") or [])])
-                    if ref is not None
-                ],
+                "files": _paper_files(db, p),
             }
             for p in profile.papers
             if isinstance(p, dict)
@@ -372,6 +411,8 @@ def profile_view(db: Session, profile: TargetProfile | None) -> dict[str, Any] |
             if isinstance(s, dict)
         ],
         "not_looked_at": papers_not_looked_at(db, profile),
+        # Files without a stated reason they belong to their paper (only analyses since 2026-11-25 state one).
+        "evidence_missing": evidence_gaps(db, profile)["missing"] if profile.version >= 2 else [],
         "unreadable": profile.unreadable,
         # confirmed / unconfirmed, or before_confirmation for analyses made before ADR-013
         "confirmation": confirmation,

@@ -867,6 +867,18 @@ class ItemType(BaseModel):
     share: float = Field(ge=0, le=1)
 
 
+class FileEvidenceIn(BaseModel):
+    """Why one file belongs to its paper (owner 2026-11-25: five photos were put on one kolokvij without a reason)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: uuid.UUID
+    # What on the file shows it, e.g. "header: 2. kolokvij, 16. 01. 2026" or "numbering goes on from 26".
+    why: str = Field(min_length=1, max_length=300)
+    # strong: the file itself shows it (header, date); weak: only inferred (numbering, layout); ask the learner.
+    strength: Literal["strong", "weak"]
+
+
 class ProfilePaperIn(BaseModel):
     """One old paper the analysis read (ADR-013 §1)."""
 
@@ -883,6 +895,8 @@ class ProfilePaperIn(BaseModel):
     use: Literal["style", "style_and_topics"] = "style_and_topics"
     # Further files of the same paper, e.g. a second photo or page (owner 2026-11-25).
     extra_source_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+    # For every file of the paper: what shows that it belongs to this paper and exam.
+    evidence: list[FileEvidenceIn] = Field(default_factory=list, max_length=21)
 
 
 class SkippedPaperIn(BaseModel):

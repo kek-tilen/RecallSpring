@@ -191,6 +191,7 @@ def test_every_past_paper_is_looked_at_or_left_out_on_the_learners_word(owner_ap
     ports = {"label": "Ports", "concept_ids": [ids["Ports"]]}
     r = conn.post(f"/targets/{t['id']}/profile", {"papers": [{"source_id": first, "label": "2026"}], "topics": [ports]})
     assert r.status_code == 201, r.text
+    assert [m["filename"] for m in r.json()["evidence_missing"]] == ["3.jpg.png"]
     assert [m["filename"] for m in r.json()["not_looked_at"]] == ["4.png", "5.png"]
     assert r.json()["confirm"].startswith("These past papers of the course are not in the analysis: 4.png, 5.png.")
     profile_id = r.json()["profile"]["id"]
@@ -211,6 +212,43 @@ def test_every_past_paper_is_looked_at_or_left_out_on_the_learners_word(owner_ap
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["not_looked_at"] == [] and not body["confirm"].startswith("These past papers")
+    # every file must say why it belongs to its paper (owner 2026-11-25)
+    assert [m["filename"] for m in body["evidence_missing"]] == ["3.jpg.png", "4.png"]
+    refused = conn.post(f"/targets/{t['id']}/profile/confirm", {"profile_id": body["profile"]["id"]})
+    assert refused.status_code == 409 and refused.json()["code"] == "evidence_missing"
+    evidence = [
+        {"source_id": first, "why": "header: 2. kolokvij, 16. 01. 2026", "strength": "strong"},
+        {"source_id": page2, "why": "numbering goes on from 5", "strength": "weak"},
+    ]
+    wrong = conn.post(
+        f"/targets/{t['id']}/profile",
+        {
+            "papers": [
+                {
+                    "source_id": first,
+                    "label": "2026",
+                    "evidence": [{"source_id": other, "why": "x", "strength": "weak"}],
+                }
+            ],
+            "topics": [ports],
+        },
+    )
+    assert wrong.status_code == 422 and wrong.json()["code"] == "evidence_not_for_paper"
+    r = conn.post(
+        f"/targets/{t['id']}/profile",
+        {
+            "papers": [{"source_id": first, "label": "2026", "extra_source_ids": [page2], "evidence": evidence}],
+            "skipped_papers": [{"source_id": other, "reason": "2nd kolokvij; learner: does not apply"}],
+            "topics": [ports],
+        },
+    )
+    body = r.json()
+    assert body["evidence_missing"] == [] and [w["filename"] for w in body["weak_evidence"]] == ["4.png"]
+    assert "The evidence is weak for: 4.png (numbering goes on from 5)." in body["confirm"]
+    files = body["profile"]["papers"][0]["files"]
+    assert [(f["filename"], f["strength"]) for f in files] == [("3.jpg.png", "strong"), ("4.png", "weak")]
+    limits = {x["code"]: x["message"] for x in owner_api.get(f"/targets/{t['id']}/rationale").json()["limits"]}
+    assert "4.png (numbering goes on from 5)" in limits["weak_evidence"] and "evidence_missing" not in limits
     assert body["profile"]["skipped_papers"][0]["source"]["filename"] == "5.png"
     assert [f["filename"] for f in body["profile"]["papers"][0]["files"]] == ["3.jpg.png", "4.png"]  # every file
     ok = conn.post(f"/targets/{t['id']}/profile/confirm", {"profile_id": body["profile"]["id"]})

@@ -36,7 +36,7 @@ from ..models import (
 from . import check_first, readiness
 from .learning import effective_status
 from .planner import PRIORITY_RULES, today_plan
-from .targets import latest_profile, papers_not_looked_at, profile_view
+from .targets import evidence_gaps, latest_profile, papers_not_looked_at, profile_view
 
 POLICY = "rationale-v1"
 MAX_LISTED = 20
@@ -282,7 +282,7 @@ def rationale(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
     on_paper = {c["id"] for t in counted for c in t["concepts"]}
     not_on_paper = [c["term"] for c in in_scope.values() if c["id"] not in on_paper] if counted else []
     missing = [m["filename"] for m in papers_not_looked_at(db, profile)] if profile else []
-    limits = _limits(profile, topics, not_on_paper, above, limit, len(in_scope), missing)
+    limits = _limits(profile, topics, not_on_paper, above, limit, len(in_scope), missing, db)
 
     return {
         "policy_version": POLICY,
@@ -323,6 +323,7 @@ def _limits(
     limit: int,
     concepts: int,
     not_looked_at: list[str] | None = None,
+    db_for_limits: Session | None = None,
 ) -> list[dict[str, str]]:
     """What the basis of the plan cannot say, in the order a learner should hear it."""
     out: list[dict[str, str]] = []
@@ -353,6 +354,21 @@ def _limits(
         )
     elif profile.confirmed_at is None:
         add("unconfirmed", "You have not confirmed the analysis yet: check it against the paper.")
+    if profile.version >= 2:
+        gaps = evidence_gaps(db_for_limits, profile) if db_for_limits is not None else {"missing": [], "weak": []}
+        if gaps["weak"]:
+            add(
+                "weak_evidence",
+                "Your assistant is not sure these files belong to their paper: "
+                + _listed([f"{w['filename']} ({w['why']})" for w in gaps["weak"]])
+                + ". Tell it if one does not.",
+            )
+        if gaps["missing"]:
+            add(
+                "evidence_missing",
+                f"Your assistant did not say why these files belong to their paper: "
+                f"{_listed([m['filename'] for m in gaps['missing']])}. Ask it to analyse the papers again.",
+            )
     if not_looked_at:
         add(
             "not_looked_at",

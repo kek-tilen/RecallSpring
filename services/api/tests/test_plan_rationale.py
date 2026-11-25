@@ -32,7 +32,12 @@ def test_the_rationale_ties_the_paper_to_coverage_and_todays_work(owner_api: Api
         f"/targets/{t['id']}/profile",
         {
             "papers": [
-                {"source_id": paper["id"], "label": "2025", "total_points": 30},
+                {
+                    "source_id": paper["id"],
+                    "label": "2025",
+                    "total_points": 30,
+                    "evidence": [{"source_id": paper["id"], "why": "header: 2025", "strength": "strong"}],
+                },
                 {"label": "2024", "total_points": 30},
             ],
             "bloom_mix": {"3": 0.5, "4": 0.5},

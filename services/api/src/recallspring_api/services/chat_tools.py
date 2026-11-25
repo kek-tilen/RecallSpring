@@ -161,7 +161,10 @@ its style, and use "style" unless the learner says its topics count. Look at EVE
 first (get_study_context past_papers, photos included), not only the first: read each (get_source_section; a \
 photo you cannot see here: ask the learner to attach it). Each goes in papers (several photos of one paper: \
 extra_source_ids) or, only on the learner's word, in skipped_papers with their reason. When it is unclear which \
-exam or material a paper belongs to, say what it shows and ask the learner. You cannot search the web here: when \
+exam or material a paper belongs to, say what it shows and ask the learner. For every file of a paper give \
+papers[].evidence: why it belongs (e.g. "header: 2. kolokvij, 16. 01. 2026") and strength (strong: the file shows \
+it; weak: only inferred from numbering or layout); never state a weak link as a fact, ask the learner about each. \
+You cannot search the web here: when \
 something on the paper is not in the material, say so and mark it not_in_material; the learner can look it up with \
 an assistant that has web search and add it there with their consent, labelled as from the web. The profile is saved \
 unconfirmed: show the learner a short summary (each paper with its exam and use, topics with points, item types, \

@@ -65,6 +65,10 @@ Start of every study session in a course:
    belongs to, tell the learner what it shows and ask; they confirm or say what to use. Leave a paper out only on
    their word (skipped_papers with the reason). RecallSpring names papers not looked at (not_looked_at) and
    refuses confirm_exam_profile until each is in papers or skipped_papers.
+   EVIDENCE PER FILE: for every file of a paper say what shows that it belongs to that paper and exam
+   (papers[].evidence: why, strength). strong = the file itself shows it (a header with the exam and date, a date
+   in the file name); weak = only inferred (the numbering goes on, the same layout). Never state a weak link as a
+   fact: name the weak files and their evidence in your summary and ask the learner whether each belongs there.
    NOT IN THE MATERIAL: when a topic on the paper, or a detail of one (e.g. a command's flag the material never
    explains), is not in the material, you may look it up on the web if this app gives you web search; otherwise say
    so and keep it not_in_material. Prefer primary sources (official documentation, the standard, the tool's
@@ -1165,6 +1169,14 @@ class ItemTypeShare(BaseModel):
     share: float = Field(ge=0, le=1)
 
 
+class FileEvidence(BaseModel):
+    source_id: str = Field(description="one file of this paper")
+    why: str = Field(description='what shows it, e.g. "header: 2. kolokvij, 16. 01. 2026", "numbering goes on from 26"')
+    strength: Literal["strong", "weak"] = Field(
+        description="strong: the file itself shows it (header, date); weak: only inferred (numbering, layout)"
+    )
+
+
 class PaperIn(BaseModel):
     source_id: str | None = Field(default=None, description="the paper as past_paper material of this course")
     label: str | None = Field(default=None, description='e.g. the year, "2025"; topics name papers by it')
@@ -1178,6 +1190,9 @@ class PaperIn(BaseModel):
     )
     extra_source_ids: list[str] = Field(
         default_factory=list, description="further files of the same paper, e.g. its second photo or page"
+    )
+    evidence: list[FileEvidence] = Field(
+        default_factory=list, description="for every file of the paper (source_id and extra_source_ids): why it belongs"
     )
 
 
@@ -1220,6 +1235,7 @@ async def record_exam_profile(
     Look at EVERY past paper of the course first (get_study_context past_papers; view_image / view_page each one):
     each goes in papers (several photos of one paper: extra_source_ids) or, on the learner's word only, in
     skipped_papers with their reason. RecallSpring lists any it finds missing and refuses confirm_exam_profile.
+    Every file of a paper needs evidence (why, strength); ask the learner about each weak one before confirming.
     unreadable: what you could not make out (e.g. "points of Q4"). Saved unconfirmed: then show the learner a short
     summary and ask whether it matches; confirm_exam_profile only on their yes."""
     payload = {

@@ -211,7 +211,8 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
   whether its topics should count or only its style (question types, Bloom mix, length); use "style" unless I say so.
   Look at EVERY past paper of the course (past_papers in get_study_context, photos too), not only the first; several
   photos can be one paper (extra_source_ids). If it is unclear which exam or material one belongs to, ask me; leave
-  one out only when I say so (skipped_papers with my reason).
+  one out only when I say so (skipped_papers with my reason). For every file say why it belongs to its paper
+  (papers[].evidence: why, strength strong or weak); never state a weak link as a fact, ask me about each.
 - When something on the paper is not in the material (a topic, or e.g. a command's flag the material never
   explains), you may look it up on the web if you can; prefer primary sources (official documentation, the
   standard, the tool's manual). Tell me it is not from my course material, give the links and why it seems to

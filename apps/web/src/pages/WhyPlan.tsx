@@ -5,7 +5,7 @@ import { request } from "../api";
 import { Async, Card, ErrorNote } from "../components/ui";
 import { dateTime, plural } from "../format";
 import { useRationale } from "../queries";
-import type { PlanRationale, RationaleTopic, ReadinessState, TargetProfile } from "../types";
+import type { PaperFile, PlanRationale, RationaleTopic, ReadinessState, TargetProfile } from "../types";
 
 /** ADR-013 §4: "Why this plan" on the Readiness page, from the server's rationale (rationale-v1, no model). */
 
@@ -76,6 +76,7 @@ export function Papers({ profile }: { profile: TargetProfile }) {
 function PapersLeftOut({ profile }: { profile: TargetProfile }) {
   const skipped = profile.skipped_papers ?? [];
   const missing = profile.not_looked_at ?? [];
+  const unproven = profile.evidence_missing ?? [];
   return (
     <>
       {skipped.length > 0 && (
@@ -87,6 +88,12 @@ function PapersLeftOut({ profile }: { profile: TargetProfile }) {
               {s.source && !s.source.removed ? <Link to={`/library/${s.source.id}`}>{s.source.filename}</Link> : "a paper"} ({s.reason})
             </span>
           ))}
+        </div>
+      )}
+      {unproven.length > 0 && (
+        <div className="small muted" style={{ marginTop: 4 }}>
+          Your assistant did not say why these files belong to their paper: {unproven.map((u) => u.filename).join(", ")}. Ask it to analyse
+          the papers again.
         </div>
       )}
       {missing.length > 0 && (
@@ -115,7 +122,7 @@ function PaperList({ profile }: { profile: TargetProfile }) {
     <ul style={{ margin: 0, paddingLeft: 18 }}>
       {papers.map((p, i) => {
         const name = p.label || p.source?.filename || "Old paper";
-        const files = p.files ?? (p.source ? [p.source] : []);
+        const files: PaperFile[] = p.files ?? (p.source ? [p.source] : []);
         const live = files.filter((f) => !f.removed);
         const extra = [p.total_points != null ? plural(p.total_points, "point") : null, p.duration_minutes ? `${p.duration_minutes} min` : null]
           .filter(Boolean)
@@ -127,16 +134,20 @@ function PaperList({ profile }: { profile: TargetProfile }) {
             {p.exam && <span> · for {p.exam}</span>}
             {extra && <span className="muted"> · {extra}</span>}
             {live.length === 0 && <span className="muted"> · no copy in RecallSpring</span>}
-            {files.length > 1 && (
-              <div className="small">
-                Files:{" "}
-                {files.map((f, j) => (
-                  <span key={f.id}>
-                    {j > 0 && ", "}
+            {(files.length > 1 || files.some((f) => f.why)) && (
+              <ul className="small" style={{ margin: "2px 0 0", paddingLeft: 18 }} aria-label={`Files of ${name}`}>
+                {files.map((f) => (
+                  <li key={f.id}>
                     {f.removed ? <span className="muted">{f.filename} (removed)</span> : <Link to={`/library/${f.id}`}>{f.filename}</Link>}
-                  </span>
+                    {f.why && <span className="muted"> · {f.why}</span>}
+                    {f.strength === "weak" && (
+                      <span className="chip warn" style={{ marginLeft: 6 }} title="Only inferred, e.g. from the numbering: check that this file belongs to the paper.">
+                        Weak evidence
+                      </span>
+                    )}
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
             {p.use && (
               <div className={p.use === "style" ? "small" : "small muted"}>

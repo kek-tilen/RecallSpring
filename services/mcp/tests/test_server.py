@@ -790,6 +790,7 @@ async def test_exam_profile_v2_is_passed_through_and_confirmed_separately(api: F
         "exam": "2. kolokvij 2026",
         "use": "style",
         "extra_source_ids": [],
+        "evidence": [],
     }
     assert json.loads(api.requests[1].content) == {"profile_id": "p1"}
     assert "only on their yes" in tools["record_exam_profile"].description
@@ -797,6 +798,7 @@ async def test_exam_profile_v2_is_passed_through_and_confirmed_separately(api: F
     assert 'use="style" unless the learner' in instructions
     assert "EVERY PAST PAPER" in instructions and "skipped_papers" in instructions
     assert "HARDER QUESTIONS" in instructions and "offer_harder" in instructions
+    assert "EVIDENCE PER FILE" in instructions and "Never state a weak link as a" in instructions
 
 
 async def test_plan_rationale_and_web_sources_are_passed_through(api: FakeApi) -> None:

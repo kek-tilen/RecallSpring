@@ -181,8 +181,8 @@ describe("Why this plan (ADR-013 §4)", () => {
             ...PROFILE.papers![0]!,
             extra_source_ids: ["s2", "s5"],
             files: [
-              { id: "s1", filename: "3.jpg", removed: false },
-              { id: "s2", filename: "4.png", removed: false },
+              { id: "s1", filename: "3.jpg", removed: false, why: "header: 2. kolokvij, 16. 01. 2026", strength: "strong" },
+              { id: "s2", filename: "4.png", removed: false, why: "numbering goes on from 19", strength: "weak" },
               { id: "s5", filename: "6.png", removed: true },
             ],
           },
@@ -196,7 +196,12 @@ describe("Why this plan (ADR-013 §4)", () => {
     expect(within(note).getByRole("link", { name: "5.png" }).getAttribute("href")).toBe("/library/s4");
     const section = document.getElementById("why")!;
     expect(section.textContent).toContain("2025 · 3 files");
-    expect(section.textContent).toContain("Files: 3.jpg, 4.png, 6.png (removed)");
+    const files = within(within(section).getByRole("list", { name: "Files of 2025" })).getAllByRole("listitem");
+    expect(files.map((f) => f.textContent)).toEqual([
+      "3.jpg · header: 2. kolokvij, 16. 01. 2026",
+      "4.png · numbering goes on from 19Weak evidence",
+      "6.png (removed)",
+    ]);
     expect(within(section).getByRole("link", { name: "4.png" }).getAttribute("href")).toBe("/library/s2");
     expect(within(section).queryByRole("link", { name: "6.png" })).toBeNull();
     expect(section.textContent).toContain("Left out on your word: 2019.pdf (for the exam, not this kolokvij)");

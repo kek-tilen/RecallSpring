@@ -155,10 +155,22 @@ export interface TargetProfile {
   skipped_papers?: { source_id: string; reason: string; source: { id: string; filename: string; removed: boolean } | null }[];
   /** Past papers of the course the analysis has not looked at. */
   not_looked_at?: { id: string; filename: string }[];
+  /** Files of the papers without a stated reason they belong there. */
+  evidence_missing?: { id: string; filename: string }[];
   unreadable?: string[];
   confirmation?: "confirmed" | "unconfirmed" | "before_confirmation";
   confirmed_at?: string | null;
   confirmed_via?: "assistant" | "web" | null;
+}
+
+/** One file of an analysed paper, with what shows it belongs there (owner 2026-11-25). */
+export interface PaperFile {
+  id: string;
+  filename: string;
+  removed: boolean;
+  why?: string | null;
+  /** strong: the file itself shows it (header, date); weak: only inferred (numbering, layout). */
+  strength?: "strong" | "weak" | null;
 }
 
 export interface ProfilePaper {
@@ -174,7 +186,7 @@ export interface ProfilePaper {
   /** Further files of the same paper, e.g. its second photo. */
   extra_source_ids?: string[];
   /** Every file of the paper in RecallSpring, the first one first (owner 2026-11-25). */
-  files?: { id: string; filename: string; removed: boolean }[];
+  files?: PaperFile[];
 }
 
 export interface ProfileTopic {

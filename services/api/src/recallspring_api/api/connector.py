@@ -104,6 +104,7 @@ from ..services.reviews import concept_ids_for_question, recompute, review_queue
 from ..services.targets import (
     check_profile_topics,
     computed_topics,
+    evidence_gaps,
     papers_not_looked_at,
     study_context,
     target_view,
@@ -871,6 +872,14 @@ def record_profile(
             paper = owned(db, Source, paper_in.source_id, ctx.user.id)
             if paper.course_id != target.course_id:
                 raise ApiError(422, "source_not_in_course", "The old paper must be material of this exam's course.")
+    for paper_in in papers:
+        files = {paper_in.source_id, *paper_in.extra_source_ids}
+        if any(e.source_id not in files for e in paper_in.evidence):
+            raise ApiError(
+                422,
+                "evidence_not_for_paper",
+                "Evidence can only name files of its own paper (source_id or extra_source_ids).",
+            )
     for source_id in [i for p in papers for i in p.extra_source_ids] + [s.source_id for s in payload.skipped_papers]:
         if owned(db, Source, source_id, ctx.user.id).course_id != target.course_id:
             raise ApiError(422, "source_not_in_course", "The old paper must be material of this exam's course.")
@@ -916,8 +925,24 @@ def record_profile(
         if missing
         else ""
     )
+    gaps = evidence_gaps(db, profile)
+    body["evidence_missing"] = gaps["missing"]
+    body["weak_evidence"] = gaps["weak"]
+    if gaps["missing"]:
+        check += (
+            "Say for every file what shows that it belongs to its paper (papers[].evidence with why and strength): "
+            + ", ".join(m["filename"] for m in gaps["missing"])
+            + ". confirm_exam_profile is refused until then. "
+        )
+    if gaps["weak"]:
+        check += (
+            "The evidence is weak for: "
+            + "; ".join(f"{w['filename']} ({w['why']})" for w in gaps["weak"])
+            + ". Ask the learner whether each of these belongs to that paper before they confirm. "
+        )
     body["confirm"] = check + (
-        "Saved unconfirmed. Show the learner a short summary (each paper with the exam it was for and whether its "
+        "Saved unconfirmed. Show the learner a short summary (each paper with the exam it was for, each file with "
+        "what shows it belongs there, and whether its "
         "topics count or only its style; topics with points and where they are on the paper, item types, Bloom mix, "
         "what you could not read) and ask whether it matches what they know about this exam. "
         "On their yes call confirm_exam_profile with profile.id; on a correction record the profile again."

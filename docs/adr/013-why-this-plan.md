@@ -49,6 +49,13 @@ asserted by the model.
   rationale limit) and refuses `confirm_exam_profile` from an assistant while any remain (409
   `papers_not_looked_at`); the learner may still confirm in the web app, which shows the warning. Migration 0030
   adds `target_profiles.skipped_papers` (additive).
+- **Evidence per file** (added 2026-11-25, owner: five photos were put on one kolokvij without a reason). Each paper
+  gives `evidence` for every file (`source_id`, `why`, `strength`): `strong` when the file itself shows it (a header
+  with the exam and date, a date in the file name), `weak` when it is only inferred (numbering, layout). The record
+  response lists `evidence_missing` and `weak_evidence` and tells the assistant to ask the learner about each weak
+  file; an assistant cannot confirm while evidence is missing (409 `evidence_missing`). Evidence naming a file of
+  another paper is refused (422). The rationale adds `weak_evidence` / `evidence_missing` limits, and the web lists
+  each file with its reason and a "Weak evidence" chip. Stored in the papers JSON, so no migration.
 - **Unread parts:** `unreadable` lists what the model could not make out (e.g. "points of Q4", "page 2 is a scan
   without text").
 - **Mapping checked by the server.** Every topic must name concepts of this course or be marked
