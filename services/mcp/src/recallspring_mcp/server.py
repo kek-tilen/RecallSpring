@@ -55,6 +55,10 @@ Start of every study session in a course:
    and where they are on the paper, item types, Bloom mix, what you could not read) and ask whether it matches
    what they know about the exam. On their yes confirm_exam_profile; on a correction record it again. Every
    topic names the course concepts that cover it (create_concepts first if needed) or not_in_material.
+   For every paper say which exam it was for (papers[].exam). When it was for another exam than the one prepared
+   for (e.g. last year's 2nd kolokvij for the 1st), ASK whether its topics should count (the material may have
+   moved between kolokviji) or only its style (question types, Bloom mix, length); use="style" unless the learner
+   says its topics count. Say this in the summary too.
    NOT IN THE MATERIAL: when a topic on the paper, or a detail of one (e.g. a command's flag the material never
    explains), is not in the material, you may look it up on the web if this app gives you web search; otherwise say
    so and keep it not_in_material. Prefer primary sources (official documentation, the standard, the tool's
@@ -1157,6 +1161,12 @@ class PaperIn(BaseModel):
     label: str | None = Field(default=None, description='e.g. the year, "2025"; topics name papers by it')
     total_points: float | None = Field(default=None, gt=0, description="only when the paper shows it")
     duration_minutes: int | None = Field(default=None, ge=1)
+    exam: str | None = Field(default=None, description='which exam the paper was for, e.g. "2. kolokvij 2026"')
+    use: Literal["style", "style_and_topics"] = Field(
+        default="style_and_topics",
+        description='"style": only its kind of questions counts (another exam, or the learner says its topics do not '
+        'apply); "style_and_topics": its topics weigh too',
+    )
 
 
 class TopicIn(BaseModel):
@@ -1186,7 +1196,9 @@ async def record_exam_profile(
     and a few short paraphrased example items. Each topic: points (or share) as on the paper, where it is (question,
     page), the papers it appeared on, and the course concepts that cover it (concept_ids; create_concepts first
     when needed) or not_in_material=true; RecallSpring refuses a topic with neither and computes the weights.
-    papers: each paper read, with source_id (imported as past_paper in this course) and a label such as the year.
+    papers: each paper read, with source_id (imported as past_paper in this course), a label such as the year, the
+    exam it was for (exam) and use: when it was for another exam than the target (e.g. a 2nd kolokvij paper for the
+    1st), ask the learner whether its topics should count or only its style, and use "style" unless they say so.
     unreadable: what you could not make out (e.g. "points of Q4"). Saved unconfirmed: then show the learner a short
     summary and ask whether it matches; confirm_exam_profile only on their yes."""
     payload = {

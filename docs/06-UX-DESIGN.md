@@ -247,9 +247,10 @@ Implemented:
   yet, Weak, Studied not practised, Getting there, Solid; weak uses the warning colour, the rest the green ramp)
   with a legend and counts, the time check, next steps, the weakest concepts with what was missing in their last
   answer and where to read again, simulations, and the material groups as collapsible blocks (open while anything
-  in them is not yet "Getting there" or "Solid"). Below, **Why this plan** (ADR-013 §4, `#why`, from
+  in them is not yet "Getting there" or "Solid"; `Collapse all` / `Expand all` on the card, owner 2026-11-25). Below, **Why this plan** (ADR-013 §4, `#why`, from
   `GET /targets/{id}/rationale`, nothing written by a model): the old papers (linked when RecallSpring has a copy,
-  else "no copy"), whether the analysis is confirmed with `It matches the paper` while it is not (corrections go
+  else "no copy"; the exam each was for and "Style only" when only its kind of questions counts), the assistant's
+  note on the analysis (labelled as its words), whether the analysis is confirmed with `It matches the paper` while it is not (corrections go
   through the assistant, which reads the paper again), coverage by points and a table of the topics (points or
   share, where on the paper, on how many papers, each concept with its state, "From the web" and "Not in your
   material" marked), the kinds of questions on the paper against what was practised and the practice limit,

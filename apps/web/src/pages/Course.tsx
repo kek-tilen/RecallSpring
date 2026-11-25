@@ -15,7 +15,7 @@ import type { AttemptDetail, AttemptRow, ConceptRow, CourseOverview, ProfileTopi
 import { NewNoteButton, NoteList } from "./Notes";
 import { FolderBrowser } from "./Library";
 import { QuizTable } from "./Simulations";
-import { ConfirmProfile } from "./WhyPlan";
+import { ConfirmProfile, Papers } from "./WhyPlan";
 
 const TABS = [
   { id: "concepts", label: "Concepts" },
@@ -272,6 +272,7 @@ function ProfileTopics({ value }: { value: ProfileTopic[] }) {
           <li key={i}>
             {[t.label, size, t.where, on].filter(Boolean).join(" · ")}
             {t.not_in_material && <span className="chip warn" style={{ marginLeft: 6 }}>Not in your material</span>}
+            {t.style_only && <span className="chip" style={{ marginLeft: 6 }}>Style only</span>}
           </li>
         );
       })}
@@ -485,6 +486,14 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
                     </dd>
                     {t.profile.version === 2 ? (
                       <>
+                        {(t.profile.papers?.length ?? 0) > 0 && (
+                          <>
+                            <dt>Papers</dt>
+                            <dd>
+                              <Papers profile={t.profile} />
+                            </dd>
+                          </>
+                        )}
                         <dt>Topics</dt>
                         <dd>
                           <ProfileTopics value={t.profile.topics ?? []} />

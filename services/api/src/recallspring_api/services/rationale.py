@@ -95,6 +95,7 @@ def _profile_topics(profile: TargetProfile | None) -> list[dict[str, Any]]:
                 "share": None,
                 "where": None,
                 "papers": [],
+                "style_only": False,
                 "weight": w.get("weight", 1.0),
             }
         )
@@ -228,6 +229,8 @@ def rationale(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
                 "unmapped": t["unmapped"],
                 # added from the web at the learner's request: every concept of the topic is backed by web sources
                 "from_web": bool(concepts) and all(c["id"] in web_only for c in concepts),
+                # only on papers used for their style (e.g. another kolokvij): listed, but it does not weigh
+                "style_only": bool(t.get("style_only")),
                 "status": status,
                 "concepts": concepts,
                 "counts": counts,
@@ -236,8 +239,9 @@ def rationale(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
                 "_solid": _fraction(concepts, ("solid",)),
             }
         )
-    topics.sort(key=lambda t: -(t["share"] if isinstance(t["share"], int | float) else -1.0))
-    coverage = _coverage(topics)
+    topics.sort(key=lambda t: (t["style_only"], -(t["share"] if isinstance(t["share"], int | float) else -1.0)))
+    counted = [t for t in topics if not t["style_only"]]  # topics of papers used only for their style do not count
+    coverage = _coverage(counted)
     for t in topics:
         for key in ("_studied", "_ready", "_solid"):
             t.pop(key)
@@ -245,7 +249,7 @@ def rationale(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
     # today's plan as the learner sees it on Home, this course's part, each item tied to its topics on the paper
     plan = today_plan(db, user, now)
     by_concept: dict[str, list[dict[str, Any]]] = {}
-    for t in topics:
+    for t in counted:
         for c in t["concepts"]:
             by_concept.setdefault(c["id"], []).append(t)
     today = []
@@ -275,8 +279,8 @@ def rationale(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
         "paper_above_limit": above,
     }
 
-    on_paper = {c["id"] for t in topics for c in t["concepts"]}
-    not_on_paper = [c["term"] for c in in_scope.values() if c["id"] not in on_paper] if topics else []
+    on_paper = {c["id"] for t in counted for c in t["concepts"]}
+    not_on_paper = [c["term"] for c in in_scope.values() if c["id"] not in on_paper] if counted else []
     limits = _limits(profile, topics, not_on_paper, above, limit, len(in_scope))
 
     return {
@@ -303,6 +307,11 @@ def rationale(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
         "limits": limits,
         "note": readiness.NOTE,
     }
+
+
+def _paper_name(paper: dict[str, Any]) -> str:
+    name = str(paper.get("label") or "a paper")
+    return f"{name} ({paper['exam']})" if paper.get("exam") else name
 
 
 def _limits(
@@ -357,6 +366,14 @@ def _limits(
             )
         if profile.unreadable:
             add("unreadable", f"Your assistant could not read: {_listed([str(u) for u in profile.unreadable])}.")
+        style = [_paper_name(p) for p in papers if p.get("use") == "style"]
+        if style:
+            add(
+                "style_only",
+                f"Used only for the kind of questions, not for its topics: {_listed(style)}. Its topics are listed "
+                "but do not change the order of your plan.",
+            )
+    topics = [t for t in topics if not t.get("style_only")]
     web = [t["label"] for t in topics if t.get("from_web")]
     if web:
         add(

@@ -876,6 +876,11 @@ class ProfilePaperIn(BaseModel):
     label: str | None = Field(default=None, min_length=1, max_length=60)
     total_points: float | None = Field(default=None, gt=0, le=1000)
     duration_minutes: int | None = Field(default=None, ge=1, le=600)
+    # Which exam the paper was for, e.g. "2. kolokvij 2026" (it may be another exam than the one prepared for), and
+    # how it is used: "style" = only the kind of questions (types, Bloom mix, length), its topics do not weigh;
+    # "style_and_topics" = its topics weigh too. ADR-013 §1, added 2026-11-25.
+    exam: str | None = Field(default=None, min_length=1, max_length=80)
+    use: Literal["style", "style_and_topics"] = "style_and_topics"
 
 
 class ProfileTopicIn(BaseModel):

@@ -768,7 +768,10 @@ async def test_exam_profile_v2_is_passed_through_and_confirmed_separately(api: F
                 "target_id": "t1",
                 "item_types": [{"type": "scenario", "share": 1}],
                 "topics": [topic, {"label": "Firewalls", "not_in_material": True}],
-                "papers": [{"source_id": "s1", "label": "2025", "total_points": 30}],
+                "papers": [
+                    {"source_id": "s1", "label": "2025", "total_points": 30},
+                    {"label": "2026", "exam": "2. kolokvij 2026", "use": "style"},
+                ],
                 "unreadable": ["points of Q4"],
             },
         )
@@ -778,9 +781,19 @@ async def test_exam_profile_v2_is_passed_through_and_confirmed_separately(api: F
     assert sent["topics"][0] == {**topic, "not_in_material": False, "share": None}
     assert sent["topics"][1]["not_in_material"] is True and "topic_weights" not in sent
     assert sent["papers"][0]["label"] == "2025" and sent["unreadable"] == ["points of Q4"]
+    assert sent["papers"][0]["use"] == "style_and_topics" and sent["papers"][0]["exam"] is None
+    assert sent["papers"][1] == {
+        "source_id": None,
+        "label": "2026",
+        "total_points": None,
+        "duration_minutes": None,
+        "exam": "2. kolokvij 2026",
+        "use": "style",
+    }
     assert json.loads(api.requests[1].content) == {"profile_id": "p1"}
     assert "only on their yes" in tools["record_exam_profile"].description
     assert "confirm_exam_profile" in instructions and "not_in_material" in instructions
+    assert 'use="style" unless the learner' in instructions
 
 
 async def test_plan_rationale_and_web_sources_are_passed_through(api: FakeApi) -> None:

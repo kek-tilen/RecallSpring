@@ -127,13 +127,17 @@ def topic_weight(share: float | None, topics: int, papers_seen: int) -> float:
 def computed_topics(topics: list[ProfileTopicIn], papers: list[ProfilePaperIn]) -> list[dict[str, Any]]:
     """Each topic as stored: what the assistant read, plus the share of the points and the weight RecallSpring
     computes. Points count against the papers' total points (or the sum of the topics' points when a total is
-    missing); a share is taken as given."""
+    missing); a share is taken as given. A topic that appears only on papers used for their style (``use="style"``,
+    e.g. a paper of another kolokvij) is kept as ``style_only`` with weight 1.0: it does not change the plan."""
     totals = [p.total_points for p in papers]
     total = sum(t for t in totals if t) if totals and all(totals) else sum(t.points or 0 for t in topics)
     out = []
     for t in topics:
         share = t.points / total if t.points is not None and total > 0 else t.share
-        seen = len(set(t.papers)) or 1
+        on = [p for p in papers if p.label in t.papers] if t.papers else papers
+        counted = [p for p in on if p.use == "style_and_topics"]
+        style_only = bool(on) and not counted
+        seen = (len(counted) if t.papers else len(set(t.papers))) or 1
         out.append(
             {
                 "label": t.label,
@@ -143,7 +147,8 @@ def computed_topics(topics: list[ProfileTopicIn], papers: list[ProfilePaperIn]) 
                 "share": round(share, 4) if share is not None else None,
                 "where": t.where,
                 "papers": list(dict.fromkeys(t.papers)),
-                "weight": topic_weight(share, len(topics), seen),
+                "style_only": style_only,
+                "weight": 1.0 if style_only else topic_weight(share, len(topics), seen),
             }
         )
     return out

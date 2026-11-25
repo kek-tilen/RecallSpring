@@ -23,7 +23,7 @@ afterEach(() => {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-const COURSE = { id: "k1", title: "Digitalna forenzika", kind: "course" as const };
+const COURSE = { id: "k1", title: "Statistika", kind: "course" as const };
 type Sent = { method: string; path: string; body: unknown };
 
 function routeFetch(sent: Sent[], overrides: (s: Sent) => Response | null = () => null) {
@@ -79,16 +79,16 @@ describe("deleting a course", () => {
     expect(box.disabled).toBe(true);
 
     fireEvent.click(screen.getByLabelText(/I understand that everything in this course will be deleted/));
-    fireEvent.change(box, { target: { value: "digitalna forenzika" } });
+    fireEvent.change(box, { target: { value: "statistika" } });
     expect(del.disabled).toBe(true);
-    fireEvent.change(box, { target: { value: "Digitalna forenzika " } });
+    fireEvent.change(box, { target: { value: "Statistika " } });
     expect(del.disabled).toBe(true);
-    fireEvent.change(box, { target: { value: "Digitalna forenzika" } });
+    fireEvent.change(box, { target: { value: "Statistika" } });
     expect(del.disabled).toBe(false);
 
     fireEvent.click(del);
     await screen.findByText("Courses page");
-    expect(sent).toEqual([{ method: "DELETE", path: "/courses/k1", body: { confirm_title: "Digitalna forenzika" } }]);
+    expect(sent).toEqual([{ method: "DELETE", path: "/courses/k1", body: { confirm_title: "Statistika" } }]);
   });
 
   it("unticking I understand disables Delete again", async () => {
@@ -105,7 +105,7 @@ describe("deleting a course", () => {
     const sent: Sent[] = [];
     routeFetch(sent);
     show(<RecentlyDeletedCourses />);
-    fireEvent.click(await screen.findByRole("button", { name: "Restore Digitalna forenzika" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restore Statistika" }));
     await waitFor(() => expect(sent).toEqual([{ method: "POST", path: "/courses/k1/restore", body: null }]));
   });
 });

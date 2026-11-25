@@ -58,8 +58,11 @@ function bloomLine(mix: Record<string, number>): string {
   return entries.length ? entries.map(([level, share]) => `${BLOOM[Number(level)] ?? `Level ${level}`} ${pct(share)}`).join(" · ") : "—";
 }
 
-/** The old papers behind the analysis, each linked when RecallSpring has a copy. */
-function Papers({ profile }: { profile: TargetProfile }) {
+const USE: Record<string, string> = { style: "only its kind of questions counts", style_and_topics: "its topics count too" };
+
+/** The old papers behind the analysis, each linked when RecallSpring has a copy, with the exam it was for and how it
+ * is used (ADR-013 §1). */
+export function Papers({ profile }: { profile: TargetProfile }) {
   const papers = profile.papers ?? [];
   if (papers.length === 0) {
     if (profile.source && !profile.source.removed) return <Link to={`/library/${profile.source.id}`}>{profile.source.filename}</Link>;
@@ -75,8 +78,14 @@ function Papers({ profile }: { profile: TargetProfile }) {
         return (
           <li key={i}>
             {p.source && !p.source.removed ? <Link to={`/library/${p.source.id}`}>{name}</Link> : name}
+            {p.exam && <span> · for {p.exam}</span>}
             {extra && <span className="muted"> · {extra}</span>}
             {(!p.source || p.source.removed) && <span className="muted"> · no copy in RecallSpring</span>}
+            {p.use && (
+              <div className={p.use === "style" ? "small" : "small muted"}>
+                {p.use === "style" ? <span className="chip">Style only</span> : null} {USE[p.use]}
+              </div>
+            )}
           </li>
         );
       })}
@@ -142,7 +151,7 @@ function Topics({ r }: { r: PlanRationale }) {
         </thead>
         <tbody>
           {r.topics.map((t, i) => (
-            <tr key={i}>
+            <tr key={i} className={t.style_only ? "muted" : undefined}>
               <td style={{ minWidth: 140 }}>
                 <span style={{ fontWeight: 600 }}>{t.label}</span>
                 {t.from_web && (
@@ -174,6 +183,11 @@ function Topics({ r }: { r: PlanRationale }) {
               </td>
               <td>
                 <span className={STATUS[t.status].tone}>{STATUS[t.status].label}</span>
+                {t.style_only && (
+                  <div className="tiny muted" style={{ marginTop: 4 }}>
+                    Style only: does not change your plan
+                  </div>
+                )}
               </td>
             </tr>
           ))}
@@ -235,6 +249,12 @@ export function WhyThisPlanBody({ r }: { r: PlanRationale }) {
             <div className="small">
               <Papers profile={r.profile} />
             </div>
+            {r.profile.notes && (
+              <div className="small">
+                <span className="muted">Your assistant's note: </span>
+                <span className="pre">{r.profile.notes}</span>
+              </div>
+            )}
             <ConfirmProfile targetId={r.target.id} profile={r.profile} />
           </>
         ) : (

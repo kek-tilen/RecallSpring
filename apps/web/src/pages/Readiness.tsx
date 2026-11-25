@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { CourseDot } from "../components/organise";
 import { Async, Card, Empty, Meter, PageHead } from "../components/ui";
@@ -82,7 +83,31 @@ function ConceptRow({ c }: { c: ReadinessConcept }) {
   );
 }
 
-function Groups({ r }: { r: ExamReadiness }) {
+type Group = ExamReadiness["groups"][number];
+const groupKey = (g: Group) => `${g.kind}-${g.id ?? "none"}`;
+/** A block starts open while anything in it is not yet "Getting there" or "Solid". */
+const startsOpen = (g: Group) => g.counts.solid + g.counts.developing < g.concepts.length;
+
+/** "By material" with Collapse all / Expand all (owner 2026-11-25). */
+export function MaterialCard({ r }: { r: ExamReadiness }) {
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const isOpen = (g: Group) => open[groupKey(g)] ?? startsOpen(g);
+  const anyOpen = r.groups.some(isOpen);
+  const setAll = (value: boolean) => setOpen(Object.fromEntries(r.groups.map((g) => [groupKey(g), value])));
+  const action =
+    r.groups.length > 1 ? (
+      <button type="button" className="btn ghost small" onClick={() => setAll(!anyOpen)} aria-expanded={anyOpen}>
+        {anyOpen ? "Collapse all" : "Expand all"}
+      </button>
+    ) : undefined;
+  return (
+    <Card title="By material" meta="In the order it is taught" action={action}>
+      <Groups r={r} isOpen={isOpen} onToggle={(g, value) => setOpen((o) => (o[groupKey(g)] === value ? o : { ...o, [groupKey(g)]: value }))} />
+    </Card>
+  );
+}
+
+function Groups({ r, isOpen, onToggle }: { r: ExamReadiness; isOpen: (g: Group) => boolean; onToggle: (g: Group, open: boolean) => void }) {
   if (r.groups.length === 0) {
     return (
       <Empty title="No concepts in scope yet">
@@ -95,7 +120,7 @@ function Groups({ r }: { r: ExamReadiness }) {
       {r.groups.map((g) => {
         const total = g.concepts.length;
         return (
-          <details key={`${g.kind}-${g.id ?? "none"}`} className="group-block" open={g.counts.solid + g.counts.developing < total}>
+          <details key={groupKey(g)} className="group-block" open={isOpen(g)} onToggle={(e) => onToggle(g, e.currentTarget.open)}>
             <summary>
               <div className="material-head">
                 <div style={{ overflowWrap: "anywhere" }}>
@@ -244,9 +269,7 @@ export function ReadinessPage() {
                     <Simulations r={r} />
                   </Card>
                 </div>
-                <Card title="By material" meta="In the order it is taught">
-                  <Groups r={r} />
-                </Card>
+                <MaterialCard r={r} />
               </div>
               <div style={{ marginTop: 20 }}>
                 <WhyThisPlan targetId={t.id} />

@@ -150,11 +150,23 @@ export interface TargetProfile {
   /** ADR-013: 2 = topics mapped to concepts, points, papers and the learner's confirmation; 1 = before that. */
   version?: number;
   topics?: ProfileTopic[];
-  papers?: { source_id: string | null; label: string | null; total_points: number | null; duration_minutes: number | null; source: { id: string; filename: string; removed: boolean } | null }[];
+  papers?: ProfilePaper[];
   unreadable?: string[];
   confirmation?: "confirmed" | "unconfirmed" | "before_confirmation";
   confirmed_at?: string | null;
   confirmed_via?: "assistant" | "web" | null;
+}
+
+export interface ProfilePaper {
+  source_id: string | null;
+  label: string | null;
+  total_points: number | null;
+  duration_minutes: number | null;
+  source: { id: string; filename: string; removed: boolean } | null;
+  /** The exam the paper was for, e.g. "2. kolokvij 2026". */
+  exam?: string | null;
+  /** "style": only its kind of questions counts; "style_and_topics": its topics weigh too. */
+  use?: "style" | "style_and_topics";
 }
 
 export interface ProfileTopic {
@@ -166,6 +178,8 @@ export interface ProfileTopic {
   where: string | null;
   papers: string[];
   weight: number;
+  /** Only on papers used for their style: listed, but it does not weigh. */
+  style_only?: boolean;
 }
 
 export interface ScopeItem {
@@ -550,6 +564,7 @@ export interface RationaleTopic {
   not_in_material: boolean;
   unmapped: boolean;
   from_web: boolean;
+  style_only: boolean;
   status: "not_studied" | "in_progress" | "weak" | "solid" | "not_in_material" | "unmapped";
   concepts: { id: string; term: string; state: ReadinessState; due: boolean; in_scope: boolean }[];
   counts: ReadinessCounts;

@@ -62,6 +62,7 @@ const RATIONALE: PlanRationale = {
       not_in_material: false,
       unmapped: false,
       from_web: false,
+      style_only: false,
       status: "in_progress",
       concepts: [
         { id: "c1", term: "Port scanning", state: "not_studied", due: false, in_scope: true },
@@ -79,6 +80,7 @@ const RATIONALE: PlanRationale = {
       not_in_material: false,
       unmapped: false,
       from_web: true,
+      style_only: false,
       status: "not_studied",
       concepts: [{ id: "c3", term: "nmap -A", state: "not_studied", due: false, in_scope: false }],
       counts: { ...counts, not_studied: 1 },
@@ -93,6 +95,7 @@ const RATIONALE: PlanRationale = {
       not_in_material: true,
       unmapped: false,
       from_web: false,
+      style_only: false,
       status: "not_in_material",
       concepts: [],
       counts,
@@ -146,6 +149,29 @@ function renderWhy(r: PlanRationale, sent: { url: string; body: unknown }[] = []
 }
 
 describe("Why this plan (ADR-013 §4)", () => {
+  it("names the exam each paper was for, papers used only for their style and the assistant's note", async () => {
+    const papers = [
+      { ...PROFILE.papers![0]!, exam: "1. kolokvij 2025", use: "style_and_topics" as const },
+      { ...PROFILE.papers![1]!, exam: "2. kolokvij 2026", use: "style" as const },
+    ];
+    const styleTopic = { ...RATIONALE.topics[0]!, label: "Jump Lists", style_only: true, papers: ["2024"] };
+    renderWhy({
+      ...RATIONALE,
+      profile: { ...PROFILE, papers, notes: "The 2nd kolokvij paper is used for its style only." },
+      topics: [...RATIONALE.topics, styleTopic],
+    });
+    expect(await screen.findByText(/Your assistant's note:/)).toBeTruthy();
+    const section = document.getElementById("why")!;
+    expect(section.textContent).toContain("2025 · for 1. kolokvij 2025");
+    expect(section.textContent).toContain("2024 · for 2. kolokvij 2026");
+    expect(section.textContent).toContain("Style only only its kind of questions counts");
+    expect(section.textContent).toContain("The 2nd kolokvij paper is used for its style only.");
+    const row = screen.getAllByRole("row").find((r) => r.textContent?.startsWith("Jump Lists"))!;
+    expect(row.className).toBe("muted");
+    expect(row.textContent).toContain("Style only: does not change your plan");
+  });
+
+
   it("shows the papers, coverage by topic, today's work and the limits from the server", async () => {
     renderWhy(RATIONALE);
     await screen.findByRole("heading", { name: "Why this plan" });

@@ -153,11 +153,14 @@ material (get_course_outline). Ask for anything missing and show the mapping bef
 paper with record_exam_profile and pass its source_id; if the paper is not in the course's material yet, ask the \
 learner to upload it under the course as Past paper first, so they can open it next to the analysis. Every topic \
 names the course concepts that cover it (create_concepts first when needed) or not_in_material, with its points and \
-where it is on the paper. You cannot search the web here: when something on the paper is not in the material, say \
-so and mark it not_in_material; the learner can look it up with an assistant that has web search and add it there \
-with their consent, labelled as from the web. The profile is saved unconfirmed: show the learner a short summary \
-(topics with points, item types, Bloom mix, what you could not read), ask whether it matches what they know, and \
-confirm_exam_profile only on their yes. Create concepts from material you read (create_concepts, linked \
+where it is on the paper. Say for every paper which exam it was for (papers[].exam); when it was for another exam \
+than the one prepared for (e.g. last year's 2nd kolokvij for the 1st), ask whether its topics should count or only \
+its style, and use "style" unless the learner says its topics count. You cannot search the web here: when \
+something on the paper is not in the material, say so and mark it not_in_material; the learner can look it up with \
+an assistant that has web search and add it there with their consent, labelled as from the web. The profile is saved \
+unconfirmed: show the learner a short summary (each paper with its exam and use, topics with points, item types, \
+Bloom mix, what you could not read), ask whether it matches what they know, and confirm_exam_profile only on their \
+yes. Create concepts from material you read (create_concepts, linked \
 to section IDs). Then show priorities across courses with get_study_plan without course_id. To study, practise or \
 get feedback on a course, the learner starts a new conversation and picks that course under Study."""
 

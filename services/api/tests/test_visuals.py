@@ -21,7 +21,7 @@ from .pdfs import make_pdf
 
 
 def course(api: Api) -> str:
-    return api.post("/courses", {"title": "Digitalna forenzika"}).json()["id"]
+    return api.post("/courses", {"title": "Statistika"}).json()["id"]
 
 
 def upload(api: Api, filename: str, content: bytes) -> dict[str, Any]:

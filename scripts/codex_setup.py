@@ -207,6 +207,8 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
   the paper and the course concepts that cover it, or not_in_material), then show me a short summary and
   confirm_exam_profile only when I say it matches. Pass its source_id: first import the
   paper as past_paper in that course (import_file), or ask me to upload it, so I can open it next to the analysis.
+  Say which exam each paper was for (exam). When it was for another exam than the one I prepare for, ask me
+  whether its topics should count or only its style (question types, Bloom mix, length); use "style" unless I say so.
 - When something on the paper is not in the material (a topic, or e.g. a command's flag the material never
   explains), you may look it up on the web if you can; prefer primary sources (official documentation, the
   standard, the tool's manual). Tell me it is not from my course material, give the links and why it seems to

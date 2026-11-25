@@ -55,7 +55,7 @@ def test_chat_analysis_has_no_source_until_the_learner_links_the_paper(owner_api
 
 def test_the_paper_must_be_material_of_the_exams_course(owner_api: Api, conn: ConnectorApi) -> None:
     _, t = exam_with_profile(owner_api, conn)
-    other, _ = course_with_concepts(owner_api, conn, ["X"], title="Digitalna forenzika")
+    other, _ = course_with_concepts(owner_api, conn, ["X"], title="Statistika")
     foreign = owner_api.upload(other, "other.pdf", make_pdf(["Other"]), category="past_paper").json()
 
     r = owner_api.client.put(

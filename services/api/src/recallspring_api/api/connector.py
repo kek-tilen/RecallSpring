@@ -891,8 +891,9 @@ def record_profile(
     )
     body = target_view(db, target, _today(ctx))
     body["confirm"] = (
-        "Saved unconfirmed. Show the learner a short summary (topics with points and where they are on the paper, "
-        "item types, Bloom mix, what you could not read) and ask whether it matches what they know about this exam. "
+        "Saved unconfirmed. Show the learner a short summary (each paper with the exam it was for and whether its "
+        "topics count or only its style; topics with points and where they are on the paper, item types, Bloom mix, "
+        "what you could not read) and ask whether it matches what they know about this exam. "
         "On their yes call confirm_exam_profile with profile.id; on a correction record the profile again."
     )
     return commit_with_response(db, ctx, payload, 201, body)

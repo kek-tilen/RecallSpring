@@ -99,7 +99,7 @@ def test_page_range_scope_resolves_to_concepts_on_those_pages(owner_api: Api, co
 
 def test_scope_must_belong_to_the_course(owner_api: Api, conn: ConnectorApi) -> None:
     course, _ = course_with_concepts(owner_api, conn, ["A"])
-    _, other_ids = course_with_concepts(owner_api, conn, ["B"], title="Digitalna forenzika")
+    _, other_ids = course_with_concepts(owner_api, conn, ["B"], title="Statistika")
     r = conn.post(
         "/targets",
         {

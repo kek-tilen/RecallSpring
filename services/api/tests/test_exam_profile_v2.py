@@ -74,7 +74,7 @@ def test_a_profile_with_points_papers_and_unreadable_parts(owner_api: Api, conn:
 
 def test_nothing_is_silently_ignored(owner_api: Api, conn: ConnectorApi) -> None:
     _, ids, t = _exam(owner_api, conn)
-    _, other_ids = course_with_concepts(owner_api, conn, ["X"], title="Digitalna forenzika")
+    _, other_ids = course_with_concepts(owner_api, conn, ["X"], title="Statistika")
 
     def post(body: dict) -> dict:
         r = conn.post(f"/targets/{t['id']}/profile", body)
@@ -128,3 +128,43 @@ def test_an_analysis_from_before_confirmation_is_analysed_again(owner_api: Api, 
     assert owner_api.get(f"/targets/{t['id']}/readiness").json()["target"]["name"] == "1. kolokvij"
     items = {i["term"]: i for i in conn.get("/plan").json()["items"]}
     assert "Weighs more on past papers." in items["Ports"]["why_selected"]  # v1 weights still count
+
+
+def test_a_paper_of_another_exam_can_count_for_its_style_only(owner_api: Api, conn: ConnectorApi) -> None:
+    """Owner 2026-11-25: a 2nd kolokvij paper used for the 1st. Its kind of questions counts; its topics are listed
+    but do not weigh, do not count towards coverage and do not raise recurrence."""
+    course, ids, t = _exam(owner_api, conn)
+    r = conn.post(
+        f"/targets/{t['id']}/profile",
+        {
+            "papers": [
+                {"label": "2025", "exam": "1. kolokvij 2025", "total_points": 20},
+                {"label": "2026", "exam": "2. kolokvij 2026", "use": "style", "total_points": 20},
+            ],
+            "bloom_mix": {"1": 0.5, "2": 0.5},
+            "topics": [
+                {"label": "Scanning", "concept_ids": [ids["Port scanning"]], "points": 10, "papers": ["2025", "2026"]},
+                {"label": "Dorking", "concept_ids": [ids["Dorking"]], "points": 16, "papers": ["2026"]},
+                {"label": "Ports", "concept_ids": [ids["Ports"]], "points": 4, "papers": ["2025"]},
+            ],
+        },
+    )
+    assert r.status_code == 201, r.text
+    profile = r.json()["profile"]
+    assert profile["papers"][1]["use"] == "style" and profile["papers"][1]["exam"] == "2. kolokvij 2026"
+    assert profile["papers"][0]["use"] == "style_and_topics"
+    topics = {x["label"]: x for x in profile["topics"]}
+    # on the style-only paper alone: weight 1.0 although it has the most points
+    assert topics["Dorking"]["style_only"] is True and topics["Dorking"]["weight"] == 1.0
+    # on both papers, but only one counts for topics: no recurrence bonus (share 10/40 x 3 topics = 0.75)
+    assert topics["Scanning"]["style_only"] is False and topics["Scanning"]["weight"] == 0.75
+
+    body = owner_api.get(f"/targets/{t['id']}/rationale").json()
+    assert [x["label"] for x in body["topics"]][-1] == "Dorking"  # listed last
+    assert body["topics"][-1]["style_only"] is True
+    # coverage counts only the topics that count: Scanning and Ports (both known = studied)
+    assert body["coverage"]["studied_percent"] == 100
+    by_code = {x["code"]: x["message"] for x in body["limits"]}
+    assert "2026 (2. kolokvij 2026)" in by_code["style_only"] and "2025" not in by_code["style_only"]
+    assert all(i["topics"] == [] or i["topics"][0]["label"] != "Dorking" for i in body["today"]["items"])
+    assert conn.post(f"/targets/{t['id']}/profile", {"papers": [{"label": "x", "use": "topics"}]}).status_code == 422

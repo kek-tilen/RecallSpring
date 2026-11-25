@@ -31,6 +31,16 @@ asserted by the model.
 - **Several papers per target.** A profile lists its papers (`source_id`, year or label, total points, duration when
   shown). A topic on more papers counts more: weight from its share of points, raised for recurrence (on 2 papers
   ×1.25, on 3 or more ×1.5, capped at 2.0). The exact formula is fixed in the build and recorded in `docs/05`.
+- **Papers of another exam** (added 2026-11-25, owner in chat: an analysis for the 1st kolokvij was based on last
+  year's 2nd kolokvij, and nothing showed whether its topics counted). Each paper says which exam it was for
+  (`exam`, e.g. "2. kolokvij 2026") and how it is used (`use`): `style` = only its kind of questions counts (types,
+  Bloom mix, length), `style_and_topics` = its topics weigh too (default). When a paper was for another exam than
+  the one prepared for, the assistant asks the learner which it is (the material may have moved between kolokviji)
+  and uses `style` unless they say its topics count. A topic that appears only on style papers is kept as
+  `style_only` with weight 1.0; style papers do not count for recurrence; style-only topics are listed in the
+  rationale but left out of coverage, today's topics and the topic limits, and a `style_only` limit names the
+  papers. "Why this plan" also shows the assistant's own note on the analysis, as its words. Stored in the papers
+  and topics JSON, so no migration.
 - **Unread parts:** `unreadable` lists what the model could not make out (e.g. "points of Q4", "page 2 is a scan
   without text").
 - **Mapping checked by the server.** Every topic must name concepts of this course or be marked
