@@ -351,7 +351,20 @@ def profile_view(db: Session, profile: TargetProfile | None) -> dict[str, Any] |
         "version": profile.version,
         # v2 (ADR-013): topics with points/share, concepts, place on the paper, papers, computed share and weight
         "topics": profile.topics,
-        "papers": [{**p, "source": _source_ref(db, p.get("source_id"))} for p in profile.papers if isinstance(p, dict)],
+        # Each paper with its first file (source) and every file of it (files: a paper may be several photos).
+        "papers": [
+            {
+                **p,
+                "source": _source_ref(db, p.get("source_id")),
+                "files": [
+                    ref
+                    for ref in (_source_ref(db, i) for i in [p.get("source_id"), *(p.get("extra_source_ids") or [])])
+                    if ref is not None
+                ],
+            }
+            for p in profile.papers
+            if isinstance(p, dict)
+        ],
         # Past papers left out on the learner's word, and those of the course the analysis has not looked at.
         "skipped_papers": [
             {**s, "source": _source_ref(db, s.get("source_id"))}

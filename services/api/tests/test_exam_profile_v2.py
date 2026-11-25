@@ -212,6 +212,7 @@ def test_every_past_paper_is_looked_at_or_left_out_on_the_learners_word(owner_ap
     body = r.json()
     assert body["not_looked_at"] == [] and not body["confirm"].startswith("These past papers")
     assert body["profile"]["skipped_papers"][0]["source"]["filename"] == "5.png"
+    assert [f["filename"] for f in body["profile"]["papers"][0]["files"]] == ["3.jpg.png", "4.png"]  # every file
     ok = conn.post(f"/targets/{t['id']}/profile/confirm", {"profile_id": body["profile"]["id"]})
     assert ok.status_code == 200, ok.text
     assert "not_looked_at" not in {x["code"] for x in owner_api.get(f"/targets/{t['id']}/rationale").json()["limits"]}

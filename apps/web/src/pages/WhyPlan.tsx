@@ -115,16 +115,29 @@ function PaperList({ profile }: { profile: TargetProfile }) {
     <ul style={{ margin: 0, paddingLeft: 18 }}>
       {papers.map((p, i) => {
         const name = p.label || p.source?.filename || "Old paper";
+        const files = p.files ?? (p.source ? [p.source] : []);
+        const live = files.filter((f) => !f.removed);
         const extra = [p.total_points != null ? plural(p.total_points, "point") : null, p.duration_minutes ? `${p.duration_minutes} min` : null]
           .filter(Boolean)
           .join(" · ");
         return (
           <li key={i}>
-            {p.source && !p.source.removed ? <Link to={`/library/${p.source.id}`}>{name}</Link> : name}
-            {(p.extra_source_ids?.length ?? 0) > 0 && <span className="muted"> · {plural((p.extra_source_ids?.length ?? 0) + 1, "file")}</span>}
+            {files.length === 1 && live.length === 1 ? <Link to={`/library/${live[0]!.id}`}>{name}</Link> : name}
+            {files.length > 1 && <span className="muted"> · {plural(files.length, "file")}</span>}
             {p.exam && <span> · for {p.exam}</span>}
             {extra && <span className="muted"> · {extra}</span>}
-            {(!p.source || p.source.removed) && <span className="muted"> · no copy in RecallSpring</span>}
+            {live.length === 0 && <span className="muted"> · no copy in RecallSpring</span>}
+            {files.length > 1 && (
+              <div className="small">
+                Files:{" "}
+                {files.map((f, j) => (
+                  <span key={f.id}>
+                    {j > 0 && ", "}
+                    {f.removed ? <span className="muted">{f.filename} (removed)</span> : <Link to={`/library/${f.id}`}>{f.filename}</Link>}
+                  </span>
+                ))}
+              </div>
+            )}
             {p.use && (
               <div className={p.use === "style" ? "small" : "small muted"}>
                 {p.use === "style" ? <span className="chip">Style only</span> : null} {USE[p.use]}

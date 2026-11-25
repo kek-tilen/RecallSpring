@@ -249,7 +249,8 @@ Implemented:
   answer and where to read again, simulations, and the material groups as collapsible blocks (collapsed by default,
   owner 2026-11-25, with progress bar and counts visible; `Collapse all` / `Expand all` on the card, owner 2026-11-25). Below, **Why this plan** (ADR-013 §4, `#why`, from
   `GET /targets/{id}/rationale`, nothing written by a model): the old papers (linked when RecallSpring has a copy,
-  else "no copy"; the exam each was for and "Style only" when only its kind of questions counts), the assistant's
+  else "no copy"; a paper of several files, e.g. photos, lists and links each file; on the course's Exams tab
+  the same list replaces the single "Old paper" link once a newer analysis names files; the exam each was for and "Style only" when only its kind of questions counts), the assistant's
   note on the analysis (labelled as its words), whether the analysis is confirmed with `It matches the paper` while it is not (corrections go
   through the assistant, which reads the paper again), coverage by points and a table of the topics (points or
   share, where on the paper, on how many papers, each concept with its state, "From the web" and "Not in your

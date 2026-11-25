@@ -173,6 +173,8 @@ export interface ProfilePaper {
   use?: "style" | "style_and_topics";
   /** Further files of the same paper, e.g. its second photo. */
   extra_source_ids?: string[];
+  /** Every file of the paper in RecallSpring, the first one first (owner 2026-11-25). */
+  files?: { id: string; filename: string; removed: boolean }[];
 }
 
 export interface ProfileTopic {

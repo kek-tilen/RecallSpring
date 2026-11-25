@@ -280,6 +280,10 @@ function ProfileTopics({ value }: { value: ProfileTopic[] }) {
   );
 }
 
+/** A v2 analysis whose papers have files in RecallSpring: shown as a list of papers with every file. */
+const paperFiles = (profile: TargetProfile) =>
+  profile.version === 2 && (profile.papers ?? []).some((p) => (p.files ?? (p.source ? [p.source] : [])).length > 0);
+
 const GOAL: Record<string, string> = { long_term: "Remember it long-term", exam_only: "Only for this exam" };
 
 /** Where the old paper behind an exam-style analysis is, or how to bring it into RecallSpring and link it. */
@@ -472,10 +476,23 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
                 <summary style={{ cursor: "pointer", fontWeight: 600 }}>Exam style from an old paper</summary>
                 <div className="stack" style={{ marginTop: 10 }}>
                   <dl className="kv">
-                    <dt>Old paper</dt>
-                    <dd>
-                      <OldPaper targetId={t.id} courseId={courseId} profile={t.profile} />
-                    </dd>
+                    {/* A newer analysis lists its papers with every file; the single-file link stays for older
+                        ones and for papers RecallSpring has no copy of yet (owner 2026-11-25). */}
+                    {paperFiles(t.profile) ? (
+                      <>
+                        <dt>Papers</dt>
+                        <dd>
+                          <Papers profile={t.profile} />
+                        </dd>
+                      </>
+                    ) : (
+                      <>
+                        <dt>Old paper</dt>
+                        <dd>
+                          <OldPaper targetId={t.id} courseId={courseId} profile={t.profile} />
+                        </dd>
+                      </>
+                    )}
                     <dt>Question types</dt>
                     <dd>
                       <ItemTypes value={t.profile.item_types} />
@@ -486,7 +503,7 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
                     </dd>
                     {t.profile.version === 2 ? (
                       <>
-                        {(t.profile.papers?.length ?? 0) > 0 && (
+                        {!paperFiles(t.profile) && (t.profile.papers?.length ?? 0) > 0 && (
                           <>
                             <dt>Papers</dt>
                             <dd>
