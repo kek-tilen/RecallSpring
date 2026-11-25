@@ -1,7 +1,7 @@
 # ADR-013 — Why this plan: a confirmed exam profile, coverage and an honest rationale
 
 Status: accepted 2026-11-25 (owner in chat; owner feedback after real use: "the learner must be able to trust that the
-agent knows what it is doing"). Rolled out in steps, see Rollout (step 1 done 2026-11-25). Extends ADR-005 (study targets,
+agent knows what it is doing"). Rolled out in steps, see Rollout (steps 1-2 done 2026-11-25). Extends ADR-005 (study targets,
 plan v1, simulations) and the exam readiness in `docs/05`.
 
 ## Context
@@ -52,12 +52,18 @@ profile, readiness and today's plan:
 - **Coverage, weighted by points:** for each topic its concepts and their states (not studied, weak, not practised,
   developing, solid); in total "studied N % of the points, solid M %", plus the same for the Bloom mix against what
   has been practised.
-- **Why this order:** the actual priority rules applied today (not studied with the most points first, in the order
-  of the material; then weak; then due reviews), with each of today's items tied to its topic and points.
+- **Why this order:** the priority rules the planner actually applies (`PRIORITY_RULES` in `planner.py`, kept next
+  to the scoring), with each of today's items tied to its topic and points. Built 2026-11-25, the rules are: a
+  score of exam closeness × need × topic weight × difficulty; new material keeps the order of the material whatever
+  its weight (earlier parts come before what builds on them) and a heavier topic gets more study time instead; with
+  average weights due reviews come first, then new material, then practice and weak concepts. Learning new material
+  by points was considered and not done: it would break the order of the material.
 - **Does it fit:** work left against the time available until the date (the existing capacity check).
 - **Limits, stated by the server:** no old paper; only one paper (pattern uncertain); unconfirmed profile; topics
-  marked `not_in_material`; scope concepts that never appeared on a paper (they get less time, and that is said);
-  unreadable parts; Bloom levels on the paper above the learner's practice limit.
+  marked `not_in_material`; scope concepts that never appeared on a paper (they keep an average weight, so heavier
+  topics can come before them, and that is said); topics on the paper outside the exam's scope; no points on the
+  paper; papers RecallSpring has no copy of; unreadable parts; Bloom levels on the paper above the learner's
+  practice limit.
 
 Estimates from practice, never a predicted grade or a validated score.
 
@@ -109,6 +115,7 @@ Each step with tests and docs:
    tools `record_exam_profile` v2 and `confirm_exam_profile`; the Course page shows v2 topics and whether the
    analysis is confirmed).
 2. `rationale-v1` service and `GET /targets/{id}/rationale` (owner and connector), with source-aware tests.
+   **Done 2026-11-25** (`services/rationale.py`).
 3. MCP tool and instructions; ChatGPT in Chat tool; Codex / Antigravity folder text; web sources for
    topics not in the material (§5: source origin `web` with URLs, `from_web` topics, consent first).
 4. Web: Readiness section, Home `Why?` link, profile confirmation.

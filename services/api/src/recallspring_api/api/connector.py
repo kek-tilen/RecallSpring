@@ -88,6 +88,7 @@ from ..services import explanations as explanation_svc
 from ..services import folders as folder_svc
 from ..services import interests as interest_svc
 from ..services import quizzes as quiz_svc
+from ..services import rationale as rationale_svc
 from ..services import self_assessment as self_svc
 from ..services import sources as source_svc
 from ..services import targets as target_svc
@@ -123,6 +124,14 @@ def plan(
     if course_id is not None:
         owned(db, Course, course_id, ctx.user.id)
     return today_plan(db, ctx.user, clock.now(), minutes, course_id)
+
+
+@router.get("/targets/{target_id}/rationale")
+def plan_rationale(
+    target_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Why this plan (ADR-013 §2), computed by RecallSpring: explain it, never add claims it does not contain."""
+    return rationale_svc.rationale(db, ctx.user, target_id, clock.now())
 
 
 @router.get("/readiness")

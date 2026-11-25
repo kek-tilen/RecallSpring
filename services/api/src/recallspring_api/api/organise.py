@@ -28,7 +28,7 @@ from ..schemas import (
     TargetIn,
     TargetUpdateIn,
 )
-from ..services import interests, overview, readiness
+from ..services import interests, overview, rationale, readiness
 from ..services import targets as target_svc
 from ..services.events import audit
 from ..services.ownership import owned
@@ -244,6 +244,14 @@ def update_course(
 @router.get("/targets")
 def list_targets(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     return overview.targets_timeline(db, ctx.user)
+
+
+@router.get("/targets/{target_id}/rationale")
+def target_rationale(
+    target_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Why this plan (ADR-013 §2): what the old papers show, coverage by points, today's order, fit and limits."""
+    return rationale.rationale(db, ctx.user, target_id, clock.now())
 
 
 @router.get("/targets/{target_id}/readiness")

@@ -54,6 +54,21 @@ REMAINING_WORK = {"not_studied": 18, "not_started": 6, "emerging": 10, "developi
 WEAK_REASONS = {"partial", "lapse", "uncertain_followup"}
 EMPTY_MESSAGE = "You're caught up. Continue a topic or browse your library."
 NOTE = "Estimated from practice, not a guarantee of recall."
+# How the scoring below orders a course's work, in words; "Why this plan" (rationale-v1, ADR-013) shows them.
+# Keep them true to the code in today_plan when the scoring changes.
+PRIORITY_RULES = (
+    "Each piece of work gets a score: how close the exam is (x1 more than 2 weeks away, x1.5 within 2 weeks, x2 "
+    "within a week, x3 within 3 days) x what it needs x how much its topic weighs on the old papers (0.5-2) x how "
+    "hard the concept is (harder a little sooner).",
+    "What it needs: a due review 1.0-1.5 (more when overdue), a studied concept not yet practised 0.9, a weak "
+    "concept 0.8-1.0 (more when it was forgotten).",
+    "New material counts 0.95 and keeps the order of the material whatever its weight, so earlier parts come before "
+    "what builds on them; a topic that weighs more on the old papers gets 4 more minutes to study instead.",
+    "With average weights: due reviews, then new material, then practice and weak concepts. A heavier topic can "
+    "move ahead of new material; a lighter one falls behind it.",
+    "Material outside this exam keeps only its due reviews, at lower priority; passed exams get a small "
+    "maintenance share of the day.",
+)
 STATUS_WORDS = {"tight": "tight", "at_risk": "at risk"}
 
 
