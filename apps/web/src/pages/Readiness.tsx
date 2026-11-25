@@ -4,6 +4,7 @@ import { Async, Card, Empty, Meter, PageHead } from "../components/ui";
 import { dateLabel, gradeLabel, plural } from "../format";
 import { useReadiness } from "../queries";
 import type { ExamReadiness, ReadinessConcept, ReadinessCounts, ReadinessState } from "../types";
+import { WhyThisPlan } from "./WhyPlan";
 
 export const READINESS_ORDER: ReadinessState[] = ["not_studied", "weak", "not_practised", "developing", "solid"];
 export const READINESS_LABEL: Record<ReadinessState, string> = {
@@ -246,6 +247,9 @@ export function ReadinessPage() {
                 <Card title="By material" meta="In the order it is taught">
                   <Groups r={r} />
                 </Card>
+              </div>
+              <div style={{ marginTop: 20 }}>
+                <WhyThisPlan targetId={t.id} />
               </div>
               <p className="tiny muted">{r.note}</p>
             </>

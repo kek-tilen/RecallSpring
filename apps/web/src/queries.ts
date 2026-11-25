@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { get } from "./api";
-import type { ArchivedView, AssistantsStatus, BackupStatus, ChatImport, ChatImportSummary, ConceptDetail, ConnectorSettings, Course, CourseOverview, CourseSummary, Dashboard, DeletedTarget, ExamReadiness, FocusSummary, Folder, Group, HistoryRow, Note, QuizSummary, QuizView, SessionInfo, Source, StudyPreferences, StudySettings, TimelineTarget, UploadLimits, WeekReview } from "./types";
+import type { ArchivedView, AssistantsStatus, BackupStatus, ChatImport, ChatImportSummary, ConceptDetail, ConnectorSettings, Course, CourseOverview, CourseSummary, Dashboard, DeletedTarget, ExamReadiness, FocusSummary, Folder, Group, HistoryRow, Note, PlanRationale, QuizSummary, QuizView, SessionInfo, Source, StudyPreferences, StudySettings, TimelineTarget, UploadLimits, WeekReview } from "./types";
 
 export const keys = {
   session: ["session"] as const,
@@ -25,6 +25,7 @@ export const keys = {
   assistants: ["settings", "connector", "assistants"] as const,
   backup: ["settings", "backup"] as const,
   readiness: (id: string) => ["targets", id, "readiness"] as const,
+  rationale: (id: string) => ["targets", id, "rationale"] as const,
   week: (weeksAgo: number) => ["week", weeksAgo] as const,
   chatImports: ["imports", "chatgpt"] as const,
   chatImport: (id: string) => ["imports", "chatgpt", id] as const,
@@ -69,6 +70,8 @@ export const useStudySettings = () =>
   useQuery({ queryKey: keys.studySettings, queryFn: () => get<StudySettings>("/settings/study") });
 export const useReadiness = (id: string) =>
   useQuery({ queryKey: keys.readiness(id), queryFn: () => get<ExamReadiness>(`/targets/${id}/readiness`) });
+export const useRationale = (id: string) =>
+  useQuery({ queryKey: keys.rationale(id), queryFn: () => get<PlanRationale>(`/targets/${id}/rationale`) });
 export const useWeek = (weeksAgo: number) =>
   useQuery({ queryKey: keys.week(weeksAgo), queryFn: () => get<WeekReview>("/overview/week", { weeks_ago: weeksAgo }) });
 export const useBackup = () => useQuery({ queryKey: keys.backup, queryFn: () => get<BackupStatus>("/settings/backup") });

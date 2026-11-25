@@ -15,6 +15,7 @@ import type { AttemptDetail, AttemptRow, ConceptRow, CourseOverview, ProfileTopi
 import { NewNoteButton, NoteList } from "./Notes";
 import { FolderBrowser } from "./Library";
 import { QuizTable } from "./Simulations";
+import { ConfirmProfile } from "./WhyPlan";
 
 const TABS = [
   { id: "concepts", label: "Concepts" },
@@ -278,15 +279,6 @@ function ProfileTopics({ value }: { value: ProfileTopic[] }) {
   );
 }
 
-/** Whether the learner confirmed the analysis (ADR-013 §1). */
-export function ProfileConfirmation({ profile }: { profile: TargetProfile }) {
-  if (profile.confirmation === "confirmed")
-    return <span className="small">Confirmed by you{profile.confirmed_at ? ` on ${dateTime(profile.confirmed_at)}` : ""}.</span>;
-  if (profile.confirmation === "unconfirmed")
-    return <span className="small">Not confirmed yet: your assistant asks whether it matches what you know about this exam.</span>;
-  return <span className="small muted">Analysed before analyses were confirmed. Ask your assistant to analyse the paper again.</span>;
-}
-
 const GOAL: Record<string, string> = { long_term: "Remember it long-term", exam_only: "Only for this exam" };
 
 /** Where the old paper behind an exam-style analysis is, or how to bring it into RecallSpring and link it. */
@@ -514,7 +506,7 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
                     )}
                     <dt>Checked</dt>
                     <dd>
-                      <ProfileConfirmation profile={t.profile} />
+                      <ConfirmProfile targetId={t.id} profile={t.profile} />
                     </dd>
                     <dt>Examples</dt>
                     <dd>

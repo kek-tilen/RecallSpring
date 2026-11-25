@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OldPaper, ProfileConfirmation } from "./pages/Course";
+import { OldPaper } from "./pages/Course";
+import { ProfileConfirmation } from "./pages/WhyPlan";
 import type { TargetProfile } from "./types";
 
 afterEach(() => {

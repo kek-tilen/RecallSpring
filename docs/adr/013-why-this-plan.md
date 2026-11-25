@@ -1,7 +1,7 @@
 # ADR-013 — Why this plan: a confirmed exam profile, coverage and an honest rationale
 
 Status: accepted 2026-11-25 (owner in chat; owner feedback after real use: "the learner must be able to trust that the
-agent knows what it is doing"). Rolled out in steps, see Rollout (steps 1-3 done 2026-11-25). Extends ADR-005 (study targets,
+agent knows what it is doing"). Rolled out in steps, see Rollout (all four steps done 2026-11-25). Extends ADR-005 (study targets,
 plan v1, simulations) and the exam readiness in `docs/05`.
 
 ## Context
@@ -121,7 +121,9 @@ Each step with tests and docs:
    **Done 2026-11-25** (migration 0029; MCP `get_plan_rationale` and `add_web_source`; `explain_plan` in the study
    context; ChatGPT in Chat reads the rationale as `get_exam_readiness` with `why: true` to stay within 20 tools,
    and has no web search; Library labels web sources and lists their links).
-4. Web: Readiness section, Home `Why?` link, profile confirmation.
+4. Web: Readiness section, Home `Why?` link, profile confirmation. **Done 2026-11-25** (`pages/WhyPlan.tsx`;
+   `It matches the paper` on Readiness and on the course's Exams tab; Home links `Why?` after the next step and one
+   "Why this plan:" link per exam under today's plan).
 
 ## Consequences
 

@@ -144,8 +144,22 @@ const SHORT_TAG: Record<PlanItem["category"], string> = {
   Maintain: "Keep fresh",
 };
 
+/** ADR-013 §4: the exam a plan item works towards, for a quiet "Why?" link to Why this plan on its Readiness page. */
+export function examFor(d: Dashboard, item: PlanItem): TargetCapacity | null {
+  if (!item.target) return null;
+  return d.plan.targets.find((t) => t.course_id === item.course_id && t.target === item.target) ?? null;
+}
+
+function WhyLink({ exam }: { exam: TargetCapacity }) {
+  return (
+    <Link to={`/exams/${exam.target_id}#why`} className="muted" aria-label={`Why this plan for ${exam.target} in ${exam.course_title}`}>
+      Why?
+    </Link>
+  );
+}
+
 /** The one next step: a line of text and one button. */
-function NextStep({ item, a }: { item: PlanItem; a: AssistantWords }) {
+function NextStep({ item, a, exam }: { item: PlanItem; a: AssistantWords; exam: TargetCapacity | null }) {
   const button =
     item.category === "Review due"
       ? { to: "/review", label: "Start reviews" }
@@ -157,6 +171,12 @@ function NextStep({ item, a }: { item: PlanItem; a: AssistantWords }) {
       <p className="home-next-text">
         Next: {NEXT_VERB[item.category]} <Link to={`/concepts/${item.concept_id}`}>{item.term}</Link>
         <span className="muted"> · {item.course_title}</span>
+        {exam && (
+          <span className="small">
+            {" "}
+            · <WhyLink exam={exam} />
+          </span>
+        )}
       </p>
       {item.category !== "Review due" && <p className="small muted">{continueHint(a, item.course_title)}</p>}
       <div>
@@ -329,12 +349,36 @@ function PlanCard({ d }: { d: Dashboard }) {
           ))}
         </ul>
       )}
+      <WhyLinks d={d} />
       {d.plan.note && (
         <p className="tiny muted" style={{ marginTop: 12 }}>
           {d.plan.note}
         </p>
       )}
     </Card>
+  );
+}
+
+/** One quiet "Why?" per exam that today's plan works towards. */
+function WhyLinks({ d }: { d: Dashboard }) {
+  const exams: TargetCapacity[] = [];
+  for (const item of d.plan.items) {
+    const exam = examFor(d, item);
+    if (exam && !exams.some((e) => e.target_id === exam.target_id)) exams.push(exam);
+  }
+  if (exams.length === 0) return null;
+  return (
+    <p className="tiny muted" style={{ marginTop: 12 }}>
+      Why this plan:{" "}
+      {exams.map((e, i) => (
+        <span key={e.target_id}>
+          {i > 0 && " · "}
+          <Link to={`/exams/${e.target_id}#why`}>
+            {e.target}, {e.course_title}
+          </Link>
+        </span>
+      ))}
+    </p>
   );
 }
 
@@ -432,7 +476,7 @@ export function HomePage() {
                       Which assistant do you study with? <Link to="/welcome">Choose it</Link>
                     </p>
                   )}
-                  {started && next && <NextStep item={next} a={a} />}
+                  {started && next && <NextStep item={next} a={a} exam={examFor(d, next)} />}
                   {started && <ThenToday items={d.plan.items.slice(1, 3)} />}
                 </header>
                 {started && <WeekPanel d={d} focus={focus.data} />}

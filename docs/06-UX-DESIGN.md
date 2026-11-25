@@ -72,12 +72,14 @@ Typography first, no streaks or other pressure counters.
   with the name set in Settings → Profile, "What should Home call you?"; none by default), one sentence about
   today (the nearest exam or midterm and about how many minutes are planned), a quiet "Which assistant…" line while
   none is chosen, **one next step** (the first plan item as text, the assistant hint except for reviews, and one
-  button: `Start reviews`, `Open Chat` for ChatGPT, else `Open concept`) and "Then today" with the next two items.
+  button: `Start reviews`, `Open Chat` for ChatGPT, else `Open concept`; a quiet `Why?` after it when the item works
+  towards an exam, ADR-013 §4) and "Then today" with the next two items.
   Right, **This week**: a strip of the next seven days (today marked, a dot on days with an exam or midterm), the
   dates within seven days ("today", "tomorrow", "Mon 30 Nov"), reviews due today, minutes focused this week, and a
   link to the weekly review.
 - **Today in detail**, open by default; `Hide` / `Show` is remembered on this device and a hidden section loads
-  nothing: today's plan with `Start focus` next to exams and midterms (status On track / Tight / At risk), then
+  nothing: today's plan with `Start focus` and a quiet "Why this plan:" line linking each exam it works towards
+  (`/exams/:id#why`), next to exams and midterms (status On track / Tight / At risk), then
   Needs attention, recent activity and Add material, and one line with what RecallSpring holds.
 - Before the first course: the greeting, the first-course hint, then Today in detail.
 Include quota status only when relevant; never interrupt the learner with admin chores.
@@ -245,7 +247,14 @@ Implemented:
   yet, Weak, Studied not practised, Getting there, Solid; weak uses the warning colour, the rest the green ramp)
   with a legend and counts, the time check, next steps, the weakest concepts with what was missing in their last
   answer and where to read again, simulations, and the material groups as collapsible blocks (open while anything
-  in them is not yet "Getting there" or "Solid"). It ends with "not a prediction of your grade".
+  in them is not yet "Getting there" or "Solid"). Below, **Why this plan** (ADR-013 §4, `#why`, from
+  `GET /targets/{id}/rationale`, nothing written by a model): the old papers (linked when RecallSpring has a copy,
+  else "no copy"), whether the analysis is confirmed with `It matches the paper` while it is not (corrections go
+  through the assistant, which reads the paper again), coverage by points and a table of the topics (points or
+  share, where on the paper, on how many papers, each concept with its state, "From the web" and "Not in your
+  material" marked), the kinds of questions on the paper against what was practised and the practice limit,
+  today's work for this course tied to its topics with "How RecallSpring orders the work" folded, the time check,
+  and "What this cannot tell you" (the server's limits). It ends with "not a prediction of your grade".
 - **Weekly review** (`/week`, and a "This week" card on Today): plain summary sentences, numbers, a 0-4 grade
   distribution as a labelled table, per course, reviews, exams in the next three weeks; earlier weeks one click
   back.

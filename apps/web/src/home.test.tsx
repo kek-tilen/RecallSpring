@@ -135,6 +135,16 @@ describe("calm home (ADR-012, variant A)", () => {
     expect(screen.getByRole("button", { name: "Show" }).getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("links quietly to Why this plan for the exams today's plan works towards (ADR-013 §4)", async () => {
+    const other = { ...TARGET, course_id: "k2", course_title: "Statistics", target_id: "t2", target: "Exam" };
+    const items = [ITEM, { ...ITEM, concept_id: "c3", course_id: "k2", course_title: "Statistics", target: "Exam" }];
+    renderHome(dashboard({ items: [...items, { ...ITEM, concept_id: "c4", target: null }], targets: [TARGET, other] }));
+    const why = await screen.findByRole("link", { name: "Why this plan for 1st midterm in Computer Architecture" });
+    expect(why.getAttribute("href")).toBe("/exams/t1#why");
+    expect(screen.getByRole("link", { name: "1st midterm, Computer Architecture" }).getAttribute("href")).toBe("/exams/t1#why");
+    expect(screen.getByRole("link", { name: "Exam, Statistics" }).getAttribute("href")).toBe("/exams/t2#why");
+  });
+
   it("keeps the first-course hint visible before any course exists", async () => {
     renderHome(dashboard({ items: [], targets: [] }, 0));
     expect(await screen.findByText("Add your first course")).toBeTruthy();

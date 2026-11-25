@@ -539,6 +539,43 @@ export interface ReadinessConcept {
   } | null;
 }
 
+// ADR-013 §2: Why this plan, computed by the server (rationale-v1)
+export interface RationaleTopic {
+  label: string;
+  points: number | null;
+  share: number | null;
+  where: string | null;
+  papers: string[];
+  weight: number;
+  not_in_material: boolean;
+  unmapped: boolean;
+  from_web: boolean;
+  status: "not_studied" | "in_progress" | "weak" | "solid" | "not_in_material" | "unmapped";
+  concepts: { id: string; term: string; state: ReadinessState; due: boolean; in_scope: boolean }[];
+  counts: ReadinessCounts;
+}
+
+export interface PlanRationale {
+  policy_version: string;
+  generated_at: string;
+  target: ExamReadiness["target"];
+  profile: TargetProfile | null;
+  topics: RationaleTopic[];
+  coverage: { basis: "points" | "share" | "topics"; studied_percent: number; ready_percent: number; solid_percent: number; not_in_material_percent: number } | null;
+  bloom: { paper: Record<string, number>; practised: Record<string, number>; practice_limit: number; paper_above_limit: number };
+  today: {
+    items: { concept_id: string; term: string; category: string; minutes: number; topics: { label: string; points: number | null; share: number | null }[]; why: string }[];
+    minutes: number;
+    other_courses_items: number;
+    note: string | null;
+  };
+  order_rules: string[];
+  fit: { days_left: number; summary: ExamReadiness["summary"]; capacity: ExamReadiness["capacity"] };
+  not_on_paper: { count: number; terms: string[] };
+  limits: { code: string; message: string }[];
+  note: string;
+}
+
 export interface ExamReadiness {
   policy_version: string;
   generated_at: string;
