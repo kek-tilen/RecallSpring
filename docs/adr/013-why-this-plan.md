@@ -1,7 +1,7 @@
 # ADR-013 — Why this plan: a confirmed exam profile, coverage and an honest rationale
 
 Status: accepted 2026-11-25 (owner in chat; owner feedback after real use: "the learner must be able to trust that the
-agent knows what it is doing"). Not built yet; rolled out in steps, see Rollout. Extends ADR-005 (study targets,
+agent knows what it is doing"). Rolled out in steps, see Rollout (step 1 done 2026-11-25). Extends ADR-005 (study targets,
 plan v1, simulations) and the exam readiness in `docs/05`.
 
 ## Context
@@ -79,14 +79,38 @@ Estimates from practice, never a predicted grade or a validated score.
   paper.
 - **Home:** a quiet `Why?` link next to today's plan for a course with an active target, opening that section.
 
+### 5. On the paper but not in the material: the web, labelled and only with the learner's yes
+
+Added 2026-11-25 (owner in chat). Example: the material shows `nmap` but never explains the `-A` flag, while
+reliable sources show it matters for the kind of questions on the paper.
+
+- When a topic on a paper, or a detail of what the material covers (a command's flag, an option, a standard), is
+  not in the material, the assistant may look it up on the web, only in an app that gives it web search. It
+  prefers primary sources (official documentation, the standard, the tool's manual) and says plainly that this is
+  **not from the course material**, with the links it used.
+- It explains why it seems important for this exam (where such questions appear on the paper, what the sources
+  say), then **asks** whether to add it. Nothing is added on its own.
+- On yes: the content is saved as a separate source, origin `web`, titled "From the web: …", with each URL and the
+  date it was read. The concepts created for it link only to that source, so every later citation, question and
+  grade shows it comes from the web and not from the professor's material. The paper's topic then names those
+  concepts and keeps a `from_web` mark.
+- On no: the topic stays `not_in_material`.
+- The rationale (§2) lists these topics separately: "added from the web at your request" and "not in the material,
+  not added". Web content is never mixed into the material's citations, and a claim from the web never counts as
+  evidence from the uploaded material.
+- An app without web search says that it cannot look it up and offers to note the topic as not in the material.
+
 ## Rollout
 
 Each step with tests and docs:
 
 1. Profile v2: migration (new columns and a papers list; v1 rows kept as they are), API validation (mapping
-   required, recurrence weight), confirmation endpoint.
+   required, recurrence weight), confirmation endpoint. **Done 2026-11-25** (migration 0028; the MCP and ChatGPT
+   tools `record_exam_profile` v2 and `confirm_exam_profile`; the Course page shows v2 topics and whether the
+   analysis is confirmed).
 2. `rationale-v1` service and `GET /targets/{id}/rationale` (owner and connector), with source-aware tests.
-3. MCP tool and instructions; ChatGPT in Chat tool; Codex / Antigravity folder text.
+3. MCP tool and instructions; ChatGPT in Chat tool; Codex / Antigravity folder text; web sources for
+   topics not in the material (§5: source origin `web` with URLs, `from_web` topics, consent first).
 4. Web: Readiness section, Home `Why?` link, profile confirmation.
 
 ## Consequences

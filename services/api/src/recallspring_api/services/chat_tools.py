@@ -49,6 +49,7 @@ from ..schemas import (
     ExplanationFeedbackIn,
     KnownConceptsIn,
     OrganiseCoursesIn,
+    ProfileConfirmIn,
     QuizIn,
     TargetIn,
     TargetProfileIn,
@@ -144,7 +145,11 @@ organise_courses to file them under university, faculty and semester, and for ev
 set_study_target with the date, the type, the scope in the learner's own words and your mapping of that scope to the \
 material (get_course_outline). Ask for anything missing and show the mapping before you save it. Analyse an old \
 paper with record_exam_profile and pass its source_id; if the paper is not in the course's material yet, ask the \
-learner to upload it under the course as Past paper first, so they can open it next to the analysis. \
+learner to upload it under the course as Past paper first, so they can open it next to the analysis. Every topic \
+names the course concepts that cover it (create_concepts first when needed) or not_in_material, with its points and \
+where it is on the paper. The profile is saved unconfirmed: show the learner a short summary (topics with points, \
+item types, Bloom mix, what you could not read), ask whether it matches what they know, and confirm_exam_profile \
+only on their yes. \
 Create concepts from material you read (create_concepts, linked \
 to section IDs). Then show priorities across courses with get_study_plan without course_id. To study, practise or \
 get feedback on a course, the learner starts a new conversation and picks that course under Study."""
@@ -256,6 +261,10 @@ class TargetUpdateArgs(TargetUpdateIn):
 
 
 class ProfileArgs(TargetProfileIn):
+    target_id: uuid.UUID
+
+
+class ProfileConfirmArgs(ProfileConfirmIn):
     target_id: uuid.UUID
 
 
@@ -401,6 +410,11 @@ def _update_target(db: Session, ctx: WriteCtx, a: TargetUpdateArgs) -> tuple[Any
 def _record_profile(db: Session, ctx: WriteCtx, a: ProfileArgs) -> tuple[Any, None]:
     payload = TargetProfileIn.model_validate({**a.model_dump(exclude={"target_id"}), "model_name": ctx.model})
     return _body(_c().record_profile(target_id=a.target_id, payload=payload, ctx=ctx, db=db)), None
+
+
+def _confirm_profile(db: Session, ctx: WriteCtx, a: ProfileConfirmArgs) -> tuple[Any, None]:
+    payload = ProfileConfirmIn(profile_id=a.profile_id)
+    return _body(_c().confirm_profile(target_id=a.target_id, payload=payload, ctx=ctx, db=db)), None
 
 
 def _n(value: Any, key: str) -> int:
@@ -673,14 +687,24 @@ _TOOLS = [
     ),
     Tool(
         "record_exam_profile",
-        "After reading an old paper the learner uploaded: the item types and their shares, the Bloom mix, topic "
-        "weights (0.5-2, optionally a concept_id of the course) and up to 10 example items, for a study target. "
-        "Pass source_id (the paper in this course's material).",
+        "After reading old papers the learner uploaded: the item types and their shares, the Bloom mix, the topics "
+        "(each with points or share, where it is on the paper, the papers it appeared on, and concept_ids of the "
+        "course or not_in_material) and up to 10 example items, for a study target. papers: each paper with its "
+        "source_id (in this course's material) and a label such as the year. Saved unconfirmed.",
         ProfileArgs,
         _record_profile,
         lambda a, r: "Saved the exam profile",
         writes=True,
         drop=("model_name",),
+    ),
+    Tool(
+        "confirm_exam_profile",
+        "Only after the learner said your summary of the exam analysis matches what they know: confirms the latest "
+        "analysis (profile.id).",
+        ProfileConfirmArgs,
+        _confirm_profile,
+        lambda a, r: "Confirmed the exam profile",
+        writes=True,
     ),
 ]
 TOOLS: dict[str, Tool] = {t.name: t for t in _TOOLS}
@@ -706,6 +730,7 @@ STUDY = _READ + [
 ]
 PLANNING_TOOLS = ["list_courses", *_READ, "get_due_reviews", "create_course", "organise_courses"]
 PLANNING_TOOLS += ["create_concepts", "set_study_target", "update_study_target", "record_exam_profile"]
+PLANNING_TOOLS += ["confirm_exam_profile"]
 # In a study conversation, setting-up calls must stay inside its course.
 COURSE_BOUND = {"create_concepts", "set_study_target", "update_study_target", "record_exam_profile"}
 

@@ -147,6 +147,25 @@ export interface TargetProfile {
   notes: string | null;
   derived_by: string;
   created_at: string;
+  /** ADR-013: 2 = topics mapped to concepts, points, papers and the learner's confirmation; 1 = before that. */
+  version?: number;
+  topics?: ProfileTopic[];
+  papers?: { source_id: string | null; label: string | null; total_points: number | null; duration_minutes: number | null; source: { id: string; filename: string; removed: boolean } | null }[];
+  unreadable?: string[];
+  confirmation?: "confirmed" | "unconfirmed" | "before_confirmation";
+  confirmed_at?: string | null;
+  confirmed_via?: "assistant" | "web" | null;
+}
+
+export interface ProfileTopic {
+  label: string;
+  concept_ids: string[];
+  not_in_material: boolean;
+  points: number | null;
+  share: number | null;
+  where: string | null;
+  papers: string[];
+  weight: number;
 }
 
 export interface ScopeItem {

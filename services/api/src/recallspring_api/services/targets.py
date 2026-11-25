@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -24,8 +24,8 @@ from ..models import (
     TargetProfile,
     User,
 )
-from ..schemas import TargetIn, TargetScopeItem, TargetUpdateIn
-from .events import audit
+from ..schemas import ProfilePaperIn, ProfileTopicIn, TargetIn, TargetScopeItem, TargetUpdateIn
+from .events import audit, learning_event
 from .ownership import owned
 
 SETUP_QUESTIONS = [
@@ -110,10 +110,180 @@ def latest_profile(db: Session, target_id: uuid.UUID) -> TargetProfile | None:
     )
 
 
+# ---------------------------------------------------------------- exam profile v2 (ADR-013 §1)
+
+RECURRENCE = {2: 1.25, 3: 1.5}  # a topic on 2 papers counts x1.25, on 3 or more x1.5
+
+
+def topic_weight(share: float | None, topics: int, papers_seen: int) -> float:
+    """A topic's weight for planning (0.5-2): its share of the points against an average topic's share, raised when
+    it recurs on several papers. Without a share a topic counts as average (1.0)."""
+    base = 1.0 if share is None or topics == 0 else share * topics
+    factor = RECURRENCE[min(papers_seen, 3)] if papers_seen >= 2 else 1.0
+    return round(min(2.0, max(0.5, base * factor)), 2)
+
+
+def computed_topics(topics: list[ProfileTopicIn], papers: list[ProfilePaperIn]) -> list[dict[str, Any]]:
+    """Each topic as stored: what the assistant read, plus the share of the points and the weight RecallSpring
+    computes. Points count against the papers' total points (or the sum of the topics' points when a total is
+    missing); a share is taken as given."""
+    totals = [p.total_points for p in papers]
+    total = sum(t for t in totals if t) if totals and all(totals) else sum(t.points or 0 for t in topics)
+    out = []
+    for t in topics:
+        share = t.points / total if t.points is not None and total > 0 else t.share
+        seen = len(set(t.papers)) or 1
+        out.append(
+            {
+                "label": t.label,
+                "concept_ids": [str(c) for c in dict.fromkeys(t.concept_ids)],
+                "not_in_material": t.not_in_material,
+                "points": t.points,
+                "share": round(share, 4) if share is not None else None,
+                "where": t.where,
+                "papers": list(dict.fromkeys(t.papers)),
+                "weight": topic_weight(share, len(topics), seen),
+            }
+        )
+    return out
+
+
+def check_profile_topics(
+    db: Session, user: User, course_id: uuid.UUID, topics: list[ProfileTopicIn], papers: list[ProfilePaperIn]
+) -> None:
+    """Nothing in a profile is silently ignored: every topic names concepts of this course or says it is not in the
+    material, and names only papers the profile lists."""
+    labels = {p.label for p in papers if p.label}
+    for index, t in enumerate(topics):
+        if not t.concept_ids and not t.not_in_material:
+            raise ApiError(
+                422,
+                "topic_not_mapped",
+                f"Topic '{t.label}' names no concept. Link the course concepts that cover it (create them first if "
+                "needed), or set not_in_material when the course material does not cover it.",
+                {"index": index},
+            )
+        if t.concept_ids and t.not_in_material:
+            raise ApiError(
+                422,
+                "topic_mapping_unclear",
+                f"Topic '{t.label}' names concepts and says it is not in the material; choose one.",
+                {"index": index},
+            )
+        for cid in t.concept_ids:
+            concept = db.get(Concept, cid)
+            if concept is None or concept.user_id != user.id or concept.course_id != course_id:
+                raise ApiError(
+                    422, "invalid_weight", "A topic refers to a concept outside this course.", {"index": index}
+                )
+        unknown = [p for p in t.papers if p not in labels]
+        if unknown:
+            raise ApiError(
+                422,
+                "unknown_paper",
+                f"Topic '{t.label}' names a paper the profile does not list: {', '.join(unknown)}.",
+                {"index": index},
+            )
+
+
+def concept_weights(profile: TargetProfile | None) -> dict[str, float]:
+    """Planning weight per concept from the latest profile: v2 topics (the highest weight of the topics a concept
+    covers) or v1 topic weights linked to a concept."""
+    weights: dict[str, float] = {}
+    if profile is None:
+        return weights
+    if profile.version >= 2:
+        for t in profile.topics:
+            if not isinstance(t, dict):
+                continue
+            for cid in t.get("concept_ids") or []:
+                weights[str(cid)] = max(weights.get(str(cid), 0.0), float(t.get("weight", 1.0)))
+        return weights
+    for w in profile.topic_weights:
+        if isinstance(w, dict) and w.get("concept_id"):
+            try:
+                weights[str(w["concept_id"])] = max(0.5, min(2.0, float(w.get("weight", 1.0))))
+            except (TypeError, ValueError):
+                continue
+    return weights
+
+
+def confirm_profile(
+    db: Session,
+    user: User,
+    target_id: uuid.UUID,
+    profile_id: uuid.UUID,
+    via: str,
+    now: datetime,
+    request_id: str,
+) -> StudyTarget:
+    """The learner confirms that the latest analysis matches the paper (ADR-013 §1). Only the latest v2 analysis can
+    be confirmed; confirming twice changes nothing. Audited."""
+    target = owned(db, StudyTarget, target_id, user.id)
+    if target.deleted_at is not None:
+        raise ApiError(404, "not_found", "Study target not found.")
+    profile = latest_profile(db, target.id)
+    if profile is None:
+        raise ApiError(404, "no_profile", "This exam has no analysis of an old paper yet.")
+    if profile.id != profile_id:
+        raise ApiError(
+            409,
+            "profile_changed",
+            "A newer analysis of this exam exists. Show the learner the latest one before confirming.",
+            {"latest_profile_id": str(profile.id)},
+        )
+    if profile.version < 2:
+        raise ApiError(
+            409,
+            "analyse_again",
+            "This analysis was made before analyses were confirmed and its topics may not be linked to the material. "
+            "Analyse the paper again (record_exam_profile), then ask the learner to confirm.",
+        )
+    if profile.confirmed_at is None:
+        profile.confirmed_at = now
+        profile.confirmed_via = via
+        audit(
+            db,
+            actor_id=user.id,
+            action="exam_profile.confirmed",
+            target_type="target_profile",
+            target_id=profile.id,
+            details={"via": via},
+            request_id=request_id,
+        )
+        learning_event(
+            db,
+            user_id=user.id,
+            entity_type="study_target",
+            entity_id=target.id,
+            event_type="target.profile_confirmed",
+            payload={"profile_id": str(profile.id), "via": via},
+            request_id=request_id,
+        )
+        db.flush()
+    return target
+
+
+def _source_ref(db: Session, source_id: Any) -> dict[str, Any] | None:
+    if not source_id:
+        return None
+    try:
+        src = db.get(Source, uuid.UUID(str(source_id)))
+    except ValueError:
+        return None
+    if src is None:
+        return None
+    return {"id": str(src.id), "filename": src.filename, "removed": src.deleted_at is not None}
+
+
 def profile_view(db: Session, profile: TargetProfile | None) -> dict[str, Any] | None:
     if profile is None:
         return None
     src = db.get(Source, profile.source_id) if profile.source_id else None
+    if profile.version < 2:
+        confirmation = "before_confirmation"
+    else:
+        confirmation = "confirmed" if profile.confirmed_at is not None else "unconfirmed"
     return {
         "id": str(profile.id),
         "source_id": str(profile.source_id) if profile.source_id else None,
@@ -130,6 +300,15 @@ def profile_view(db: Session, profile: TargetProfile | None) -> dict[str, Any] |
         "notes": profile.notes,
         "derived_by": profile.model or "assistant",
         "created_at": profile.created_at.isoformat(),
+        "version": profile.version,
+        # v2 (ADR-013): topics with points/share, concepts, place on the paper, papers, computed share and weight
+        "topics": profile.topics,
+        "papers": [{**p, "source": _source_ref(db, p.get("source_id"))} for p in profile.papers if isinstance(p, dict)],
+        "unreadable": profile.unreadable,
+        # confirmed / unconfirmed, or before_confirmation for analyses made before ADR-013
+        "confirmation": confirmation,
+        "confirmed_at": profile.confirmed_at.isoformat() if profile.confirmed_at else None,
+        "confirmed_via": profile.confirmed_via,
     }
 
 
@@ -162,6 +341,11 @@ def link_profile_source(
             request_id=request_id,
         )
         profile.source_id = source_id
+        if profile.version >= 2:
+            # the first paper of a v2 analysis is the one the link shows
+            papers = [dict(p) for p in profile.papers if isinstance(p, dict)] or [{"label": None}]
+            papers[0]["source_id"] = str(source_id) if source_id else None
+            profile.papers = papers
         db.flush()
     return target
 

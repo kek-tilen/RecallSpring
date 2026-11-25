@@ -45,7 +45,7 @@ from ..models import (
 from . import mastery
 from .learning import effective_status
 from .reviews import effective_assessment
-from .targets import latest_profile, scope_concepts
+from .targets import concept_weights, latest_profile, scope_concepts
 
 POLICY = "readiness-v1"
 STATES = ("not_studied", "weak", "not_practised", "developing", "solid")
@@ -181,15 +181,7 @@ def _material(db: Session, concept_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict
 
 
 def _weights(db: Session, target: StudyTarget) -> dict[str, float]:
-    profile = latest_profile(db, target.id)
-    weights: dict[str, float] = {}
-    for w in profile.topic_weights if profile else []:
-        if isinstance(w, dict) and w.get("concept_id"):
-            try:
-                weights[str(w["concept_id"])] = float(w.get("weight", 1.0))
-            except (TypeError, ValueError):
-                continue
-    return weights
+    return concept_weights(latest_profile(db, target.id))
 
 
 def _pages(pages: list[int]) -> str | None:
@@ -409,7 +401,7 @@ def _reason(row: dict[str, Any]) -> str:
     if row["lapses"] >= 2:
         text += f"; forgotten {row['lapses']} times"
     if (row["exam_weight"] or 1.0) >= 1.5:
-        text += "; frequent in your old papers"
+        text += "; weighs more on your old papers"
     return text + "."
 
 

@@ -11,7 +11,7 @@ import { CheckChip, CheckFirstPanel, PracticeLimitControl } from "../components/
 import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
 import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, gradeLabel, gradedBy, plural, relativeDay } from "../format";
 import { keys, useCourseOverview, useGroups, useSources } from "../queries";
-import type { AttemptDetail, AttemptRow, ConceptRow, CourseOverview, StudyStatus, Target, TargetProfile } from "../types";
+import type { AttemptDetail, AttemptRow, ConceptRow, CourseOverview, ProfileTopic, StudyStatus, Target, TargetProfile } from "../types";
 import { NewNoteButton, NoteList } from "./Notes";
 import { FolderBrowser } from "./Library";
 import { QuizTable } from "./Simulations";
@@ -259,6 +259,34 @@ function TopicWeights({ value }: { value: TargetProfile["topic_weights"] }) {
   return <>{value.map((w) => `${w.label} ×${w.weight}`).join(" · ")}</>;
 }
 
+/** Profile v2 topics (ADR-013): points or share, where on the paper, and whether the material covers it. */
+function ProfileTopics({ value }: { value: ProfileTopic[] }) {
+  if (!value.length) return <span className="muted">—</span>;
+  return (
+    <ul style={{ margin: 0, paddingLeft: 18 }}>
+      {value.map((t, i) => {
+        const size = t.points != null ? `${t.points} points` : t.share != null ? pct(t.share) : null;
+        const on = t.papers.length > 1 ? `on ${t.papers.length} papers` : null;
+        return (
+          <li key={i}>
+            {[t.label, size, t.where, on].filter(Boolean).join(" · ")}
+            {t.not_in_material && <span className="chip warn" style={{ marginLeft: 6 }}>Not in your material</span>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Whether the learner confirmed the analysis (ADR-013 §1). */
+export function ProfileConfirmation({ profile }: { profile: TargetProfile }) {
+  if (profile.confirmation === "confirmed")
+    return <span className="small">Confirmed by you{profile.confirmed_at ? ` on ${dateTime(profile.confirmed_at)}` : ""}.</span>;
+  if (profile.confirmation === "unconfirmed")
+    return <span className="small">Not confirmed yet: your assistant asks whether it matches what you know about this exam.</span>;
+  return <span className="small muted">Analysed before analyses were confirmed. Ask your assistant to analyse the paper again.</span>;
+}
+
 const GOAL: Record<string, string> = { long_term: "Remember it long-term", exam_only: "Only for this exam" };
 
 /** Where the old paper behind an exam-style analysis is, or how to bring it into RecallSpring and link it. */
@@ -463,9 +491,30 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
                     <dd>
                       <BloomMix value={t.profile.bloom_mix} />
                     </dd>
-                    <dt>Topic weights</dt>
+                    {t.profile.version === 2 ? (
+                      <>
+                        <dt>Topics</dt>
+                        <dd>
+                          <ProfileTopics value={t.profile.topics ?? []} />
+                        </dd>
+                        {(t.profile.unreadable?.length ?? 0) > 0 && (
+                          <>
+                            <dt>Could not read</dt>
+                            <dd>{t.profile.unreadable!.join(" · ")}</dd>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <dt>Topic weights</dt>
+                        <dd>
+                          <TopicWeights value={t.profile.topic_weights} />
+                        </dd>
+                      </>
+                    )}
+                    <dt>Checked</dt>
                     <dd>
-                      <TopicWeights value={t.profile.topic_weights} />
+                      <ProfileConfirmation profile={t.profile} />
                     </dd>
                     <dt>Examples</dt>
                     <dd>

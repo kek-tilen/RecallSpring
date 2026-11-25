@@ -69,6 +69,8 @@ from ..schemas import (
     MaterialCategory,
     OrganiseCoursesIn,
     PlanOut,
+    ProfileConfirmIn,
+    ProfilePaperIn,
     QuizDraftIn,
     QuizIn,
     QuizSubmitIn,
@@ -97,7 +99,8 @@ from ..services.note_refs import references as note_references
 from ..services.ownership import course_alive, owned
 from ..services.planner import today_plan
 from ..services.reviews import concept_ids_for_question, recompute, review_queue
-from ..services.targets import study_context, target_view
+from ..services.targets import check_profile_topics, computed_topics, study_context, target_view
+from ..services.targets import confirm_profile as confirm_exam_profile
 from .attempts import save_attempt
 from .questions import _add_question, _course_concepts, question_view
 from .reviews import _item as review_item
@@ -822,32 +825,38 @@ def record_profile(
     ctx: WriteCtx = Depends(connector_write_ctx),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Exam profile derived by Claude from past papers. Topic weights may point to concepts of the course."""
+    """Exam profile v2 derived by the assistant from past papers (ADR-013 §1). Every topic names concepts of the
+    course or says it is not in the material; RecallSpring computes each topic's share and weight. Saved
+    unconfirmed: the assistant then shows the learner the analysis and confirms it only on their yes."""
     if replay := replay_if_seen(db, ctx, payload):
         return replay
     target = db.get(StudyTarget, target_id)
     if target is None or target.user_id != ctx.user.id or target.deleted_at is not None:
         raise ApiError(404, "not_found", "Study target not found.")
-    if payload.source_id is not None:
-        paper = owned(db, Source, payload.source_id, ctx.user.id)
-        if paper.course_id != target.course_id:
-            raise ApiError(422, "source_not_in_course", "The old paper must be material of this exam's course.")
-    for w in payload.topic_weights:
-        if w.concept_id is not None:
-            concept = db.get(Concept, w.concept_id)
-            if concept is None or concept.user_id != ctx.user.id or concept.course_id != target.course_id:
-                raise ApiError(422, "invalid_weight", "A topic weight refers to a concept outside this course.")
+    papers = list(payload.papers)
+    if not papers and payload.source_id is not None:
+        papers = [ProfilePaperIn(source_id=payload.source_id)]
+    for paper_in in papers:
+        if paper_in.source_id is not None:
+            paper = owned(db, Source, paper_in.source_id, ctx.user.id)
+            if paper.course_id != target.course_id:
+                raise ApiError(422, "source_not_in_course", "The old paper must be material of this exam's course.")
+    check_profile_topics(db, ctx.user, target.course_id, payload.topics, papers)
     profile = TargetProfile(
         user_id=ctx.user.id,
         target_id=target.id,
-        source_id=payload.source_id,
+        source_id=papers[0].source_id if papers else None,
         item_types=[t.model_dump() for t in payload.item_types],
         bloom_mix=payload.bloom_mix,
-        topic_weights=[w.model_dump(mode="json") for w in payload.topic_weights],
+        topic_weights=[],
         example_items=payload.example_items,
         notes=payload.notes,
         model=payload.model_name,
         created_at=clock.now(),
+        version=2,
+        topics=computed_topics(payload.topics, papers),
+        papers=[p.model_dump(mode="json") for p in papers],
+        unreadable=payload.unreadable,
     )
     db.add(profile)
     db.flush()
@@ -857,10 +866,30 @@ def record_profile(
         entity_type="study_target",
         entity_id=target.id,
         event_type="target.profile_recorded",
-        payload={"model": payload.model_name},
+        payload={"model": payload.model_name, "version": 2, "topics": len(payload.topics), "papers": len(papers)},
         request_id=ctx.request_id,
     )
-    return commit_with_response(db, ctx, payload, 201, target_view(db, target, _today(ctx)))
+    body = target_view(db, target, _today(ctx))
+    body["confirm"] = (
+        "Saved unconfirmed. Show the learner a short summary (topics with points and where they are on the paper, "
+        "item types, Bloom mix, what you could not read) and ask whether it matches what they know about this exam. "
+        "On their yes call confirm_exam_profile with profile.id; on a correction record the profile again."
+    )
+    return commit_with_response(db, ctx, payload, 201, body)
+
+
+@router.post("/targets/{target_id}/profile/confirm")
+def confirm_profile(
+    target_id: uuid.UUID,
+    payload: ProfileConfirmIn,
+    ctx: WriteCtx = Depends(connector_write_ctx),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Only after the learner said the analysis matches the paper: marks the latest analysis confirmed (ADR-013)."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    target = confirm_exam_profile(db, ctx.user, target_id, payload.profile_id, "assistant", clock.now(), ctx.request_id)
+    return commit_with_response(db, ctx, payload, 200, target_view(db, target, _today(ctx)))
 
 
 @router.post("/concepts/difficulty")

@@ -922,9 +922,18 @@ class StudyTargetScope(Base):
 
 
 class TargetProfile(Base):
-    """Exam profile derived from past papers: item types, Bloom mix and topic weights (AI-derived, labelled)."""
+    """Exam profile derived from past papers: item types, Bloom mix and topics (AI-derived, labelled).
+
+    Version 1 rows have ``topic_weights`` (label, optional concept, weight). Version 2 (ADR-013) has ``topics`` with
+    points or share, the concepts that cover each topic (or ``not_in_material``), where it is on the paper and on
+    which papers, the computed share and weight; ``papers``; what could not be read; and the learner's confirmation.
+    """
 
     __tablename__ = "target_profiles"
+    __table_args__ = (
+        CheckConstraint("version IN (1, 2)", name="version"),
+        CheckConstraint("confirmed_via IS NULL OR confirmed_via IN ('assistant','web')", name="confirmed_via"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     user_id: Mapped[uuid.UUID] = _owner()
@@ -937,6 +946,12 @@ class TargetProfile(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     model: Mapped[str | None] = mapped_column(String(120))
     created_at: Mapped[datetime] = _created()
+    version: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="1", default=1)
+    topics: Mapped[list[Any]] = _json_list()
+    papers: Mapped[list[Any]] = _json_list()
+    unreadable: Mapped[list[Any]] = _json_list()
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmed_via: Mapped[str | None] = mapped_column(String(20))
 
 
 class AvailabilityOverride(Base):

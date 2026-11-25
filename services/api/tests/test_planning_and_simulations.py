@@ -163,7 +163,11 @@ def test_exam_profile_weight_raises_a_topic(owner_api: Api, conn: ConnectorApi, 
         {
             "item_types": [{"type": "scenario", "share": 0.6}, {"type": "mcq", "share": 0.4}],
             "bloom_mix": {"3": 0.5, "4": 0.5},
-            "topic_weights": [{"label": "Zeta", "concept_id": ids["Zeta"], "weight": 2.0}],
+            "papers": [{"label": "2025", "total_points": 25}],
+            "topics": [
+                {"label": "Zeta", "concept_ids": [ids["Zeta"]], "points": 20, "where": "Q1-Q3", "papers": ["2025"]},
+                {"label": "Alpha", "concept_ids": [ids["Alpha"]], "points": 5, "where": "Q4"},
+            ],
             "example_items": ["Analyse given scan output"],
             "model_name": "Claude Sonnet 5.5",
         },
@@ -171,7 +175,7 @@ def test_exam_profile_weight_raises_a_topic(owner_api: Api, conn: ConnectorApi, 
     assert r.status_code == 201 and r.json()["profile"]["item_types"][0]["type"] == "scenario"
     items = conn.get("/plan").json()["items"]
     assert [i["term"] for i in items] == ["Zeta", "Alpha"]
-    assert "Frequent topic on past papers." in items[0]["why_selected"]
+    assert "Weighs more on past papers." in items[0]["why_selected"]
 
 
 def test_learner_difficulty_rating_is_not_overwritten_by_claude(owner_api: Api, conn: ConnectorApi) -> None:

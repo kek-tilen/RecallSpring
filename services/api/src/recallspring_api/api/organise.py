@@ -17,7 +17,17 @@ from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
 from ..models import Course, CourseGroup, User
-from ..schemas import ArchiveIn, CoursePatch, GroupIn, GroupPatch, MergeIn, ProfileSourceIn, TargetIn, TargetUpdateIn
+from ..schemas import (
+    ArchiveIn,
+    CoursePatch,
+    GroupIn,
+    GroupPatch,
+    MergeIn,
+    ProfileConfirmIn,
+    ProfileSourceIn,
+    TargetIn,
+    TargetUpdateIn,
+)
 from ..services import interests, overview, readiness
 from ..services import targets as target_svc
 from ..services.events import audit
@@ -271,6 +281,17 @@ def link_profile_source(
     if replay := replay_if_seen(db, ctx, payload):
         return replay
     target = target_svc.link_profile_source(db, ctx.user, target_id, payload.source_id, ctx.request_id)
+    return commit_with_response(db, ctx, payload, 200, target_view(db, target, _today(ctx.user)))
+
+
+@router.post("/targets/{target_id}/profile/confirm")
+def confirm_profile(
+    target_id: uuid.UUID, payload: ProfileConfirmIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """The learner confirms in the web app that the latest exam-style analysis matches the paper (ADR-013)."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    target = target_svc.confirm_profile(db, ctx.user, target_id, payload.profile_id, "web", clock.now(), ctx.request_id)
     return commit_with_response(db, ctx, payload, 200, target_view(db, target, _today(ctx.user)))
 
 

@@ -842,25 +842,63 @@ class TargetUpdateIn(BaseModel):
     notes: str | None = Field(default=None, max_length=4000)
 
 
-class TopicWeight(BaseModel):
-    label: str = Field(min_length=1, max_length=200)
-    concept_id: uuid.UUID | None = None
-    weight: float = Field(default=1.0, ge=0.5, le=2.0)
-
-
 class ItemType(BaseModel):
     type: str = Field(min_length=1, max_length=60)
     share: float = Field(ge=0, le=1)
 
 
-class TargetProfileIn(BaseModel):
+class ProfilePaperIn(BaseModel):
+    """One old paper the analysis read (ADR-013 §1)."""
+
+    model_config = ConfigDict(extra="forbid")
+
     source_id: uuid.UUID | None = None
+    label: str | None = Field(default=None, min_length=1, max_length=60)
+    total_points: float | None = Field(default=None, gt=0, le=1000)
+    duration_minutes: int | None = Field(default=None, ge=1, le=600)
+
+
+class ProfileTopicIn(BaseModel):
+    """A topic on the paper. It names the course concepts that cover it, or says it is not in the material."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1, max_length=200)
+    concept_ids: list[uuid.UUID] = Field(default_factory=list, max_length=30)
+    not_in_material: bool = False
+    points: float | None = Field(default=None, gt=0, le=1000)
+    share: float | None = Field(default=None, gt=0, le=1)
+    where: str | None = Field(default=None, min_length=1, max_length=200)
+    papers: list[str] = Field(default_factory=list, max_length=10)
+
+
+class TargetProfileIn(BaseModel):
+    """Exam profile v2 (ADR-013). The v1 field ``topic_weights`` is refused: every topic must be mapped."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: uuid.UUID | None = None
+    papers: list[ProfilePaperIn] = Field(default_factory=list, max_length=10)
     item_types: list[ItemType] = Field(default_factory=list, max_length=12)
     bloom_mix: dict[str, float] = Field(default_factory=dict)
-    topic_weights: list[TopicWeight] = Field(default_factory=list, max_length=60)
+    topics: list[ProfileTopicIn] = Field(default_factory=list, max_length=60)
     example_items: list[str] = Field(default_factory=list, max_length=10)
+    unreadable: list[str] = Field(default_factory=list, max_length=20)
     notes: str | None = Field(default=None, max_length=4000)
     model_name: str | None = Field(default=None, max_length=120)
+
+    @field_validator("unreadable", "example_items")
+    @classmethod
+    def _short_lines(cls, value: list[str]) -> list[str]:
+        if any(len(v) > 500 for v in value):
+            raise ValueError("each line may have at most 500 characters")
+        return value
+
+
+class ProfileConfirmIn(BaseModel):
+    """The learner confirmed this analysis (the latest one) matches the paper."""
+
+    profile_id: uuid.UUID
 
 
 class DifficultyItem(BaseModel):

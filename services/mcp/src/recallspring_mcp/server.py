@@ -51,6 +51,10 @@ Start of every study session in a course:
    file or folder on this computer; when it was only attached to the chat, ask the learner to upload the originals
    under the course as Past paper. Then pass its source_id. If it cannot be added, analyse it anyway without
    source_id and tell the learner that RecallSpring has no copy of the paper.
+   record_exam_profile saves the analysis unconfirmed: then show the learner a short summary (topics with points
+   and where they are on the paper, item types, Bloom mix, what you could not read) and ask whether it matches
+   what they know about the exam. On their yes confirm_exam_profile; on a correction record it again. Every
+   topic names the course concepts that cover it (create_concepts first if needed) or not_in_material.
 2. get_study_plan (course_id for one course, none for an overview across courses) and propose a session within the
    learner's available time. Passed material is maintenance only; the active target has priority. When the exam is
    within about two weeks, also call get_exam_readiness (course_id) and build the session on its next_steps:
@@ -1095,37 +1099,62 @@ class ItemTypeShare(BaseModel):
     share: float = Field(ge=0, le=1)
 
 
-class TopicWeightIn(BaseModel):
+class PaperIn(BaseModel):
+    source_id: str | None = Field(default=None, description="the paper as past_paper material of this course")
+    label: str | None = Field(default=None, description='e.g. the year, "2025"; topics name papers by it')
+    total_points: float | None = Field(default=None, gt=0, description="only when the paper shows it")
+    duration_minutes: int | None = Field(default=None, ge=1)
+
+
+class TopicIn(BaseModel):
     label: str
-    concept_id: str | None = None
-    weight: float = Field(default=1.0, ge=0.5, le=2.0, description=">1 appears often or carries many points")
+    concept_ids: list[str] = Field(default_factory=list, description="course concepts that cover this topic")
+    not_in_material: bool = Field(default=False, description="true when no course material covers it")
+    points: float | None = Field(default=None, gt=0, description="points on the paper(s), when shown")
+    share: float | None = Field(default=None, gt=0, le=1, description="share of the paper, when points are not shown")
+    where: str | None = Field(default=None, description='where on the paper, e.g. "Q2, p. 1"')
+    papers: list[str] = Field(default_factory=list, description="labels of the papers it appeared on")
 
 
 @mcp.tool(annotations=APPEND)
 async def record_exam_profile(
     target_id: str,
     item_types: list[ItemTypeShare],
-    topic_weights: list[TopicWeightIn],
+    topics: list[TopicIn],
+    papers: list[PaperIn] | None = None,
     bloom_mix: dict[str, float] | None = None,
     example_items: list[str] | None = None,
+    unreadable: list[str] | None = None,
     notes: str | None = None,
     source_id: str | None = None,
     model_name: str | None = None,
 ) -> str:
-    """After analysing an old kolokvij or exam: record question types with their shares, the Bloom mix, topic
-    weights (link concept_id when you can) and a few short paraphrased example items. Used to match the question
-    style and to prioritise topics. Pass source_id: the paper imported as past_paper in this exam's course (the
-    learner opens it from the analysis). Without it the analysis says RecallSpring has no copy of the paper."""
+    """After analysing old kolokvij or exam papers: question types with their shares, the Bloom mix, the topics
+    and a few short paraphrased example items. Each topic: points (or share) as on the paper, where it is (question,
+    page), the papers it appeared on, and the course concepts that cover it (concept_ids; create_concepts first
+    when needed) or not_in_material=true; RecallSpring refuses a topic with neither and computes the weights.
+    papers: each paper read, with source_id (imported as past_paper in this course) and a label such as the year.
+    unreadable: what you could not make out (e.g. "points of Q4"). Saved unconfirmed: then show the learner a short
+    summary and ask whether it matches; confirm_exam_profile only on their yes."""
     payload = {
         "item_types": [t.model_dump() for t in item_types],
-        "topic_weights": [w.model_dump() for w in topic_weights],
+        "topics": [t.model_dump() for t in topics],
+        "papers": [p.model_dump() for p in papers or []],
         "bloom_mix": bloom_mix or {},
         "example_items": example_items or [],
+        "unreadable": unreadable or [],
         "notes": notes,
         "source_id": source_id,
         "model_name": model_name,
     }
     return as_json(await get_client().post(f"/targets/{target_id}/profile", payload))
+
+
+@mcp.tool(annotations=APPEND)
+async def confirm_exam_profile(target_id: str, profile_id: str) -> str:
+    """Only after the learner said your summary of the exam analysis matches what they know: marks the latest
+    analysis (profile.id from record_exam_profile or get_study_context) confirmed. Never on your own judgement."""
+    return as_json(await get_client().post(f"/targets/{target_id}/profile/confirm", {"profile_id": profile_id}))
 
 
 class DifficultyRating(BaseModel):

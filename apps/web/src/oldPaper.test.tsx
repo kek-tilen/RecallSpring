@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OldPaper } from "./pages/Course";
+import { OldPaper, ProfileConfirmation } from "./pages/Course";
 import type { TargetProfile } from "./types";
 
 afterEach(() => {
@@ -67,5 +67,19 @@ describe("the old paper behind an exam-style analysis", () => {
     renderPaper({ ...PROFILE, source_id: "s1", source: { id: "s1", filename: "kolokvij-2025.pdf", removed: false } });
     expect(screen.getByRole("link", { name: "kolokvij-2025.pdf" }).getAttribute("href")).toBe("/library/s1");
     expect(screen.getByRole("button", { name: "Unlink" })).toBeTruthy();
+  });
+});
+
+describe("Exam profile v2 (ADR-013)", () => {
+  it("says whether the learner confirmed the analysis", () => {
+    const v2 = { ...PROFILE, version: 2 };
+    render(<ProfileConfirmation profile={{ ...v2, confirmation: "unconfirmed" }} />);
+    expect(screen.getByText(/Not confirmed yet/)).toBeTruthy();
+    cleanup();
+    render(<ProfileConfirmation profile={{ ...v2, confirmation: "confirmed", confirmed_at: "2026-11-25T10:00:00Z" }} />);
+    expect(screen.getByText(/Confirmed by you on/)).toBeTruthy();
+    cleanup();
+    render(<ProfileConfirmation profile={{ ...PROFILE, confirmation: "before_confirmation" }} />);
+    expect(screen.getByText(/analyse the paper again/)).toBeTruthy();
   });
 });

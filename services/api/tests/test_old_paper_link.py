@@ -13,7 +13,7 @@ from .test_planning_and_simulations import course_with_concepts, target
 
 PROFILE = {
     "item_types": [{"type": "mcq", "share": 1.0}],
-    "topic_weights": [{"label": "Ports", "weight": 2.0}],
+    "topics": [{"label": "Ports", "not_in_material": True}],
     "example_items": ["Which service uses port 389?"],
 }
 

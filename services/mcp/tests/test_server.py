@@ -754,3 +754,30 @@ async def test_feedback_after_a_form_comes_unasked_and_grades_are_named() -> Non
         instructions = client.instructions or ""
     assert "AFTER A FORM" in instructions and "Do not wait to be asked" in instructions
     assert 'never a bare number such as "3/4"' in instructions
+
+
+async def test_exam_profile_v2_is_passed_through_and_confirmed_separately(api: FakeApi) -> None:
+    api.route("POST", "/targets/t1/profile", 201, {"profile": {"id": "p1", "confirmation": "unconfirmed"}})
+    api.route("POST", "/targets/t1/profile/confirm", 200, {"profile": {"id": "p1", "confirmation": "confirmed"}})
+    topic = {"label": "Scanning", "concept_ids": ["c1"], "points": 12, "where": "Q2, p. 1", "papers": ["2025"]}
+    async with Client(mcp) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        await client.call_tool(
+            "record_exam_profile",
+            {
+                "target_id": "t1",
+                "item_types": [{"type": "scenario", "share": 1}],
+                "topics": [topic, {"label": "Firewalls", "not_in_material": True}],
+                "papers": [{"source_id": "s1", "label": "2025", "total_points": 30}],
+                "unreadable": ["points of Q4"],
+            },
+        )
+        await client.call_tool("confirm_exam_profile", {"target_id": "t1", "profile_id": "p1"})
+        instructions = client.instructions or ""
+    sent = json.loads(api.requests[0].content)
+    assert sent["topics"][0] == {**topic, "not_in_material": False, "share": None}
+    assert sent["topics"][1]["not_in_material"] is True and "topic_weights" not in sent
+    assert sent["papers"][0]["label"] == "2025" and sent["unreadable"] == ["points of Q4"]
+    assert json.loads(api.requests[1].content) == {"profile_id": "p1"}
+    assert "only on their yes" in tools["record_exam_profile"].description
+    assert "confirm_exam_profile" in instructions and "not_in_material" in instructions

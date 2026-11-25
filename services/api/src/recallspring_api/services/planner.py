@@ -43,7 +43,7 @@ from ..models import (
     User,
 )
 from . import check_first, learning, mastery
-from .targets import active_target, latest_profile, live_targets, scope_concepts
+from .targets import active_target, concept_weights, latest_profile, live_targets, scope_concepts
 
 PLAN_POLICY = "plan-v2"
 MAX_ITEMS = 6
@@ -107,11 +107,7 @@ class _CourseScope:
             self.passed_scope |= scope_concepts(db, t)
         if self.active_scope is not None:
             self.passed_scope -= self.active_scope
-        self.weights: dict[str, float] = {}
-        profile = latest_profile(db, self.active.id) if self.active else None
-        for w in profile.topic_weights if profile else []:
-            if isinstance(w, dict) and w.get("concept_id"):
-                self.weights[str(w["concept_id"])] = max(0.5, min(2.0, float(w.get("weight", 1.0))))
+        self.weights: dict[str, float] = concept_weights(latest_profile(db, self.active.id) if self.active else None)
         self.days_left = (self.active.due_date - today).days if self.active else None
 
 
@@ -188,7 +184,7 @@ def today_plan(
             context = " Personal interest: no deadline, at your own pace."
         weight = sc.weights.get(str(concept.id), 1.0)
         if weight > 1.0:
-            context += " Frequent topic on past papers."
+            context += " Weighs more on past papers."
         urgency = _urgency(sc.days_left)
         if due and state is not None:
             overdue = (today - state.due_at.astimezone(tz).date()).days
