@@ -25,7 +25,7 @@
 <br/>
 
 <p align="center">
-  <img src="assets/screenshots/home.png" alt="RecallSpring's Today page: what to learn next, concepts due for review and today's plan" width="100%" />
+  <img src="assets/screenshots/home.png" alt="RecallSpring's home page: the next step with one button, this week at a glance, and today's plan and exams in detail" width="100%" />
 </p>
 
 ## Introduction
