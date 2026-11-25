@@ -107,12 +107,15 @@ export function SourceTable({
   titles,
   selected,
   onToggle,
+  onToggleAll,
   showFolder,
 }: {
   sources: Source[];
   titles?: Record<string, string>;
   selected?: Set<string>;
   onToggle?: (id: string) => void;
+  /** Selects every row, or clears them when all are selected (owner 2026-11-25). */
+  onToggleAll?: (ids: string[]) => void;
   showFolder?: boolean;
 }) {
   if (sources.length === 0) return null;
@@ -131,7 +134,17 @@ export function SourceTable({
           <tr>
             {onToggle && (
               <th style={{ width: 1 }}>
-                <span className="sr-only">Select</span>
+                {onToggleAll && sources.length > 1 ? (
+                  <input
+                    type="checkbox"
+                    checked={sources.every((s) => selected?.has(s.id))}
+                    onChange={() => onToggleAll(sources.map((s) => s.id))}
+                    aria-label="Select all material"
+                    title="Select all"
+                  />
+                ) : (
+                  <span className="sr-only">Select</span>
+                )}
               </th>
             )}
             <th>Material</th>
@@ -565,6 +578,18 @@ export function FolderBrowser({
       else next.add(id);
       return next;
     });
+  /** Selects every given item, or clears them when all are already selected (Photos: Select all, owner 2026-11-25). */
+  const toggleAll = (ids: string[]) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const all = ids.every((id) => next.has(id));
+      for (const id of ids) {
+        if (all) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  const allImagesSelected = images.length > 0 && images.every((s) => selected.has(s.id));
   const moveTo = (ids: string[], dest: string | null) => {
     const from = folderId;
     move.mutate(
@@ -734,10 +759,20 @@ export function FolderBrowser({
         </p>
       )}
       {files.length > 0 && (
-        <SourceTable sources={files} selected={selected} onToggle={toggle} showFolder={category !== "all" && inFolders > 0} />
+        <SourceTable sources={files} selected={selected} onToggle={toggle} onToggleAll={toggleAll} showFolder={category !== "all" && inFolders > 0} />
       )}
       {images.length > 0 && (
-        <Card title="Photos" meta={plural(images.length, "image")}>
+        <Card
+          title="Photos"
+          meta={plural(images.length, "image")}
+          action={
+            images.length > 1 ? (
+              <button type="button" className="btn ghost small" onClick={() => toggleAll(images.map((s) => s.id))}>
+                {allImagesSelected ? "Deselect all" : "Select all"}
+              </button>
+            ) : undefined
+          }
+        >
           <Gallery images={images} selected={selected} onToggle={toggle} />
           <p className="tiny muted" style={{ marginTop: 10 }}>
             Photos have no extracted text. Your assistant looks at one when you ask (for example “look at my notes from lecture 3”).

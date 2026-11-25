@@ -156,3 +156,31 @@ describe("ending the focus after the last exam (owner 2026-11-23)", () => {
     expect(sent).toEqual(["PATCH /targets/t1"]);
   });
 });
+
+describe("Photos: select all (owner 2026-11-25)", () => {
+  const img = (id: string, filename: string) => ({ ...src(id, filename, null), kind: "image", page_count: null });
+  const SOURCES = [src("s1", "Lecture 1.pdf", null), img("i1", "4.png"), img("i2", "5.png")];
+
+  it("selects every photo at once and clears them again", async () => {
+    serve((url) => (url.includes("/folders") ? [] : url.includes("/sources") ? SOURCES : {}));
+    wrap(<FolderBrowser courseId="k1" folderId={null} href={(id) => `?folder=${id ?? ""}`} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Select all" }));
+    const box = (name: string) => screen.getByRole("checkbox", { name: `Select ${name}` }) as HTMLInputElement;
+    expect([box("4.png").checked, box("5.png").checked, box("Lecture 1.pdf").checked]).toEqual([true, true, false]);
+    expect(screen.getByText("2 items selected")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Deselect all" }));
+    expect([box("4.png").checked, box("5.png").checked]).toEqual([false, false]);
+  });
+
+  it("selects all material from the table header, apart from the photos", async () => {
+    const PDFS = [src("s1", "Lecture 1.pdf", null), src("s2", "Lecture 2.pdf", null), img("i1", "4.png")];
+    serve((url) => (url.includes("/folders") ? [] : url.includes("/sources") ? PDFS : {}));
+    wrap(<FolderBrowser courseId="k1" folderId={null} href={(id) => `?folder=${id ?? ""}`} />);
+    const all = (await screen.findByRole("checkbox", { name: "Select all material" })) as HTMLInputElement;
+    fireEvent.click(all);
+    const box = (name: string) => screen.getByRole("checkbox", { name: `Select ${name}` }) as HTMLInputElement;
+    expect([box("Lecture 1.pdf").checked, box("Lecture 2.pdf").checked, box("4.png").checked, all.checked]).toEqual([true, true, false, true]);
+    fireEvent.click(all);
+    expect([box("Lecture 1.pdf").checked, box("Lecture 2.pdf").checked]).toEqual([false, false]);
+  });
+});
