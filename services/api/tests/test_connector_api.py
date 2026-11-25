@@ -148,6 +148,8 @@ def test_claude_assessment_is_validated_scheduled_and_not_duplicated(
     assert assessment["provider"] == "claude_app" and assessment["model_reported_by"] == "assistant"
     assert assessment["simulated"] is False and body["status"] == "evaluated"
     assert body["schedule"][0]["reason"] == "First practice recorded; first review is the next day."
+    # the level is named, never a bare "3/4" (owner 2026-11-25)
+    assert body["grade_name"] == "Solid" and "Never write a bare number" in body["tell_the_learner"]
 
     again = conn.post(
         f"/attempts/{attempt_id}/assessments",

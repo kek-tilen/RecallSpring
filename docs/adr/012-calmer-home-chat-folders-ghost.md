@@ -21,6 +21,15 @@ Using RecallSpring daily brought up five things that slow the learner down:
 - Assistants are told: explain first, open the form as the very last step, write nothing after it (instructions and
   each form tool's result). External apps place a form where the tool is called, so this is guidance, not a
   guarantee. RecallSpring's own Chat always draws a turn's forms under all of its text.
+- **Codex: two messages** (owner test 2026-11-25: the form still came first). Codex shows the text written before a
+  tool call only in its collapsed work log and draws the form above the visible reply, so the order cannot be fixed
+  by wording. When the MCP handshake names a Codex client (`clientInfo.name` contains "codex"), `get_study_context`
+  adds `app_notes` (explain in one message without a form and ask the learner to write when ready; open the form
+  first in the next message, one short line after it at most) and the form tools' results say the same. Other apps
+  keep "form last". The Codex/Antigravity course folders' `AGENTS.md` say it too once they are regenerated.
+- **Feedback after a form without being asked** (owner 2026-11-25). Forms ask for feedback with `ui/message`, which
+  not every app delivers. The instructions now say that the learner's next message after a form, whatever it says
+  ("done", "oddano"), means it is finished: read what was saved and give the feedback without waiting to be asked.
 - Question text and expected points are drawn with RecallSpring's own LaTeX → MathML renderer wherever they appear:
   web pages, Chat forms and the MCP forms. The MCP forms get the same parser as a self-contained script built from
   the web app's source; it builds elements through the DOM (never `innerHTML`). Unsupported TeX stays visible as

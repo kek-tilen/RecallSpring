@@ -94,6 +94,29 @@ describe("Pomodoro timer", () => {
     expect(stopped.run).toMatchObject({ phase: "focus", round: 1, status: "idle" });
   });
 
+  it("a block reset while paused counts on the day of the pause, not the reset (owner 2026-11-25)", () => {
+    const s = DEFAULT_SETTINGS;
+    const day = 24 * 60 * MIN;
+    const paused = pause(start(initialRun(s, "course-1"), 0, id), 20 * MIN);
+    expect(paused.pausedAt).toBe(20 * MIN);
+    const stopped = reset(paused, s, day + 9 * 60 * MIN); // reset the next morning
+    expect(stopped.log).toMatchObject({
+      started_at: new Date(0).toISOString(),
+      ended_at: new Date(20 * MIN).toISOString(),
+      focused_seconds: 20 * 60,
+      completed: false,
+    });
+    // skipped while paused: the same
+    expect(advance(paused, s, day, false, id).log).toMatchObject({ ended_at: new Date(20 * MIN).toISOString() });
+    // resumed later and then reset: the block ends at the reset as before
+    const resumed = start(paused, 30 * MIN, id);
+    expect(resumed.pausedAt).toBeNull();
+    expect(reset(resumed, s, 40 * MIN).log).toMatchObject({ ended_at: new Date(40 * MIN).toISOString(), focused_seconds: 30 * 60 });
+    // a run stored before this change (no pausedAt) still ends at the reset
+    const legacy = { ...paused, pausedAt: null };
+    expect(reset(legacy, s, 50 * MIN).log).toMatchObject({ ended_at: new Date(50 * MIN).toISOString() });
+  });
+
   it("starts the next phase on its own only when asked to", () => {
     const auto = { ...DEFAULT_SETTINGS, autoStart: true };
     const tr = finish(initialRun(auto), auto, 0);

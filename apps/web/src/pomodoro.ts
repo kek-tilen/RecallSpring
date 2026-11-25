@@ -4,7 +4,8 @@
  * throttled background tab still ends a phase at the right moment.
  *
  * A finished focus block, or one stopped after at least a minute, becomes a `FocusLog` the app saves to RecallSpring
- * as study time. Breaks are not saved.
+ * as study time. Breaks are not saved. A block stopped while paused ends at its pause, so a reset the next day
+ * counts the time on the day it was focused (owner 2026-11-25).
  */
 
 export type Phase = "focus" | "short" | "long";
@@ -35,6 +36,7 @@ export interface RunState {
   blockStartedAt: number | null;
   focusedMs: number; // focus time before the current running stretch
   runningSince: number | null;
+  pausedAt: number | null; // while paused: when the pause began
   courseId: string | null;
 }
 
@@ -141,6 +143,7 @@ export function initialRun(settings: PomodoroSettings, courseId: string | null =
     blockStartedAt: null,
     focusedMs: 0,
     runningSince: null,
+    pausedAt: null,
     courseId,
   };
 }
@@ -179,6 +182,7 @@ export function start(run: RunState, now: number, newId: () => string): RunState
     status: "running",
     endsAt: now + run.remainingMs,
     runningSince: now,
+    pausedAt: null,
     blockId: firstStart ? newId() : run.blockId,
     blockStartedAt: firstStart ? now : run.blockStartedAt,
   };
@@ -193,11 +197,14 @@ export function pause(run: RunState, now: number): RunState {
     endsAt: null,
     focusedMs: focusedSoFar(run, now),
     runningSince: null,
+    pausedAt: now,
   };
 }
 
-function logFor(run: RunState, now: number, completed: boolean): FocusLog | null {
+function logFor(run: RunState, at: number, completed: boolean): FocusLog | null {
   if (run.phase !== "focus" || run.blockId === null || run.blockStartedAt === null) return null;
+  // Stopped while paused: the block ended when the pause began, not when it was reset or skipped.
+  const now = run.status === "paused" && run.pausedAt !== null ? Math.min(at, Math.max(run.pausedAt, run.blockStartedAt)) : at;
   const focused = Math.min(focusedSoFar(run, now), now - run.blockStartedAt);
   if (focused < MIN_LOGGED_MS) return null;
   return {
@@ -226,6 +233,7 @@ function enter(run: RunState, settings: PomodoroSettings, next: { phase: Phase; 
     remainingMs: total,
     endsAt: null,
     runningSince: null,
+    pausedAt: null,
     blockId: null,
     blockStartedAt: null,
     focusedMs: 0,

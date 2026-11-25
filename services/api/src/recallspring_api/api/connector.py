@@ -25,7 +25,7 @@ from ..deps import Ctx, WriteCtx, commit_with_response, replay_if_seen
 from ..errors import ApiError
 from ..ingest import renderer, visuals
 from ..ingest.storage import blob_path
-from ..learning.grading import GRADING_SCALE
+from ..learning.grading import GRADE_NAMES, GRADING_SCALE, TELL_THE_LEARNER
 from ..models import (
     Assessment,
     Attempt,
@@ -601,6 +601,8 @@ def record_one_assessment(
             for cid, s in schedules.items()
             if s is not None
         ],
+        "grade_name": GRADE_NAMES.get(row.grade) if row.grade is not None else None,
+        "tell_the_learner": TELL_THE_LEARNER,
     }
     if own is not None:
         # The learner had graded this answer themselves; tell them when the check differs by 2 or more.
@@ -1046,11 +1048,12 @@ def record_assessments_batch(
             {
                 "attempt_id": str(item.attempt_id),
                 "grade": latest["grade"],
+                "grade_name": body["grade_name"],
                 "status": latest["status"],
                 "schedule": body["schedule"],
             }
         )
-    return commit_with_response(db, ctx, payload, 200, {"results": results})
+    return commit_with_response(db, ctx, payload, 200, {"results": results, "tell_the_learner": TELL_THE_LEARNER})
 
 
 # ---------------------------------------------------------------- learning first (ADR-006)

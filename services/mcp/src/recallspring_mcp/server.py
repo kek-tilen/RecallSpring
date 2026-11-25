@@ -92,7 +92,9 @@ Start of every study session in a course:
    2 Partial, 3 Solid, 4 Transfer; a correct recall or true/false answer is 3, 4 only for real transfer);
    "provisional" when several answers are defensible or you are unsure, "ungraded" with grade null when it cannot
    be judged. Reward reasoning, not agreement with you. Cite
-   only section IDs you received. Explain the feedback and the next review dates RecallSpring returned.
+   only section IDs you received. Explain the feedback and the next review dates RecallSpring returned. Say the
+   level by its name in the learner's language and what it means for this answer (e.g. "Solid: everything the
+   question asks is correct"), never a bare number such as "3/4" or "grade saved": it reads like test points.
    Self-assessments: when get_study_context shows self_assessments_to_check > 0, the learner graded answers
    themselves against the expected points while no assistant was available. Offer to check them:
    get_self_assessments_to_check, then get_attempt and record_assessment for each; your grade replaces theirs.
@@ -118,7 +120,12 @@ When a reply gives feedback on the learner's work but nothing was saved to Recal
 
 FORMS LAST: write your explanation first and open a form (open_answer_form, open_quiz, open_summary_form,
 open_explanation_form) as the very last step of your message. Write nothing after the form; the learner's next
-message continues.
+message continues. When get_study_context returns app_notes, they say how forms work in this app: follow them.
+
+AFTER A FORM: the learner's next message after a form you opened, whatever it says (even only "done" or
+"oddano"), means they are finished. Do not wait to be asked: first read what was saved (get_notes for a summary,
+get_answer or get_quiz_results for answers, get_explanation for an explanation) and give the feedback the form
+asks for, then continue. If nothing was saved yet, say so and wait.
 
 Building the library (only when the learner asks): create_course; import_file for a PDF, Word (.docx),
 PowerPoint (.pptx), Excel (.xlsx), OpenDocument (.odt/.odp/.ods), Markdown or text, CSV/TSV, subtitles (.srt/.vtt),
@@ -231,6 +238,36 @@ APPEND = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempoten
 # ADR-012: apps draw a form where the tool is called, so the form must close the message.
 FORM_LAST = " The form ends your message: write nothing after it."
 
+# Owner 2026-11-25: Codex shows the text written before a tool call only in its collapsed work log and draws the
+# form above the visible reply, so "explain, then the form" cannot work in one message there. Two messages instead.
+CODEX_FORM_LAST = (
+    " In Codex this form is shown above your reply: after it write one short line at most (for example what to do "
+    "in the form); your explanation belongs in the message before, without a form."
+)
+CODEX_APP_NOTES = (
+    "Codex shows the text you write before a tool call only in its collapsed work log and draws a RecallSpring form "
+    "above your visible reply. So use two messages: teach or explain in one message without a form and end it by "
+    'asking the learner to write when they are ready (e.g. "ready", in their language). In your next message '
+    "open the form first and write one short line after it at most."
+)
+
+
+def client_name(ctx: Context | None) -> str:
+    """The connected app's own name from the MCP handshake (e.g. "codex-mcp-client"), lower case; "" if unknown."""
+    try:
+        params = ctx.request_context.session.client_params if ctx is not None else None
+        return (params.client_info.name or "").lower() if params is not None else ""
+    except Exception:  # no session details (e.g. an embedded call)
+        return ""
+
+
+def is_codex(ctx: Context | None) -> bool:
+    return "codex" in client_name(ctx)
+
+
+def form_last(ctx: Context | None) -> str:
+    return CODEX_FORM_LAST if is_codex(ctx) else FORM_LAST
+
 
 def form_html(name: str) -> str:
     """A form's HTML with RecallSpring's math script (math.js, built from the web app: npm run build:mcp-math)
@@ -269,7 +306,7 @@ async def open_answer_form(
     text = (
         f"Showing the answer form for question {q['id']} (Bloom {q['bloom_level']}):\n{q['prompt']}\n\n"
         "Wait for the learner to submit. If the form does not appear, ask the question in chat and save the "
-        "answer with submit_chat_answer." + FORM_LAST
+        "answer with submit_chat_answer." + form_last(ctx)
     )
     return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=data)
 
@@ -339,7 +376,7 @@ async def open_quiz(quiz_id: str, ctx: Context | None = None) -> CallToolResult:
         limit = f", {form['time_limit_minutes']} min" if form["time_limit_minutes"] else ""
         text = (
             f"Showing simulation '{form['title']}' ({len(form['items'])} questions{limit}). Wait for the learner."
-            + FORM_LAST
+            + form_last(ctx)
         )
     return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=form)
 
@@ -378,14 +415,16 @@ async def open_summary_form(
         text = (
             f"This app cannot show RecallSpring's summary form. Give the learner this link to summarise '{title}' "
             f"({', '.join(terms)}) in their own words; it is saved exactly as their note:\n{link}\n\nThen wait. "
-            "When they say they saved it, read it (get_notes) and say what is correct, wrong or missing compared with "
-            "the material (with page citations; not a grade), then ask 2-3 short check questions on this part."
+            "When they say they saved it (any message from them), read it (get_notes) without being asked and say "
+            "what is correct, wrong or missing compared with the material (with page citations; not a grade), then "
+            "ask 2-3 short check questions on this part."
         )
         return CallToolResult(content=[TextContent(type="text", text=text)], structured_content={**data, "link": link})
     text = (
-        f"Showing the summary form for '{title}' ({', '.join(terms)}). Wait for the learner; then read their summary "
-        "(get_notes) and say what is correct, wrong or missing compared with the material (with page citations; not "
-        "a grade), then ask 2-3 short check questions on this part." + FORM_LAST
+        f"Showing the summary form for '{title}' ({', '.join(terms)}). Wait for the learner. Their next message, "
+        "whatever it says, means it is saved: then, without being asked, read their summary (get_notes) and say what "
+        "is correct, wrong or missing compared with the material (with page citations; not a grade), then ask 2-3 "
+        "short check questions on this part." + form_last(ctx)
     )
     return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=data)
 
@@ -451,7 +490,7 @@ async def open_explanation_form(
         return CallToolResult(content=[TextContent(type="text", text=text)], structured_content={**data, "link": link})
     text = (
         f"Showing the explanation form for '{term}'. Wait for the learner; when they say it is saved, "
-        "get_explanation and record_explanation_feedback (correct, missing, wrong; not a grade)." + FORM_LAST
+        "get_explanation and record_explanation_feedback (correct, missing, wrong; not a grade)." + form_last(ctx)
     )
     return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=data)
 
@@ -983,13 +1022,16 @@ class ScopeEntry(BaseModel):
 
 
 @mcp.tool(annotations=READ)
-async def get_study_context(course_id: str) -> str:
+async def get_study_context(course_id: str, ctx: Context | None = None) -> str:
     """Call this first in every study session for a course or interest. For a course: what the learner prepares
     for (active kolokvij or exam, its scope in the learner's own words, specifics, exam profile from past papers),
     what is already passed (maintenance only) and recent simulations. For an interest: the learner's goal and
     progress (no exams). focus_time is the Pomodoro time the learner timed for it (effort only, not mastery).
-    When needs_setup is true, the questions to ask first."""
-    return as_json(await get_client().get(f"/courses/{course_id}/context"))
+    When needs_setup is true, the questions to ask first. app_notes (when present): how forms work in this app."""
+    context = await get_client().get(f"/courses/{course_id}/context")
+    if is_codex(ctx) and isinstance(context, dict):
+        context = {**context, "app_notes": CODEX_APP_NOTES}
+    return as_json(context)
 
 
 @mcp.tool(annotations=APPEND)

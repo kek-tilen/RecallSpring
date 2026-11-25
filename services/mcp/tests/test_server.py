@@ -11,6 +11,7 @@ import httpx
 import pytest
 from mcp import Client
 from mcp.client import advertise
+from mcp.types import Implementation
 
 from recallspring_mcp import server
 from recallspring_mcp.client import ConnectorError, RecallSpringClient
@@ -724,3 +725,32 @@ async def test_forms_draw_formulas_with_the_inlined_math_script() -> None:
         assert "/*RS_MATH*/" not in html and "RecallSpringMath" in html and "createElementNS" in html
         assert "innerHTML" not in html and html.count("<script>") == html.count("</script>") == 3  # nothing broke out
     assert "mathText(ui.prompt" in answer and "mathText(promptText, item.prompt)" in quiz
+
+
+# ---------------------------------------------------------------- owner feedback 2026-11-25
+
+
+async def test_codex_gets_forms_in_their_own_message_and_others_keep_forms_last(api: FakeApi) -> None:
+    api.route("GET", "/courses/k1/outline", 200, {"concepts": [{"id": "c1", "term": "Glycolysis"}]})
+    api.route("GET", "/courses/k1/context", 200, {"course": {"id": "k1"}, "needs_setup": False})
+    summary = {"course_id": "k1", "concept_ids": ["c1"], "title": "Lecture 3"}
+    codex = Implementation(name="codex-mcp-client", version="1")
+    async with Client(mcp, extensions=APPS, client_info=codex) as client:
+        form = text_of(await client.call_tool("open_summary_form", summary))
+        context = json.loads(text_of(await client.call_tool("get_study_context", {"course_id": "k1"})))
+    assert "In Codex this form is shown above your reply" in form and "write nothing after it" not in form
+    assert "two messages" in context["app_notes"]
+
+    claude = Implementation(name="claude-ai", version="1")
+    async with Client(mcp, extensions=APPS, client_info=claude) as client:
+        form = text_of(await client.call_tool("open_summary_form", summary))
+        context = json.loads(text_of(await client.call_tool("get_study_context", {"course_id": "k1"})))
+    assert form.endswith("The form ends your message: write nothing after it.")
+    assert "app_notes" not in context
+
+
+async def test_feedback_after_a_form_comes_unasked_and_grades_are_named() -> None:
+    async with Client(mcp) as client:
+        instructions = client.instructions or ""
+    assert "AFTER A FORM" in instructions and "Do not wait to be asked" in instructions
+    assert 'never a bare number such as "3/4"' in instructions

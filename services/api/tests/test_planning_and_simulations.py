@@ -303,6 +303,7 @@ def test_simulation_flow_persists_answers_grades_mcq_and_awaits_claude(
         },
     )
     assert batch.status_code == 200 and batch.json()["results"][0]["grade"] == 3
+    assert batch.json()["results"][0]["grade_name"] == "Solid" and "3/4" in batch.json()["tell_the_learner"]
     final = conn.get(f"/quizzes/{qid}/results").json()
     assert final["complete"] is True and final["earned_points"] == 4.0 and final["max_points"] == 8
 

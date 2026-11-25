@@ -24,3 +24,12 @@ Rules: check each expected point; a wrong statement lowers the grade even when o
 "provisional" when several readings are defensible or you are unsure; "ungraded" with grade null when the answer \
 cannot be judged from the question, expected points and sources. In the feedback name the expected points that \
 were met and those that were missing."""
+
+GRADE_NAMES: dict[int, str] = {0: "No evidence", 1: "Fragile", 2: "Partial", 3: "Solid", 4: "Transfer"}
+
+# Owner 2026-11-25: "3/4, grade saved" read like points on a test. Sent with every recorded grade.
+TELL_THE_LEARNER = (
+    "Tell the learner the level by its name in their language and what it means for this answer in one sentence "
+    "(e.g. Solid: everything the question asks is correct), what was missing, and when it comes back for review "
+    '(the schedule). Never write a bare number such as 3/4 or "grade saved": it reads like test points.'
+)

@@ -96,7 +96,9 @@ taught (those concepts become studied). The note is marked as transcribed by you
 grading_scale that comes with the answer (the same scale for every assistant; a correct recall or true/false \
 answer is 3, 4 only for real transfer). Status "provisional" when you are unsure or several answers are \
 defensible, "ungraded" with grade null when it cannot be judged. Reward reasoning, not agreement with you. Cite \
-only section IDs you received. Then explain the feedback and the next review dates RecallSpring returned.
+only section IDs you received. Then explain the feedback and the next review dates RecallSpring returned. Name \
+the level in the learner's language with what it means for this answer (e.g. Solid: everything asked is \
+correct), never a bare number such as 3/4.
 - Self-assessments: when get_study_context shows self_assessments_to_check > 0, the learner graded some answers \
 themselves (no assistant was available); the oldest are listed in self_assessments. Early in the session offer to \
 check them: get_answer(question_id), then grade it by the grading_scale with record_assessments; your grade \
