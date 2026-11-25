@@ -150,7 +150,7 @@ Tools call `/api/v1/connector/*` with a connector token, which is accepted nowhe
 | `open_answer_form` | UI | MCP App `ui://recallspring/answer-form` showing the question (no rubric) |
 | `submit_answer_from_form` | append, app-only | Called by the form (`visibility: ["app"]`): exact typed text, `captured_via = answer_form`, idempotent by `client_request_id` |
 | `submit_chat_answer` | append | Fallback when the form cannot render: `captured_via = assistant_transcription` |
-| `record_assessment` | append | Once per attempt; validated against `assessment.schema.json`; evidence refs that are not real sections of the question's course are dropped and a final grade becomes `provisional`; returns the next review date and reason |
+| `record_assessment` | append | Once per attempt; validated against `assessment.schema.json`; evidence refs that are not real sections of the question's course are dropped and a final grade becomes `provisional`; returns the next review date and reason, and `offer_harder` (level 3, concept_ids, terms, what to say) when the last two learning answers in the course were Solid or better (owner 2026-11-25) |
 | `record_session_summary` | append | Once per session |
 | `create_course` | append | New course (`POST /connector/courses`); `kind: "interest"` for personal learning without exams, description = goal |
 | `set_interest_goal` | audited update | The learner's goal for an interest (`POST /connector/courses/{id}/goal`) |

@@ -66,3 +66,49 @@ def test_the_outline_shows_it_for_studied_concepts(owner_api: Api, conn: Connect
     )
     practice = conn.get(f"/courses/{ids['course_id']}/outline").json()["concepts"][0]["practice"]
     assert (practice["next_level"], practice["highest_solid"]) == (5, 4)
+
+
+def test_two_solid_learning_answers_in_a_row_offer_harder_questions_once(owner_api: Api, conn: ConnectorApi) -> None:
+    """Owner 2026-11-25: when learning goes well, the assistant offers harder questions (3 Apply) once."""
+    from .test_planning_and_simulations import course_with_concepts
+
+    course, ids = course_with_concepts(owner_api, conn, ["Ports", "Dorking", "Hashes"], known=True)
+
+    def check(term: str, grade: int, level: int = 2) -> dict:
+        q = conn.post(
+            "/questions",
+            {
+                "course_id": course,
+                "questions": [
+                    {
+                        "concept_ids": [ids[term]],
+                        "bloom_level": level,
+                        "prompt": f"What is {term}?",
+                        "expected_points": ["x"],
+                    }
+                ],
+            },
+        ).json()["questions"][0]
+        attempt = owner_api.answer(q["id"]).json()
+        r = conn.post(
+            f"/attempts/{attempt['attempt_id']}/assessments",
+            {"status": "final", "grade": grade, "confidence": "high", "feedback": "ok", "evidence_refs": []},
+        )
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    assert "offer_harder" not in check("Ports", 3)  # one Solid answer is not a streak
+    offer = check("Dorking", 4)["offer_harder"]  # Transfer counts as Solid or better
+    assert offer["level"] == 3 and offer["level_name"] == "Apply"
+    assert sorted(offer["concept_ids"]) == sorted([ids["Ports"], ids["Dorking"]])
+    assert offer["terms"] == ["Dorking", "Ports"] and "Offer once" in offer["say"]
+    assert "offer_harder" not in check("Hashes", 3)  # the third in a row: not offered again
+    assert "offer_harder" not in check("Hashes", 2)  # Partial ends the streak
+    assert "offer_harder" not in check("Ports", 3)
+    assert "offer_harder" in check("Dorking", 3)  # a new streak of two
+    assert "offer_harder" not in check("Ports", 3, level=3)  # practice answers are not learning checks
+
+    # never above the learner's practice limit
+    assert owner_api.put(f"/courses/{course}/practice-limit", {"level": 2}).status_code == 200
+    check("Ports", 2)
+    assert "offer_harder" not in check("Dorking", 3) and "offer_harder" not in check("Hashes", 3)

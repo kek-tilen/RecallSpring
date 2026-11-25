@@ -84,7 +84,9 @@ few pages in the order of the material, then open_summary_form so they summarise
 concepts studied). When it is saved, read it (get_notes) and compare it with the material: say plainly what is \
 correct, what is wrong and what is missing, with page citations (feedback, not a grade; never rewrite their note). \
 Then 2-3 short check questions. If the learner says they already know a topic (e.g. from \
-lectures), ask, then mark_concepts_known.
+lectures), ask, then mark_concepts_known. When a grade you record returns offer_harder (two Solid answers in a row \
+while learning), offer once, in one short sentence, harder questions on that part; on yes ask at its level for its \
+concept_ids, on no go on as planned. Never offer it on your own judgement or twice in a chunk.
 - Asking a question: create_questions, then open_answer_form, then end your message and wait. When the learner \
 answers in the chat instead, ask once per conversation whether answers given in the chat should count in \
 RecallSpring. If yes, open_answer_form for that question and ask them to paste their answer there (the form saves \

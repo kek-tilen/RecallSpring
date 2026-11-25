@@ -22,7 +22,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..learning.scheduler import grade_text
-from ..models import Assessment, Attempt, Question, QuestionConcept, Quiz
+from ..models import Assessment, Attempt, Concept, Question, QuestionConcept, Quiz
 from .reviews import effective_assessment
 
 RAMP = (3, 4, 5)
@@ -109,3 +109,67 @@ def suggestions(
         if current is not None and current.grade is not None:
             graded[concept_id].append((attempt.submitted_at, level, current))
     return {cid: _suggest(graded.get(cid, []), ceiling) for cid in concept_ids}
+
+
+# ---------------------------------------------------------------- harder questions while learning (owner 2026-11-25)
+
+LEARNING_LEVELS = 2  # check questions after a summary and recall are Bloom 1-2
+OFFER_STREAK = 2  # two Solid-or-better learning answers in a row
+
+
+def harder_offer(db: Session, user_id: uuid.UUID, attempt: Attempt, ceiling: int) -> dict[str, Any] | None:
+    """When the learner's last two learning answers in a course (Bloom 1-2, not Check first) were both Solid or
+    Transfer, offer once to go on with harder questions (3 Apply) for the concepts of those answers. Offered exactly
+    when the streak reaches two, so a declined offer does not come back with every further good answer; a weaker
+    answer starts a new streak. Never above the learner's practice limit. Deterministic, no model call."""
+    question = db.get(Question, attempt.question_id)
+    if question is None or question.bloom_level > LEARNING_LEVELS or ceiling < RAMP[0]:
+        return None
+    rows = db.execute(
+        select(Attempt, Question)
+        .join(Question, Question.id == Attempt.question_id)
+        .outerjoin(Quiz, Quiz.id == Attempt.quiz_id)
+        .where(
+            Attempt.user_id == user_id,
+            Attempt.kind == "answer",
+            Question.course_id == question.course_id,
+            Question.bloom_level <= LEARNING_LEVELS,
+            or_(Quiz.id.is_(None), Quiz.mode != "diagnostic"),
+        )
+        .order_by(Attempt.submitted_at.desc(), Attempt.id.desc())
+        .limit(OFFER_STREAK + 1)
+    ).all()
+    if not rows or rows[0][0].id != attempt.id:
+        return None
+
+    def solid(a: Attempt) -> bool:
+        current = effective_assessment(
+            list(db.scalars(select(Assessment).where(Assessment.attempt_id == a.id).order_by(Assessment.created_at)))
+        )
+        return current is not None and _solid(current)
+
+    streak = rows[:OFFER_STREAK]
+    if len(streak) < OFFER_STREAK or not all(solid(a) for a, _ in streak):
+        return None
+    if len(rows) > OFFER_STREAK and solid(rows[OFFER_STREAK][0]):
+        return None  # the streak is longer: the offer was made at two
+    concept_ids = list(
+        dict.fromkeys(
+            db.scalars(
+                select(QuestionConcept.concept_id)
+                .where(QuestionConcept.question_id.in_([q.id for _, q in streak]))
+                .order_by(QuestionConcept.concept_id)
+            )
+        )
+    )
+    terms = [c.term for c in db.scalars(select(Concept).where(Concept.id.in_(concept_ids), Concept.user_id == user_id))]
+    return {
+        "level": RAMP[0],
+        "level_name": LABEL[RAMP[0]],
+        "concept_ids": [str(c) for c in concept_ids],
+        "terms": sorted(terms),
+        "say": "Two Solid answers in a row while learning. Offer once, in one short sentence, harder questions on "
+        'this part (Bloom 3 Apply), e.g. "You are doing well: want a harder question on this?". On yes ask at '
+        "level 3 for these concepts; on no go on as planned and do not offer again in this chunk. If the next "
+        "chapter may be familiar too, you may mention Check first once.",
+    }

@@ -796,6 +796,7 @@ async def test_exam_profile_v2_is_passed_through_and_confirmed_separately(api: F
     assert "confirm_exam_profile" in instructions and "not_in_material" in instructions
     assert 'use="style" unless the learner' in instructions
     assert "EVERY PAST PAPER" in instructions and "skipped_papers" in instructions
+    assert "HARDER QUESTIONS" in instructions and "offer_harder" in instructions
 
 
 async def test_plan_rationale_and_web_sources_are_passed_through(api: FakeApi) -> None:

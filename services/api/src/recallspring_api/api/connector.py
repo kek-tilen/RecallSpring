@@ -623,6 +623,10 @@ def record_one_assessment(
         "grade_name": GRADE_NAMES.get(row.grade) if row.grade is not None else None,
         "tell_the_learner": TELL_THE_LEARNER,
     }
+    course = db.get(Course, question.course_id)
+    offer = bloom.harder_offer(db, ctx.user.id, attempt, check_first.ceiling(course)) if course else None
+    if offer is not None:
+        body["offer_harder"] = offer  # owner 2026-11-25: harder questions once learning goes well
     if own is not None:
         # The learner had graded this answer themselves; tell them when the check differs by 2 or more.
         body["self_assessment"] = {
@@ -1123,6 +1127,7 @@ def record_assessments_batch(
                 "grade_name": body["grade_name"],
                 "status": latest["status"],
                 "schedule": body["schedule"],
+                **({"offer_harder": body["offer_harder"]} if "offer_harder" in body else {}),
             }
         )
     return commit_with_response(db, ctx, payload, 200, {"results": results, "tell_the_learner": TELL_THE_LEARNER})
