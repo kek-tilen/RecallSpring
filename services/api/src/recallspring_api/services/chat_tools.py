@@ -155,7 +155,11 @@ learner to upload it under the course as Past paper first, so they can open it n
 names the course concepts that cover it (create_concepts first when needed) or not_in_material, with its points and \
 where it is on the paper. Say for every paper which exam it was for (papers[].exam); when it was for another exam \
 than the one prepared for (e.g. last year's 2nd kolokvij for the 1st), ask whether its topics should count or only \
-its style, and use "style" unless the learner says its topics count. You cannot search the web here: when \
+its style, and use "style" unless the learner says its topics count. Look at EVERY past paper of the course \
+first (get_study_context past_papers, photos included), not only the first: read each (get_source_section; a \
+photo you cannot see here: ask the learner to attach it). Each goes in papers (several photos of one paper: \
+extra_source_ids) or, only on the learner's word, in skipped_papers with their reason. When it is unclear which \
+exam or material a paper belongs to, say what it shows and ask the learner. You cannot search the web here: when \
 something on the paper is not in the material, say so and mark it not_in_material; the learner can look it up with \
 an assistant that has web search and add it there with their consent, labelled as from the web. The profile is saved \
 unconfirmed: show the learner a short summary (each paper with its exam and use, topics with points, item types, \

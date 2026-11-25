@@ -59,6 +59,12 @@ Start of every study session in a course:
    for (e.g. last year's 2nd kolokvij for the 1st), ASK whether its topics should count (the material may have
    moved between kolokviji) or only its style (question types, Bloom mix, length); use="style" unless the learner
    says its topics count. Say this in the summary too.
+   EVERY PAST PAPER: before record_exam_profile look at every past paper of the course (get_study_context
+   past_papers lists them, photos included; view_image / view_page each one), not only the first. Several photos
+   may be one paper (extra_source_ids). When it is unclear which exam or which part of the material a paper
+   belongs to, tell the learner what it shows and ask; they confirm or say what to use. Leave a paper out only on
+   their word (skipped_papers with the reason). RecallSpring names papers not looked at (not_looked_at) and
+   refuses confirm_exam_profile until each is in papers or skipped_papers.
    NOT IN THE MATERIAL: when a topic on the paper, or a detail of one (e.g. a command's flag the material never
    explains), is not in the material, you may look it up on the web if this app gives you web search; otherwise say
    so and keep it not_in_material. Prefer primary sources (official documentation, the standard, the tool's
@@ -1167,6 +1173,14 @@ class PaperIn(BaseModel):
         description='"style": only its kind of questions counts (another exam, or the learner says its topics do not '
         'apply); "style_and_topics": its topics weigh too',
     )
+    extra_source_ids: list[str] = Field(
+        default_factory=list, description="further files of the same paper, e.g. its second photo or page"
+    )
+
+
+class SkippedPaper(BaseModel):
+    source_id: str = Field(description="a past_paper source of this course the analysis leaves out")
+    reason: str = Field(description='the learner\'s reason, e.g. "for the 2nd kolokvij, learner: does not apply"')
 
 
 class TopicIn(BaseModel):
@@ -1185,6 +1199,7 @@ async def record_exam_profile(
     item_types: list[ItemTypeShare],
     topics: list[TopicIn],
     papers: list[PaperIn] | None = None,
+    skipped_papers: list[SkippedPaper] | None = None,
     bloom_mix: dict[str, float] | None = None,
     example_items: list[str] | None = None,
     unreadable: list[str] | None = None,
@@ -1199,12 +1214,16 @@ async def record_exam_profile(
     papers: each paper read, with source_id (imported as past_paper in this course), a label such as the year, the
     exam it was for (exam) and use: when it was for another exam than the target (e.g. a 2nd kolokvij paper for the
     1st), ask the learner whether its topics should count or only its style, and use "style" unless they say so.
+    Look at EVERY past paper of the course first (get_study_context past_papers; view_image / view_page each one):
+    each goes in papers (several photos of one paper: extra_source_ids) or, on the learner's word only, in
+    skipped_papers with their reason. RecallSpring lists any it finds missing and refuses confirm_exam_profile.
     unreadable: what you could not make out (e.g. "points of Q4"). Saved unconfirmed: then show the learner a short
     summary and ask whether it matches; confirm_exam_profile only on their yes."""
     payload = {
         "item_types": [t.model_dump() for t in item_types],
         "topics": [t.model_dump() for t in topics],
         "papers": [p.model_dump() for p in papers or []],
+        "skipped_papers": [s.model_dump() for s in skipped_papers or []],
         "bloom_mix": bloom_mix or {},
         "example_items": example_items or [],
         "unreadable": unreadable or [],

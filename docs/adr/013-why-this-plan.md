@@ -41,6 +41,14 @@ asserted by the model.
   rationale but left out of coverage, today's topics and the topic limits, and a `style_only` limit names the
   papers. "Why this plan" also shows the assistant's own note on the analysis, as its words. Stored in the papers
   and topics JSON, so no migration.
+- **Every past paper** (added 2026-11-25, owner: an analysis read one photo of a course's past papers and missed the
+  other four). `get_study_context` lists the course's `past_papers` (not archived or removed, photos included). Each
+  goes in `papers` (several photos of one paper: `extra_source_ids`) or, only on the learner's word, in
+  `skipped_papers` with their reason; when it is unclear which exam or material a paper belongs to, the assistant
+  says what it shows and asks. RecallSpring computes `not_looked_at` (on the profile, in the record response and as a
+  rationale limit) and refuses `confirm_exam_profile` from an assistant while any remain (409
+  `papers_not_looked_at`); the learner may still confirm in the web app, which shows the warning. Migration 0030
+  adds `target_profiles.skipped_papers` (additive).
 - **Unread parts:** `unreadable` lists what the model could not make out (e.g. "points of Q4", "page 2 is a scan
   without text").
 - **Mapping checked by the server.** Every topic must name concepts of this course or be marked

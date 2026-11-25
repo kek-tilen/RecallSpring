@@ -951,6 +951,8 @@ class TargetProfile(Base):
     version: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="1", default=1)
     topics: Mapped[list[Any]] = _json_list()
     papers: Mapped[list[Any]] = _json_list()
+    # Past papers of the course left out on the learner's word: source_id and reason (0030).
+    skipped_papers: Mapped[list[Any]] = _json_list()
     unreadable: Mapped[list[Any]] = _json_list()
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     confirmed_via: Mapped[str | None] = mapped_column(String(20))

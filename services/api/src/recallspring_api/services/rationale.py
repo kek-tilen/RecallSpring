@@ -36,7 +36,7 @@ from ..models import (
 from . import check_first, readiness
 from .learning import effective_status
 from .planner import PRIORITY_RULES, today_plan
-from .targets import latest_profile, profile_view
+from .targets import latest_profile, papers_not_looked_at, profile_view
 
 POLICY = "rationale-v1"
 MAX_LISTED = 20
@@ -281,7 +281,8 @@ def rationale(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
 
     on_paper = {c["id"] for t in counted for c in t["concepts"]}
     not_on_paper = [c["term"] for c in in_scope.values() if c["id"] not in on_paper] if counted else []
-    limits = _limits(profile, topics, not_on_paper, above, limit, len(in_scope))
+    missing = [m["filename"] for m in papers_not_looked_at(db, profile)] if profile else []
+    limits = _limits(profile, topics, not_on_paper, above, limit, len(in_scope), missing)
 
     return {
         "policy_version": POLICY,
@@ -321,6 +322,7 @@ def _limits(
     above: float,
     limit: int,
     concepts: int,
+    not_looked_at: list[str] | None = None,
 ) -> list[dict[str, str]]:
     """What the basis of the plan cannot say, in the order a learner should hear it."""
     out: list[dict[str, str]] = []
@@ -351,6 +353,12 @@ def _limits(
         )
     elif profile.confirmed_at is None:
         add("unconfirmed", "You have not confirmed the analysis yet: check it against the paper.")
+    if not_looked_at:
+        add(
+            "not_looked_at",
+            f"Past papers of this course not in the analysis: {_listed(not_looked_at)}. Ask your assistant to look at "
+            "them, or tell it which ones do not apply.",
+        )
     if profile.version >= 2:
         papers = [p for p in profile.papers if isinstance(p, dict)]
         if not papers:

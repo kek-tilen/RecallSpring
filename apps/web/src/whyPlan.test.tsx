@@ -171,6 +171,24 @@ describe("Why this plan (ADR-013 §4)", () => {
     expect(row.textContent).toContain("Style only: does not change your plan");
   });
 
+  it("names past papers the analysis has not looked at and those left out on the learner's word", async () => {
+    renderWhy({
+      ...RATIONALE,
+      profile: {
+        ...PROFILE,
+        papers: [{ ...PROFILE.papers![0]!, extra_source_ids: ["s2"] }],
+        not_looked_at: [{ id: "s4", filename: "5.png" }],
+        skipped_papers: [{ source_id: "s3", reason: "for the exam, not this kolokvij", source: { id: "s3", filename: "2019.pdf", removed: false } }],
+      },
+    });
+    const note = await screen.findByRole("note");
+    expect(note.textContent).toContain("Not looked at Past papers of this course not in the analysis: 5.png.");
+    expect(within(note).getByRole("link", { name: "5.png" }).getAttribute("href")).toBe("/library/s4");
+    const section = document.getElementById("why")!;
+    expect(section.textContent).toContain("2025 · 2 files");
+    expect(section.textContent).toContain("Left out on your word: 2019.pdf (for the exam, not this kolokvij)");
+  });
+
 
   it("shows the papers, coverage by topic, today's work and the limits from the server", async () => {
     renderWhy(RATIONALE);

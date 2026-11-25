@@ -151,6 +151,10 @@ export interface TargetProfile {
   version?: number;
   topics?: ProfileTopic[];
   papers?: ProfilePaper[];
+  /** Past papers of the course left out on the learner's word (owner 2026-11-25). */
+  skipped_papers?: { source_id: string; reason: string; source: { id: string; filename: string; removed: boolean } | null }[];
+  /** Past papers of the course the analysis has not looked at. */
+  not_looked_at?: { id: string; filename: string }[];
   unreadable?: string[];
   confirmation?: "confirmed" | "unconfirmed" | "before_confirmation";
   confirmed_at?: string | null;
@@ -167,6 +171,8 @@ export interface ProfilePaper {
   exam?: string | null;
   /** "style": only its kind of questions counts; "style_and_topics": its topics weigh too. */
   use?: "style" | "style_and_topics";
+  /** Further files of the same paper, e.g. its second photo. */
+  extra_source_ids?: string[];
 }
 
 export interface ProfileTopic {

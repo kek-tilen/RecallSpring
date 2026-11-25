@@ -245,6 +245,18 @@ def confirm_profile(
             "This analysis was made before analyses were confirmed and its topics may not be linked to the material. "
             "Analyse the paper again (record_exam_profile), then ask the learner to confirm.",
         )
+    missing = papers_not_looked_at(db, profile) if via == "assistant" else []
+    if missing:
+        raise ApiError(
+            409,
+            "papers_not_looked_at",
+            "The analysis has not looked at every past paper of this course: "
+            + ", ".join(m["filename"] for m in missing)
+            + ". Look at each one, ask the learner which exam it was for when that is unclear, and record the profile "
+            "again with it in papers (further photos of the same paper in extra_source_ids) or in skipped_papers with "
+            "the learner's reason.",
+            {"not_looked_at": missing},
+        )
     if profile.confirmed_at is None:
         profile.confirmed_at = now
         profile.confirmed_via = via
@@ -282,6 +294,36 @@ def _source_ref(db: Session, source_id: Any) -> dict[str, Any] | None:
     return {"id": str(src.id), "filename": src.filename, "removed": src.deleted_at is not None}
 
 
+def _covered(profile: TargetProfile) -> set[str]:
+    """Sources the analysis read or left out on the learner's word."""
+    ids = {str(profile.source_id)} if profile.source_id else set()
+    for p in profile.papers or []:
+        if isinstance(p, dict):
+            ids.update(str(i) for i in [p.get("source_id"), *(p.get("extra_source_ids") or [])] if i)
+    ids.update(str(s.get("source_id")) for s in profile.skipped_papers or [] if isinstance(s, dict))
+    return ids
+
+
+def papers_not_looked_at(db: Session, profile: TargetProfile) -> list[dict[str, Any]]:
+    """Past papers of the exam's course (not archived or removed) that the analysis neither read nor left out on the
+    learner's word (owner 2026-11-25: an analysis read one photo and missed four)."""
+    target = db.get(StudyTarget, profile.target_id)
+    if target is None:
+        return []
+    covered = _covered(profile)
+    rows = db.scalars(
+        select(Source)
+        .where(
+            Source.course_id == target.course_id,
+            Source.category == "past_paper",
+            Source.deleted_at.is_(None),
+            Source.archived_at.is_(None),
+        )
+        .order_by(Source.filename)
+    )
+    return [{"id": str(s.id), "filename": s.filename} for s in rows if str(s.id) not in covered]
+
+
 def profile_view(db: Session, profile: TargetProfile | None) -> dict[str, Any] | None:
     if profile is None:
         return None
@@ -310,6 +352,13 @@ def profile_view(db: Session, profile: TargetProfile | None) -> dict[str, Any] |
         # v2 (ADR-013): topics with points/share, concepts, place on the paper, papers, computed share and weight
         "topics": profile.topics,
         "papers": [{**p, "source": _source_ref(db, p.get("source_id"))} for p in profile.papers if isinstance(p, dict)],
+        # Past papers left out on the learner's word, and those of the course the analysis has not looked at.
+        "skipped_papers": [
+            {**s, "source": _source_ref(db, s.get("source_id"))}
+            for s in profile.skipped_papers or []
+            if isinstance(s, dict)
+        ],
+        "not_looked_at": papers_not_looked_at(db, profile),
         "unreadable": profile.unreadable,
         # confirmed / unconfirmed, or before_confirmation for analyses made before ADR-013
         "confirmation": confirmation,
@@ -443,6 +492,21 @@ def study_context(db: Session, course: Course, today: date, style_percent: int =
         ],
         "learning": _learning_counts(db, active) if active else None,
         "explain_plan": _explain_plan(db, course, active),
+        # Every past paper of the course (owner 2026-11-25): an analysis looks at each one or leaves it out on the
+        # learner's word; photos of one paper may be several files.
+        "past_papers": [
+            {"id": str(s.id), "filename": s.filename, "kind": s.kind}
+            for s in db.scalars(
+                select(Source)
+                .where(
+                    Source.course_id == course.id,
+                    Source.category == "past_paper",
+                    Source.deleted_at.is_(None),
+                    Source.archived_at.is_(None),
+                )
+                .order_by(Source.filename)
+            )
+        ],
         "rules": [
             "Learn first: concepts that are not_studied are taught (explain, then the learner summarises in the "
             "summary form) before any practice or simulation. RecallSpring refuses practice on unstudied concepts "

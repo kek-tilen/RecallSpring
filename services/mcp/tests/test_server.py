@@ -789,11 +789,13 @@ async def test_exam_profile_v2_is_passed_through_and_confirmed_separately(api: F
         "duration_minutes": None,
         "exam": "2. kolokvij 2026",
         "use": "style",
+        "extra_source_ids": [],
     }
     assert json.loads(api.requests[1].content) == {"profile_id": "p1"}
     assert "only on their yes" in tools["record_exam_profile"].description
     assert "confirm_exam_profile" in instructions and "not_in_material" in instructions
     assert 'use="style" unless the learner' in instructions
+    assert "EVERY PAST PAPER" in instructions and "skipped_papers" in instructions
 
 
 async def test_plan_rationale_and_web_sources_are_passed_through(api: FakeApi) -> None:

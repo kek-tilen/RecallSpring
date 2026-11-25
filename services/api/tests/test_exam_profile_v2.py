@@ -9,6 +9,7 @@ from recallspring_api.models import AuditEvent, TargetProfile
 from recallspring_api.services.targets import topic_weight
 
 from .conftest import Api, ConnectorApi
+from .office import PNG_1PX
 from .pdfs import make_pdf
 from .test_planning_and_simulations import course_with_concepts, target
 
@@ -168,3 +169,68 @@ def test_a_paper_of_another_exam_can_count_for_its_style_only(owner_api: Api, co
     assert "2026 (2. kolokvij 2026)" in by_code["style_only"] and "2025" not in by_code["style_only"]
     assert all(i["topics"] == [] or i["topics"][0]["label"] != "Dorking" for i in body["today"]["items"])
     assert conn.post(f"/targets/{t['id']}/profile", {"papers": [{"label": "x", "use": "topics"}]}).status_code == 422
+
+
+def test_every_past_paper_is_looked_at_or_left_out_on_the_learners_word(owner_api: Api, conn: ConnectorApi) -> None:
+    """Owner 2026-11-25: an analysis read one photo of a course's past papers and missed the other four."""
+    course, ids, t = _exam(owner_api, conn)
+
+    def upload(name: str, content: bytes) -> str:
+        r = owner_api.upload(course, name, content, category="past_paper")
+        assert r.status_code == 201, r.text
+        return r.json()["id"]
+
+    first = upload("3.jpg.png", PNG_1PX)
+    page2 = upload("4.png", PNG_1PX + b"\x00")
+    other = upload("5.png", PNG_1PX + b"\x00\x00")
+    old = upload("2019.pdf", make_pdf(["Old paper"]))
+    assert owner_api.post("/sources/archive", {"source_ids": [old], "archived": True}).status_code == 200
+    papers = conn.get(f"/courses/{course}/context").json()["past_papers"]
+    assert [p["filename"] for p in papers] == ["3.jpg.png", "4.png", "5.png"]  # archived papers are not listed
+
+    ports = {"label": "Ports", "concept_ids": [ids["Ports"]]}
+    r = conn.post(f"/targets/{t['id']}/profile", {"papers": [{"source_id": first, "label": "2026"}], "topics": [ports]})
+    assert r.status_code == 201, r.text
+    assert [m["filename"] for m in r.json()["not_looked_at"]] == ["4.png", "5.png"]
+    assert r.json()["confirm"].startswith("These past papers of the course are not in the analysis: 4.png, 5.png.")
+    profile_id = r.json()["profile"]["id"]
+    refused = conn.post(f"/targets/{t['id']}/profile/confirm", {"profile_id": profile_id})
+    assert refused.status_code == 409 and refused.json()["code"] == "papers_not_looked_at"
+    limits = {x["code"]: x["message"] for x in owner_api.get(f"/targets/{t['id']}/rationale").json()["limits"]}
+    assert "4.png and 5.png" in limits["not_looked_at"] or "4.png, 5.png" in limits["not_looked_at"]
+
+    # the second photo is the same paper; the third is left out on the learner's word
+    r = conn.post(
+        f"/targets/{t['id']}/profile",
+        {
+            "papers": [{"source_id": first, "label": "2026", "extra_source_ids": [page2]}],
+            "skipped_papers": [{"source_id": other, "reason": "2nd kolokvij; learner: does not apply"}],
+            "topics": [ports],
+        },
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["not_looked_at"] == [] and not body["confirm"].startswith("These past papers")
+    assert body["profile"]["skipped_papers"][0]["source"]["filename"] == "5.png"
+    ok = conn.post(f"/targets/{t['id']}/profile/confirm", {"profile_id": body["profile"]["id"]})
+    assert ok.status_code == 200, ok.text
+    assert "not_looked_at" not in {x["code"] for x in owner_api.get(f"/targets/{t['id']}/rationale").json()["limits"]}
+
+    # a paper of another course is refused as a further page
+    other_course, _ = course_with_concepts(owner_api, conn, ["Y"], title="Statistika 2")
+    foreign = owner_api.upload(other_course, "x.png", PNG_1PX + b"\x01", category="past_paper").json()["id"]
+    bad = conn.post(
+        f"/targets/{t['id']}/profile",
+        {"papers": [{"source_id": first, "extra_source_ids": [foreign]}], "topics": [ports]},
+    )
+    assert bad.status_code == 422 and bad.json()["code"] == "source_not_in_course"
+
+
+def test_the_learner_may_confirm_in_the_web_app_with_papers_not_looked_at(owner_api: Api, conn: ConnectorApi) -> None:
+    course, ids, t = _exam(owner_api, conn)
+    owner_api.upload(course, "4.png", PNG_1PX, category="past_paper")
+    r = conn.post(f"/targets/{t['id']}/profile", {"topics": [{"label": "Ports", "concept_ids": [ids["Ports"]]}]})
+    profile = r.json()["profile"]
+    assert [m["filename"] for m in profile["not_looked_at"]] == ["4.png"]
+    ok = owner_api.post(f"/targets/{t['id']}/profile/confirm", {"profile_id": profile["id"]})
+    assert ok.status_code == 200 and ok.json()["profile"]["confirmed_via"] == "web"

@@ -881,6 +881,17 @@ class ProfilePaperIn(BaseModel):
     # "style_and_topics" = its topics weigh too. ADR-013 §1, added 2026-11-25.
     exam: str | None = Field(default=None, min_length=1, max_length=80)
     use: Literal["style", "style_and_topics"] = "style_and_topics"
+    # Further files of the same paper, e.g. a second photo or page (owner 2026-11-25).
+    extra_source_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+
+
+class SkippedPaperIn(BaseModel):
+    """A past paper of the course the analysis leaves out, with the learner's reason (owner 2026-11-25)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: uuid.UUID
+    reason: str = Field(min_length=1, max_length=200)
 
 
 class ProfileTopicIn(BaseModel):
@@ -904,6 +915,8 @@ class TargetProfileIn(BaseModel):
 
     source_id: uuid.UUID | None = None
     papers: list[ProfilePaperIn] = Field(default_factory=list, max_length=10)
+    # Past papers of the course left out on the learner's word; every other past paper must be in papers.
+    skipped_papers: list[SkippedPaperIn] = Field(default_factory=list, max_length=40)
     item_types: list[ItemType] = Field(default_factory=list, max_length=12)
     bloom_mix: dict[str, float] = Field(default_factory=dict)
     topics: list[ProfileTopicIn] = Field(default_factory=list, max_length=60)

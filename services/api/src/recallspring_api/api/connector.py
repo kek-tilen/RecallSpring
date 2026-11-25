@@ -101,7 +101,13 @@ from ..services.note_refs import references as note_references
 from ..services.ownership import course_alive, owned
 from ..services.planner import today_plan
 from ..services.reviews import concept_ids_for_question, recompute, review_queue
-from ..services.targets import check_profile_topics, computed_topics, study_context, target_view
+from ..services.targets import (
+    check_profile_topics,
+    computed_topics,
+    papers_not_looked_at,
+    study_context,
+    target_view,
+)
 from ..services.targets import confirm_profile as confirm_exam_profile
 from .attempts import save_attempt
 from .questions import _add_question, _course_concepts, question_view
@@ -861,6 +867,9 @@ def record_profile(
             paper = owned(db, Source, paper_in.source_id, ctx.user.id)
             if paper.course_id != target.course_id:
                 raise ApiError(422, "source_not_in_course", "The old paper must be material of this exam's course.")
+    for source_id in [i for p in papers for i in p.extra_source_ids] + [s.source_id for s in payload.skipped_papers]:
+        if owned(db, Source, source_id, ctx.user.id).course_id != target.course_id:
+            raise ApiError(422, "source_not_in_course", "The old paper must be material of this exam's course.")
     check_profile_topics(db, ctx.user, target.course_id, payload.topics, papers)
     profile = TargetProfile(
         user_id=ctx.user.id,
@@ -876,6 +885,7 @@ def record_profile(
         version=2,
         topics=computed_topics(payload.topics, papers),
         papers=[p.model_dump(mode="json") for p in papers],
+        skipped_papers=[s.model_dump(mode="json") for s in payload.skipped_papers],
         unreadable=payload.unreadable,
     )
     db.add(profile)
@@ -890,7 +900,19 @@ def record_profile(
         request_id=ctx.request_id,
     )
     body = target_view(db, target, _today(ctx))
-    body["confirm"] = (
+    missing = papers_not_looked_at(db, profile)
+    body["not_looked_at"] = missing
+    check = (
+        "These past papers of the course are not in the analysis: "
+        + ", ".join(m["filename"] for m in missing)
+        + ". Look at each one now (view_image / view_page). Tell the learner what each shows and, when it is unclear "
+        "which exam or material it belongs to, ask them. Then record the profile again with every paper in papers "
+        "(further photos of the same paper in extra_source_ids) or in skipped_papers with the learner's reason. "
+        "confirm_exam_profile is refused until then. "
+        if missing
+        else ""
+    )
+    body["confirm"] = check + (
         "Saved unconfirmed. Show the learner a short summary (each paper with the exam it was for and whether its "
         "topics count or only its style; topics with points and where they are on the paper, item types, Bloom mix, "
         "what you could not read) and ask whether it matches what they know about this exam. "

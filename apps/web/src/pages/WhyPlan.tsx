@@ -63,6 +63,49 @@ const USE: Record<string, string> = { style: "only its kind of questions counts"
 /** The old papers behind the analysis, each linked when RecallSpring has a copy, with the exam it was for and how it
  * is used (ADR-013 §1). */
 export function Papers({ profile }: { profile: TargetProfile }) {
+  return (
+    <>
+      <PaperList profile={profile} />
+      <PapersLeftOut profile={profile} />
+    </>
+  );
+}
+
+/** Past papers left out on the learner's word, and those of the course the analysis has not looked at (owner
+ * 2026-11-25: an analysis read one photo and missed four). */
+function PapersLeftOut({ profile }: { profile: TargetProfile }) {
+  const skipped = profile.skipped_papers ?? [];
+  const missing = profile.not_looked_at ?? [];
+  return (
+    <>
+      {skipped.length > 0 && (
+        <div className="small muted" style={{ marginTop: 4 }}>
+          Left out on your word:{" "}
+          {skipped.map((s, i) => (
+            <span key={s.source_id}>
+              {i > 0 && "; "}
+              {s.source && !s.source.removed ? <Link to={`/library/${s.source.id}`}>{s.source.filename}</Link> : "a paper"} ({s.reason})
+            </span>
+          ))}
+        </div>
+      )}
+      {missing.length > 0 && (
+        <div className="small" role="note" style={{ marginTop: 4 }}>
+          <span className="chip warn">Not looked at</span> Past papers of this course not in the analysis:{" "}
+          {missing.map((m, i) => (
+            <span key={m.id}>
+              {i > 0 && ", "}
+              <Link to={`/library/${m.id}`}>{m.filename}</Link>
+            </span>
+          ))}
+          . Ask your assistant to look at them, or tell it which ones do not apply.
+        </div>
+      )}
+    </>
+  );
+}
+
+function PaperList({ profile }: { profile: TargetProfile }) {
   const papers = profile.papers ?? [];
   if (papers.length === 0) {
     if (profile.source && !profile.source.removed) return <Link to={`/library/${profile.source.id}`}>{profile.source.filename}</Link>;
@@ -78,6 +121,7 @@ export function Papers({ profile }: { profile: TargetProfile }) {
         return (
           <li key={i}>
             {p.source && !p.source.removed ? <Link to={`/library/${p.source.id}`}>{name}</Link> : name}
+            {(p.extra_source_ids?.length ?? 0) > 0 && <span className="muted"> · {plural((p.extra_source_ids?.length ?? 0) + 1, "file")}</span>}
             {p.exam && <span> · for {p.exam}</span>}
             {extra && <span className="muted"> · {extra}</span>}
             {(!p.source || p.source.removed) && <span className="muted"> · no copy in RecallSpring</span>}
