@@ -17,18 +17,18 @@ const group = (id: string, title: string) => ({
 });
 const READINESS = { groups: [group("s1", "Intro.pdf"), group("s2", "Windows.pptx")] } as unknown as ExamReadiness;
 
-describe("By material: collapse and expand all (owner 2026-11-25)", () => {
-  it("closes every block at once and opens them again", () => {
+describe("By material: collapsed by default, expand and collapse all (owner 2026-11-25)", () => {
+  it("starts collapsed, opens every block at once and closes them again", () => {
     const { container } = render(
       <MemoryRouter>
         <MaterialCard r={READINESS} />
       </MemoryRouter>,
     );
     const blocks = () => Array.from(container.querySelectorAll("details")).map((d) => d.open);
-    expect(blocks()).toEqual([true, true]);
-    fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
     expect(blocks()).toEqual([false, false]);
     fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
     expect(blocks()).toEqual([true, true]);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
+    expect(blocks()).toEqual([false, false]);
   });
 });

@@ -85,13 +85,11 @@ function ConceptRow({ c }: { c: ReadinessConcept }) {
 
 type Group = ExamReadiness["groups"][number];
 const groupKey = (g: Group) => `${g.kind}-${g.id ?? "none"}`;
-/** A block starts open while anything in it is not yet "Getting there" or "Solid". */
-const startsOpen = (g: Group) => g.counts.solid + g.counts.developing < g.concepts.length;
 
 /** "By material" with Collapse all / Expand all (owner 2026-11-25). */
 export function MaterialCard({ r }: { r: ExamReadiness }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const isOpen = (g: Group) => open[groupKey(g)] ?? startsOpen(g);
+  const isOpen = (g: Group) => open[groupKey(g)] ?? false; // every block starts collapsed (owner 2026-11-25)
   const anyOpen = r.groups.some(isOpen);
   const setAll = (value: boolean) => setOpen(Object.fromEntries(r.groups.map((g) => [groupKey(g), value])));
   const action =
