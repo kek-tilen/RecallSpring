@@ -196,7 +196,9 @@ function Today({ r }: { r: PlanRationale }) {
               {CATEGORY_WORD[i.category] ?? i.category} <Link to={`/concepts/${i.concept_id}`}>{i.term}</Link>
               <span className="muted"> · {i.minutes} min</span>
               <div className="tiny muted">
-                {i.topics.length > 0 ? `On the paper: ${i.topics.map((t) => `${t.label} (${size(t)})`).join(", ")}` : "Not on the old papers"}
+                {i.topics.length > 0
+                  ? `On the paper: ${i.topics.map((t) => (t.points != null || t.share != null ? `${t.label} (${size(t)})` : t.label)).join(", ")}`
+                  : "Not on the old papers"}
                 {" — "}
                 {i.why}
               </div>
@@ -293,7 +295,6 @@ export function WhyThisPlanBody({ r }: { r: PlanRationale }) {
           </ul>
         </section>
       )}
-      <p className="tiny muted">{r.note}</p>
     </div>
   );
 }

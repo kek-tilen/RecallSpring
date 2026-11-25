@@ -170,6 +170,7 @@ describe("Why this plan (ADR-013 §4)", () => {
     const limits = within(screen.getByRole("heading", { name: "What this cannot tell you" }).parentElement!);
     expect(limits.getAllByRole("listitem").map((li) => li.textContent)).toEqual(RATIONALE.limits.map((l) => l.message));
     expect(section.textContent).toContain("In this exam's scope but not on the old papers: Hashing.");
+    expect(section.textContent).not.toContain("not a grade prediction"); // the page says it once, below
   });
 
   it("lets the learner confirm the latest analysis", async () => {
