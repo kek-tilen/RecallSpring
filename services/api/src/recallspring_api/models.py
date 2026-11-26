@@ -21,6 +21,7 @@ from sqlalchemy import (
     Index,
     Integer,
     MetaData,
+    Numeric,
     SmallInteger,
     String,
     Text,
@@ -894,6 +895,8 @@ class StudyTarget(Base):
     scope_description: Mapped[str] = mapped_column(Text, nullable=False)  # the learner's own words, verbatim
     notes: Mapped[str | None] = mapped_column(Text)  # specifics: allowed aids, question types, emphasis …
     goal: Mapped[str] = mapped_column(String(20), nullable=False, server_default="long_term", default="long_term")
+    # ADR-014 §4 "Before this exam": the learner's target for the exam morning; NULL = the goal's default.
+    exam_retention: Mapped[float | None] = mapped_column(Numeric(3, 2, asdecimal=False))
     revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
@@ -903,6 +906,7 @@ class StudyTarget(Base):
         CheckConstraint("kind IN ('kolokvij','izpit','other')", name="kind"),
         CheckConstraint("status IN ('upcoming','passed','failed','cancelled')", name="status"),
         CheckConstraint("goal IN ('exam_only','long_term')", name="goal"),
+        CheckConstraint("exam_retention IS NULL OR exam_retention BETWEEN 0.85 AND 0.97", name="exam_retention"),
     )
 
 
