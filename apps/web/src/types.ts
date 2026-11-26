@@ -131,8 +131,12 @@ export interface PracticeLimit {
   level: number;
   label: string;
   set_by_learner: boolean;
+  /** without a limit of the learner's own: why it is 5, or 6 when an exam paper asks for Create (owner 2026-11-26) */
+  automatic?: string | null;
   exam_profile_above: { target_id: string; target: string; share: number; confirmed: boolean } | null;
   warning: string | null;
+  /** at 6 Create: use a more capable model */
+  model_tip?: string | null;
 }
 
 export interface TargetProfile {

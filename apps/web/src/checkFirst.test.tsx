@@ -89,6 +89,36 @@ describe("Check first", () => {
     expect(init?.method).toBe("PUT");
     expect(JSON.parse(String(init?.body))).toEqual({ level: 4, keep_despite_exam: true });
   });
+
+  it("offers Automatic and 6 Create, and recommends a more capable model at 6 (owner 2026-11-26)", async () => {
+    const fetch = mockFetch(() => ({ level: 6, label: "Create", set_by_learner: true, exam_profile_above: null, warning: null }));
+    wrap(
+      <PracticeLimitControl
+        courseId="c1"
+        limit={{
+          level: 6,
+          label: "Create",
+          set_by_learner: false,
+          automatic: "6 Create, because the 1st midterm paper has Create questions.",
+          exam_profile_above: null,
+          warning: null,
+          model_tip: "Bloom 6 Create asks you to design something of your own: use the most capable model.",
+        }}
+      />,
+    );
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    expect(select.value).toBe("auto");
+    expect(screen.getByRole("option", { name: "Automatic (6 Create)" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "6 Create" })).toBeTruthy();
+    expect(screen.getByText(/because the 1st midterm paper/)).toBeTruthy();
+    expect(screen.getByRole("note").textContent).toContain("most capable model");
+    fireEvent.change(select, { target: { value: "5" } });
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(JSON.parse(String(fetch.mock.calls[0]![1]?.body))).toEqual({ level: 5 });
+    fireEvent.change(select, { target: { value: "auto" } });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(String(fetch.mock.calls[1]![1]?.body))).toEqual({ level: null });
+  });
 });
 
 describe("I'm guessing", () => {

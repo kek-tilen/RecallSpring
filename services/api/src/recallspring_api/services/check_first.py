@@ -16,8 +16,10 @@ Each concept gets a result from its latest submitted check:
 A check asks each concept at its current level: Understand (2) before it is studied, otherwise the next level of
 its practice ramp (services/bloom.py), never above the practice limit. Check answers never change the ramp.
 
-The practice limit (``courses.bloom_ceiling``, 2-5) caps practice, simulations and checks. When an exam profile of
-the course has questions above it, RecallSpring says so until the learner confirms the limit on purpose.
+The practice limit (``courses.bloom_ceiling``, 2-6) caps practice, simulations and checks. Without one it is 5
+Evaluate, or 6 Create while an upcoming exam's profile has Bloom 6 questions (owner notes 2026-11-26). When an exam
+profile of the course has questions above the limit, RecallSpring says so until the learner confirms the limit on
+purpose. At 6 it also recommends a more capable model.
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import clock
 from ..errors import ApiError
 from ..models import (
     Assessment,
@@ -54,7 +57,7 @@ CLOSED_UNITS = 1  # a correct closed answer: half a green
 GREEN_UNITS = 2
 CHAPTER_MAX = 12  # concepts in one chapter check
 EVERYTHING_MAX = 15  # concepts in "a bit of everything"
-LEVEL_LABEL = {2: "Understand", 3: "Apply", 4: "Analyze", 5: "Evaluate"}
+LEVEL_LABEL = bloom.LABEL
 RESULT_LABEL = {"green": "Already know it", "yellow": "Partly", "red": "Not yet", "pending": "Waiting for a grade"}
 _CLOSED_TYPE = re.compile(r"multiple|choice|mcq|true|false|yes/no|izbir|obkro|drži|da/ne", re.IGNORECASE)
 
@@ -71,8 +74,34 @@ HOW = (
 # ---------------------------------------------------------------- practice limit
 
 
-def ceiling(course: Course) -> int:
-    return course.bloom_ceiling or bloom.MAX_LEVEL
+def _share_at(profile_mix: dict[str, Any], level: int) -> float:
+    total = 0.0
+    for key, share in (profile_mix or {}).items():
+        try:
+            if int(str(key).strip()) == level:
+                total += float(share)
+        except (TypeError, ValueError):
+            continue
+    return round(total, 2)
+
+
+def exam_asks_create(db: Session, course: Course, today: date | None = None) -> dict[str, Any] | None:
+    """The first upcoming exam whose profile has Bloom 6 Create questions, or None."""
+    today = today or clock.now().date()
+    for target in targets.live_targets(db, course.id):
+        if target.status != "upcoming" or target.due_date < today:
+            continue
+        profile = targets.latest_profile(db, target.id)
+        if profile is not None and _share_at(profile.bloom_mix, bloom.CREATE) > 0:
+            return {"target_id": str(target.id), "target": target.name, "share": _share_at(profile.bloom_mix, 6)}
+    return None
+
+
+def ceiling(db: Session, course: Course, today: date | None = None) -> int:
+    """The learner's limit, else 5 Evaluate, or 6 Create while an upcoming exam paper asks for it."""
+    if course.bloom_ceiling:
+        return course.bloom_ceiling
+    return bloom.CREATE if exam_asks_create(db, course, today) else bloom.DEFAULT_LEVEL
 
 
 def _share_above(profile_mix: dict[str, Any], level: int) -> float:
@@ -88,7 +117,8 @@ def _share_above(profile_mix: dict[str, Any], level: int) -> float:
 
 def practice_limit(db: Session, course: Course, today: date) -> dict[str, Any]:
     """The limit, and whether an upcoming exam's profile asks for more (until the learner confirms the limit)."""
-    level = ceiling(course)
+    level = ceiling(db, course, today)
+    create = None if course.bloom_ceiling else exam_asks_create(db, course, today)
     above = None
     for target in targets.live_targets(db, course.id):
         if target.status != "upcoming" or target.due_date < today:
@@ -113,8 +143,17 @@ def practice_limit(db: Session, course: Course, today: date) -> dict[str, Any]:
         "level": level,
         "label": LEVEL_LABEL[level],
         "set_by_learner": course.bloom_ceiling is not None,
+        # automatic: why it is 6 (an exam paper with Create questions), else 5
+        "automatic": None
+        if course.bloom_ceiling
+        else (
+            f"6 Create, because the {create['target']} paper has Create questions."
+            if create
+            else "5 Evaluate; 6 Create only when you choose it or an exam paper asks for it."
+        ),
         "exam_profile_above": above,
         "warning": warning,
+        "model_tip": bloom.CREATE_TIP if level >= bloom.CREATE else None,
     }
 
 
@@ -122,7 +161,7 @@ def require_within_limit(db: Session, user_id: uuid.UUID, course_id: uuid.UUID, 
     course = db.get(Course, course_id)
     if course is None or course.user_id != user_id:
         return
-    limit = ceiling(course)
+    limit = ceiling(db, course)
     too_high = sorted({lvl for lvl in levels if lvl > max(limit, 2)})
     if too_high:
         raise ApiError(
@@ -312,7 +351,7 @@ def plan(
 ) -> dict[str, Any]:
     """Per concept: its last check, the level and kind of question to check it with; per chapter and for
     "a bit of everything": which concepts to check (adapted to the number of concepts and the exam style)."""
-    limit = ceiling(course)
+    limit = ceiling(db, course, today)
     checks = results(db, course.user_id, [c.id for c in concepts])
     level = {c.id: min(2 if status[c.id] == "not_studied" else practice[c.id]["next_level"], limit) for c in concepts}
     share = _closed_share(db, course, today)

@@ -40,11 +40,13 @@ request:
 **"I'm guessing"** is stored with the raw answer (`attempts.guessing`). In practice simulations a guessed correct
 answer is graded 3 with low confidence, so it never lengthens a review interval.
 
-**Practice limit** (`courses.bloom_ceiling`, 2-5, empty = 5) caps practice ramps, simulations, single questions and
+**Practice limit** (`courses.bloom_ceiling`, 2-6 since migration 0034; empty = automatic: 5, or 6 Create while an
+upcoming exam's profile has Bloom 6 questions, owner notes 2026-11-26; an explicit 5 stays 5) caps practice ramps, simulations, single questions and
 checks; the server refuses higher levels (`409 above_practice_limit`). When an upcoming exam's profile has questions
 above the limit, RecallSpring shows how large that share is until the learner keeps the limit on purpose
 (`bloom_ceiling_confirmed_at`, audited); a newer profile or a new limit asks again. Without an exam profile there is
-nothing to compare and no warning.
+nothing to compare and no warning. At a limit of 6 RecallSpring adds `model_tip`: Create questions (design, plan or
+produce something of one's own) are hard to ask and to grade, so it recommends the most capable model on offer.
 
 ## Consequences
 

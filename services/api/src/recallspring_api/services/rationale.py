@@ -270,7 +270,7 @@ def rationale(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
     others = len(plan["items"]) - len(today)
 
     mix = profile.bloom_mix if profile else {}
-    limit = check_first.ceiling(course)
+    limit = check_first.ceiling(db, course)
     above = check_first._share_above(mix, limit)
     bloom = {
         "paper": mix,

@@ -225,7 +225,7 @@ def outline(course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session
     # The next practice level per concept (3 → 4 → 5, then mixed; services/bloom.py), only for studied concepts,
     # never above the learner's practice limit; and what Check first would ask (services/check_first.py).
     today = _today(ctx)
-    levels = bloom.suggestions(db, ctx.user.id, [c.id for c in rows], check_first.ceiling(course))
+    levels = bloom.suggestions(db, ctx.user.id, [c.id for c in rows], check_first.ceiling(db, course))
     states = {c.id: db.get(ReviewState, (ctx.user.id, c.id)) for c in rows}
     statuses = {c.id: effective_status(c, states[c.id] is not None) for c in rows}
     check = check_first.plan(db, course, rows, statuses, levels, today)
@@ -628,7 +628,7 @@ def record_one_assessment(
         "tell_the_learner": TELL_THE_LEARNER,
     }
     course = db.get(Course, question.course_id)
-    offer = bloom.harder_offer(db, ctx.user.id, attempt, check_first.ceiling(course)) if course else None
+    offer = bloom.harder_offer(db, ctx.user.id, attempt, check_first.ceiling(db, course)) if course else None
     if offer is not None:
         body["offer_harder"] = offer  # owner 2026-11-25: harder questions once learning goes well
     again = relearn.offer(db, ctx.user, attempt, now)

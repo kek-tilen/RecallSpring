@@ -104,18 +104,20 @@ export function CheckFirstPanel({ o }: { o: CourseOverview }) {
   );
 }
 
+const AUTO = "auto";
 const LEVELS = [
   { level: 2, label: "2 Understand" },
   { level: 3, label: "3 Apply" },
   { level: 4, label: "4 Analyze" },
-  { level: 5, label: "5 Evaluate (no limit)" },
+  { level: 5, label: "5 Evaluate" },
+  { level: 6, label: "6 Create" },
 ];
 
 /** The learner's practice limit: the highest Bloom level practice, simulations and checks may ask. */
 export function PracticeLimitControl({ courseId, limit }: { courseId: string; limit: PracticeLimit }) {
   const qc = useQueryClient();
   const save = useMutation({
-    mutationFn: (body: { level: number; keep_despite_exam?: boolean }) =>
+    mutationFn: (body: { level: number | null; keep_despite_exam?: boolean }) =>
       request<PracticeLimit>(`/courses/${courseId}/practice-limit`, { method: "PUT", json: body }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.course(courseId) }),
   });
@@ -125,11 +127,13 @@ export function PracticeLimitControl({ courseId, limit }: { courseId: string; li
         <span>Practise up to</span>
         <select
           style={{ width: "auto" }}
-          value={limit.level}
+          value={limit.set_by_learner ? limit.level : AUTO}
           disabled={save.isPending}
-          onChange={(e) => save.mutate({ level: Number(e.target.value) })}
+          onChange={(e) => save.mutate({ level: e.target.value === AUTO ? null : Number(e.target.value) })}
           aria-describedby="practice-limit-hint"
         >
+          {/* owner notes 2026-11-26: automatic is 5, or 6 Create while an exam paper asks for it */}
+          <option value={AUTO}>Automatic ({limit.set_by_learner ? "5 or 6" : `${limit.level} ${limit.label}`})</option>
           {LEVELS.map((l) => (
             <option key={l.level} value={l.level}>
               {l.label}
@@ -138,8 +142,14 @@ export function PracticeLimitControl({ courseId, limit }: { courseId: string; li
         </select>
       </label>
       <span id="practice-limit-hint" className="tiny muted">
-        Bloom level: practice climbs 3 Apply → 4 Analyze → 5 Evaluate, never above your limit.
+        Bloom level: practice climbs 3 Apply → 4 Analyze → 5 Evaluate (→ 6 Create at a limit of 6), never above your limit.
+        {!limit.set_by_learner && limit.automatic ? ` Automatic: ${limit.automatic}` : ""}
       </span>
+      {limit.model_tip && (
+        <p className="notice small" role="note" style={{ margin: 0 }}>
+          {limit.model_tip}
+        </p>
+      )}
       {limit.warning && (
         <div className="notice warn small stack" style={{ gap: 6 }} role="status">
           <span>{limit.warning}</span>

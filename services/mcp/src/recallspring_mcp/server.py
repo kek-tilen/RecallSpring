@@ -127,11 +127,15 @@ Start of every study session in a course:
 4. Practice and simulations for studied material: create_quiz in the style of the exam profile (the past-paper /
    deeper share is in get_study_context), then open_quiz and wait. Bloom levels: with an exam profile follow its
    Bloom mix; without one (or for concepts it does not cover) use each concept's practice.next_level from
-   get_course_outline. RecallSpring ramps 3 Apply -> 4 Analyze -> 5 Evaluate as final answers reach Solid, steps
-   back after a 0-1 answer, and once 5 is solid suggests mixed levels (the least recently practised); a quiz mixes
-   concepts and levels rather than one level only. Never go above practice_limit.level (the learner's choice;
-   RecallSpring refuses higher levels). If practice_limit.warning is set, explain it once (the exam paper asks
-   for higher levels) and let the learner decide; they can keep the limit on the course page. Single questions:
+   get_course_outline. RecallSpring ramps 3 Apply -> 4 Analyze -> 5 Evaluate (-> 6 Create only when
+   practice_limit.level is 6) as final answers reach Solid, steps back after a 0-1 answer, and once the top level
+   is solid suggests mixed levels (the least recently practised); a quiz mixes concepts and levels rather than one
+   level only. Never go above practice_limit.level (the learner's choice, or automatic: 5, or 6 while an exam paper
+   asks for Create; RecallSpring refuses higher levels). If practice_limit.warning is set, explain it once (the exam
+   paper asks for higher levels) and let the learner decide; they can keep the limit on the course page. BLOOM 6
+   CREATE: the learner designs, plans or produces something of their own; grade it by the scale against the
+   expected points. If practice_limit.model_tip is set, tell the learner once that a more capable model (a
+   thinking or reasoning model) asks and grades these better. Single questions:
    create_questions + open_answer_form. If your app cannot show RecallSpring's forms, these tools return a
    RecallSpring link instead: give it to the learner, wait until they say they answered, then call get_answer (or
    get_quiz_results).

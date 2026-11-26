@@ -1,12 +1,15 @@
 """Which Bloom level to practise next for a concept (owner decision 2026-11-22), worked out from graded answers
 without any model call.
 
-Practice ramps 3 Apply → 4 Analyze → 5 Evaluate: a level counts as reached with a final Solid (3) or Transfer (4)
+Practice ramps 3 Apply → 4 Analyze → 5 Evaluate (→ 6 Create only when the practice limit is 6): a level counts as
+reached with a final Solid (3) or Transfer (4)
 grade from an assistant or the learner's correction. A 0-1 answer steps back one level (never below 3); provisional
-and self-assessed grades never move the ramp up. Once level 5 is reached, practice is mixed: RecallSpring suggests
-the level among 3-5 that was practised least recently, so earlier levels keep coming back. An exam profile's Bloom
+and self-assessed grades never move the ramp up. Once the top level is reached, practice is mixed: RecallSpring
+suggests the level that was practised least recently, so earlier levels keep coming back. An exam profile's Bloom
 mix, when the course has one, takes precedence (the assistants' instructions say so); this is the default without it.
-The learner's practice limit (``courses.bloom_ceiling``, 2-5) caps both: the ramp then ends, and mixes, at the limit.
+The practice limit (``courses.bloom_ceiling``, 2-6; services/check_first.py ``ceiling``) caps both: the ramp then
+ends, and mixes, at the limit. Without one it is 5, or 6 while an upcoming exam paper asks for Create (owner notes
+2026-11-26).
 Levels 1-2 (recall and the check questions after a summary) belong to learning, not to the ramp, and Check first
 (diagnostic) answers never move it.
 """
@@ -25,9 +28,16 @@ from ..learning.scheduler import grade_text
 from ..models import Assessment, Attempt, Concept, Question, QuestionConcept, Quiz
 from .reviews import effective_assessment
 
-RAMP = (3, 4, 5)
-LABEL = {2: "Understand", 3: "Apply", 4: "Analyze", 5: "Evaluate"}
-MAX_LEVEL = 5
+RAMP = (3, 4, 5, 6)
+LABEL = {2: "Understand", 3: "Apply", 4: "Analyze", 5: "Evaluate", 6: "Create"}
+MAX_LEVEL = 6
+DEFAULT_LEVEL = 5  # the limit when the learner set none and no exam paper asks for 6 Create
+CREATE = 6
+# Owner notes 2026-11-26: at 6 Create recommend a more capable model.
+CREATE_TIP = (
+    "Bloom 6 Create asks you to design, plan or produce something of your own, and judging it well is hard: use the "
+    "most capable model your assistant offers (a thinking or reasoning model) for these questions and their grading."
+)
 
 
 def _solid(a: Assessment) -> bool:
@@ -35,9 +45,9 @@ def _solid(a: Assessment) -> bool:
     return a.grade is not None and a.grade >= 3 and a.status == "final" and a.evaluator_kind != "self"
 
 
-def _suggest(graded: list[tuple[datetime, int, Assessment]], ceiling: int = MAX_LEVEL) -> dict[str, Any]:
+def _suggest(graded: list[tuple[datetime, int, Assessment]], ceiling: int = DEFAULT_LEVEL) -> dict[str, Any]:
     """graded: (answered_at, bloom_level, effective assessment) of practice answers (level 3+), any order.
-    ceiling: the learner's practice limit (2-5); levels above it are never suggested."""
+    ceiling: the practice limit (2-6); levels above it are never suggested."""
     if ceiling < RAMP[0]:
         return {
             "next_level": ceiling,
@@ -47,7 +57,7 @@ def _suggest(graded: list[tuple[datetime, int, Assessment]], ceiling: int = MAX_
         }
     ramp = tuple(lvl for lvl in RAMP if lvl <= ceiling)
     top = ramp[-1]
-    limit = f" (your limit is {top} {LABEL[top]})" if top < MAX_LEVEL else ""
+    limit = f" (your limit is {top} {LABEL[top]})" if top < DEFAULT_LEVEL else ""
     if not graded:
         return {"next_level": 3, "phase": "ramp", "highest_solid": None, "why": "No practice yet: start with 3 Apply."}
     graded.sort(key=lambda g: g[0])
@@ -84,7 +94,7 @@ def _suggest(graded: list[tuple[datetime, int, Assessment]], ceiling: int = MAX_
 
 
 def suggestions(
-    db: Session, user_id: uuid.UUID, concept_ids: list[uuid.UUID], ceiling: int = MAX_LEVEL
+    db: Session, user_id: uuid.UUID, concept_ids: list[uuid.UUID], ceiling: int = DEFAULT_LEVEL
 ) -> dict[uuid.UUID, dict[str, Any]]:
     """The next practice level for each concept, from all graded practice answers (level 3+) linked to it."""
     if not concept_ids:

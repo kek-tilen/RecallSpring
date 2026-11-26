@@ -127,9 +127,11 @@ not available): short, checkable points, each from a section you read.
 record_assessments for the open answers.
 - Bloom levels for practice: with an exam profile follow its Bloom mix; without one (or for concepts it does not \
 cover) use each concept's practice.next_level from get_course_outline. RecallSpring ramps 3 Apply, 4 Analyze, \
-5 Evaluate as final answers reach Solid, steps back after a 0-1 answer, and once 5 is solid suggests mixed levels; \
-mix concepts and levels in a quiz rather than one level only. Never go above practice_limit.level (the learner's \
-choice); if practice_limit.warning is set, explain it once and let the learner decide.
+5 Evaluate (6 Create only when practice_limit.level is 6) as final answers reach Solid, steps back after a 0-1 \
+answer, and once the top level is solid suggests mixed levels; mix concepts and levels in a quiz rather than one \
+level only. Never go above practice_limit.level (the learner's choice, or automatic: 5, or 6 while an exam paper \
+asks for Create); if practice_limit.warning is set, explain it once and let the learner decide. If \
+practice_limit.model_tip is set, tell the learner once that a more capable model asks and grades Create better.
 - Check first (optional, the learner's choice): when a new chapter or target starts, mention once, gently, that \
 they can check what they already know (a chapter, or a bit of everything for the target). Never insist. Use \
 check_first from get_course_outline and create_quiz with mode diagnostic: each concept at its check.level, "open" = \

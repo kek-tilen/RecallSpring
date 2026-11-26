@@ -203,7 +203,12 @@ def create_concept(
 
 
 class PracticeLimitIn(BaseModel):
-    level: int | None = Field(default=None, ge=2, le=5, description="highest Bloom level to practise; null = 5")
+    level: int | None = Field(
+        default=None,
+        ge=2,
+        le=6,
+        description="highest Bloom level to practise; null = automatic (5, or 6 when an exam paper asks for it)",
+    )
     keep_despite_exam: bool = Field(
         default=False, description="the learner keeps the limit although an exam profile asks for higher levels"
     )
@@ -213,12 +218,13 @@ class PracticeLimitIn(BaseModel):
 def set_practice_limit(
     course_id: uuid.UUID, payload: PracticeLimitIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
 ) -> JSONResponse:
-    """The learner's practice limit (Bloom 2-5) for one course; it caps practice, simulations and Check first."""
+    """The learner's practice limit (Bloom 2-6, or automatic) for one course; it caps practice, simulations and
+    Check first."""
     key = {"practice_limit": str(course_id), **payload.model_dump()}
     if replay := replay_if_seen(db, ctx, key):
         return replay
     course = owned(db, Course, course_id, ctx.user.id)
-    level = None if payload.level in (None, 5) else payload.level
+    level = payload.level  # an explicit 5 stays 5: automatic would become 6 when an exam paper asks for Create
     before = course.bloom_ceiling
     course.bloom_ceiling = level
     if payload.keep_despite_exam:

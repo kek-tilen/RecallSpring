@@ -128,7 +128,10 @@ Components:
 - **Deleting a note** (owner 2026-11-21): `Delete note` on the note; a dialog names the note and says it can be restored for 30 days and that linked files stay in the Library; only `Delete note` in the dialog deletes it. Notes → `Recently deleted` lists them with `Restore`.
 - Topic context card linking to syllabus, sources and last practiced date.
 - Tutor controls: `Explain`, `Give an example`, `Show a visual`, `Quiz me`, `Check my reasoning`, `Next question`.
-- Question bar: `Bloom level 3–5`, `Mixed / Progressive`, `Closed notes / Open notes`, optional `Hint`.
+- Practice limit on the course page: `Automatic (…)` (5 Evaluate, or 6 Create while an exam paper asks for it, with
+  the reason below) or a level of the learner's own, 2 Understand to 6 Create; at 6 a note recommends a more capable
+  model (owner 2026-11-26).
+- Question bar: `Bloom level 3–6`, `Mixed / Progressive`, `Closed notes / Open notes`, optional `Hint`.
 - Attempt composer autosaves drafts but **submission is explicit**. Assessment feedback distinguished from model-generated suggestions.
 - `Why this question?` link reveals concepts, difficulty rationale and source coverage.
 
