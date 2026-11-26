@@ -106,6 +106,9 @@ class User(Base):
     practice_suggestions: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
     )
+    # How assistants explain new material by default (migration 0035, owner notes 2026-11-26): "step", "balanced",
+    # "chunks" (larger chunks) or "auto" (the assistant adapts). A course may choose its own (courses.explanation_pace).
+    explanation_pace: Mapped[str] = mapped_column(String(16), nullable=False, server_default="auto", default="auto")
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
 
@@ -117,6 +120,7 @@ class User(Base):
         CheckConstraint("maintenance_percent BETWEEN 0 AND 50", name="maintenance_percent"),
         CheckConstraint("style_percent BETWEEN 0 AND 100", name="style_percent"),
         CheckConstraint("interest_percent BETWEEN 0 AND 50", name="interest_percent"),
+        CheckConstraint("explanation_pace IN ('step','balanced','chunks','auto')", name="explanation_pace"),
     )
 
 
@@ -191,6 +195,8 @@ class Course(Base):
     # exam profile of the course asks for higher levels.
     bloom_ceiling: Mapped[int | None] = mapped_column(SmallInteger)
     bloom_ceiling_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Explanation pace for this course (migration 0035); NULL = the learner's default (users.explanation_pace).
+    explanation_pace: Mapped[str | None] = mapped_column(String(16))
     revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
@@ -203,6 +209,10 @@ class Course(Base):
             "color IS NULL OR color IN ('blue','orange','aqua','yellow','magenta','green','violet','red')", name="color"
         ),
         CheckConstraint("bloom_ceiling IS NULL OR bloom_ceiling BETWEEN 2 AND 6", name="bloom_ceiling"),
+        CheckConstraint(
+            "explanation_pace IS NULL OR explanation_pace IN ('step','balanced','chunks','auto')",
+            name="explanation_pace",
+        ),
     )
 
 
