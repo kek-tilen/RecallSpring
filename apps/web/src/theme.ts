@@ -16,7 +16,7 @@ export interface ThemeInfo {
 }
 
 export const THEMES: ThemeInfo[] = [
-  { id: "light", name: "RecallSpring White", note: "Light sage, the default", dark: false, swatch: ["#ffffff", "#edf7f4", "#24332f", "#0f766e", "#0b4a44"] },
+  { id: "light", name: "RecallSpring White", note: "Quiet cool paper with sage, the default", dark: false, swatch: ["#f6f8f9", "#ffffff", "#1f2d29", "#0f766e", "#0b4a44"] },
   { id: "dark", name: "RecallSpring Dark", note: "Dark sage", dark: true, swatch: ["#111916", "#18231f", "#e4eeea", "#5fc4b4", "#c3ede4"] },
   { id: "solarized-light", name: "Solarized Light", note: "Warm cream, low glare", dark: false, swatch: ["#fdf6e3", "#eee8d5", "#073642", "#1f6a9e", "#0d4f4a"] },
   { id: "snow-storm", name: "Snow Storm", note: "Nord light: cool arctic white and blue", dark: false, swatch: ["#eceff4", "#e5e9f0", "#2e3440", "#4a6a93", "#3b4f6b"] },

@@ -1,16 +1,18 @@
-/* Sage Study (docs/06-UX-DESIGN.md). Light first; the dark variant follows the system unless the user picks one. */
+/* Sage Study (docs/06-UX-DESIGN.md). Light first; the dark variant follows the system unless the user picks one.
+   RecallSpring White is the "quiet paper" palette of the UI direction (2026-11-27): a cool page tone (--page), white
+   raised surfaces, hairlines instead of shadows, sage only for actions and the active place. */
 :root {
   color-scheme: light;
   --bg: #ffffff;
-  --surface: #edf7f4;
-  --surface-elevated: #f8fbf9;
+  --surface: #ecf0f2;
+  --surface-elevated: #ffffff;
   --primary: #0f766e;
   --primary-hover: #115e59;
   --on-primary: #ffffff;
-  --ink: #24332f;
-  --muted: #52645c;
-  --border: #cbddd6;
-  --border-strong: #9fbdb3;
+  --ink: #1f2d29;
+  --muted: #55635e;
+  --border: #dae1e4;
+  --border-strong: #9aa9ae;
   --warning: #a56a3a;
   --warning-bg: #fbf1e8;
   --danger: #b42318;
@@ -25,8 +27,10 @@
   --ramp-2: #2a8f81;
   --ramp-3: #0b4a44;
   --gap: #ffffff;
-  --shadow: 0 1px 2px rgb(36 51 47 / 6%);
+  --shadow: none;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Headings: Newsreader, shipped with the app (@fontsource-variable/newsreader, OFL), never from a font CDN. */
+  --serif: "Newsreader Variable", Georgia, "Times New Roman", serif;
   --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 
@@ -287,7 +291,7 @@ html {
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--page, var(--bg));
   color: var(--ink);
   font-family: var(--font);
   line-height: 1.55;
@@ -304,7 +308,10 @@ h4 {
 }
 
 h1 {
-  font-size: 1.6rem;
+  font-size: 1.75rem;
+  font-family: var(--serif);
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 h2 {
@@ -5048,4 +5055,207 @@ details.c2c-version > summary {
   right: 0;
   left: auto;
   text-align: left;
+}
+
+/* ------------------------------------------------------------------ shell (UI direction, 2026-11-27)
+   Six areas with icons in the rail; on phones a top bar (symbol, Settings, Help) and a bottom bar with Today in the
+   middle. Only RecallSpring White defines the cool page tone and the sage tint; other themes fall back to their own
+   background and surface. */
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --page: #f6f8f9;
+    --tint: #e2f0eb;
+    --tint-ink: #087465;
+  }
+}
+
+:root[data-theme="light"] {
+  --page: #f6f8f9;
+  --tint: #e2f0eb;
+  --tint-ink: #087465;
+}
+
+.rail {
+  padding: 18px 12px;
+}
+
+.brand {
+  font-weight: 500;
+}
+
+.brand-name {
+  font-family: var(--serif);
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: var(--brand-mark);
+}
+
+.rail nav a svg {
+  flex: none;
+}
+
+.rail nav a.active,
+.rail-foot a.active {
+  background: var(--tint, var(--surface));
+  color: var(--tint-ink, var(--primary));
+}
+
+.rail-foot {
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 0 0;
+}
+
+.rail-foot a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 550;
+  font-size: 1rem;
+}
+
+.rail-foot .rail-settings {
+  flex: 1;
+}
+
+.rail-foot .rail-icon {
+  justify-content: center;
+  padding: 8px 10px;
+}
+
+.rail-foot a:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.phone-only,
+.tabbar {
+  display: none !important;
+}
+
+@media (max-width: 860px) {
+  .rail {
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 6px 8px 6px 12px;
+    background: var(--surface-elevated);
+  }
+
+  .rail-nav {
+    display: none !important;
+  }
+
+  .brand .brand-mark {
+    width: 24px;
+    height: 24px;
+  }
+
+  .rail-foot {
+    margin-left: auto;
+    gap: 0;
+    padding: 0;
+  }
+
+  /* Settings' section links sit under the sticky top bar and scroll sideways instead of widening the page. */
+  .settings-toc {
+    min-width: 0;
+    top: 56px;
+    background: var(--page, var(--bg));
+  }
+
+  .rail-foot a {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+    padding: 8px;
+  }
+
+  .rail-foot .rail-settings {
+    flex: none;
+  }
+
+  .rail-foot .rail-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .phone-only {
+    display: flex !important;
+  }
+
+  .tabbar {
+    display: flex !important;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    justify-content: space-around;
+    background: var(--surface-elevated);
+    border-top: 1px solid var(--border);
+    padding: 4px max(4px, env(safe-area-inset-right, 0px)) calc(4px + env(safe-area-inset-bottom, 0px))
+      max(4px, env(safe-area-inset-left, 0px));
+  }
+
+  .tabbar a {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 52px;
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.72rem;
+    font-weight: 550;
+  }
+
+  .tabbar a.active {
+    color: var(--tint-ink, var(--primary));
+  }
+
+  .tabbar .tab-today .brand-mark {
+    color: var(--muted);
+  }
+
+  .tabbar .tab-today.active .brand-mark {
+    color: var(--brand-mark);
+  }
+
+  .tab-count {
+    position: absolute;
+    top: 3px;
+    left: calc(50% + 8px);
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--primary);
+    color: var(--on-primary);
+    font-size: 0.68rem;
+    font-weight: 650;
+    line-height: 18px;
+    text-align: center;
+  }
+
+  .main {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
 }

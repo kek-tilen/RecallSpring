@@ -1,25 +1,45 @@
-import { BrandMark } from "./BrandMark";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  IconBooks,
+  IconCalendarEvent,
+  IconChartBar,
+  IconClock,
+  IconHelp,
+  IconLayoutSidebar,
+  IconMessage,
+  IconRefresh,
+  IconSchool,
+  IconSettings,
+  type Icon,
+} from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router";
-import { request } from "../api";
-import { useDashboard, useSession } from "../queries";
+import { Link, Outlet, useLocation } from "react-router";
+import { useAssistants, useDashboard, useSession } from "../queries";
+import { BrandMark } from "./BrandMark";
 import { FocusPill, PomodoroProvider } from "./Pomodoro";
 
-const NAV = [
-  { to: "/", label: "Home", end: true },
-  { to: "/courses", label: "Courses" },
-  { to: "/exams", label: "Exams" },
-  { to: "/review", label: "Review" },
-  { to: "/simulations", label: "Simulations" },
-  { to: "/library", label: "Library" },
-  { to: "/notes", label: "Notes" },
-  { to: "/chat", label: "Chat" },
-  { to: "/focus", label: "Focus" },
-  { to: "/history", label: "History" },
-  { to: "/guide", label: "Guide" },
-  { to: "/settings", label: "Settings" },
-];
+/**
+ * The app shell (UI direction, 2026-11-27): six areas instead of twelve menu items. Desktop has a rail with an icon
+ * left of every label; phones have a bottom bar with Today (the RecallSpring symbol) in the middle. Pages that moved
+ * into an area keep it highlighted, e.g. Library and Notes belong to Courses, Week to Today, Simulations to Results.
+ */
+interface Area {
+  to: string;
+  label: string;
+  icon: Icon;
+  /** Other paths that belong to this area. */
+  also?: string[];
+}
+
+const TODAY: Area = { to: "/", label: "Today", icon: IconCalendarEvent, also: ["/week"] };
+const COURSES: Area = { to: "/courses", label: "Courses", icon: IconBooks, also: ["/library", "/notes", "/concepts"] };
+const REVIEW: Area = { to: "/review", label: "Review", icon: IconRefresh };
+const EXAMS: Area = { to: "/exams", label: "Exams", icon: IconSchool };
+const RESULTS: Area = { to: "/simulations", label: "Results", icon: IconChartBar };
+const CHAT: Area = { to: "/chat", label: "Chat", icon: IconMessage };
+const FOCUS: Area = { to: "/focus", label: "Focus", icon: IconClock };
+
+/** Phone bottom bar, in this order: Today in the middle. */
+const TABS: Area[] = [REVIEW, RESULTS, TODAY, COURSES, FOCUS];
 
 const RAIL_KEY = "rs-rail";
 
@@ -31,32 +51,51 @@ function railHidden(): boolean {
   }
 }
 
-function MenuIcon() {
+function under(path: string, base: string): boolean {
+  return path === base || path.startsWith(`${base}/`);
+}
+
+export function isActive(path: string, a: Area): boolean {
+  if (a.to === "/" ? path === "/" : under(path, a.to)) return true;
+  return (a.also ?? []).some((p) => under(path, p));
+}
+
+/** Chat is shown when ChatGPT is one of the learner's assistants (chosen, in the mix or connected). */
+export function useChatShown(): boolean {
+  const user = useSession().data?.user;
+  const status = useAssistants();
+  const path = useLocation().pathname;
+  if (under(path, "/chat")) return true;
+  if (user?.assistant === "chatgpt" || user?.assistant_mix?.includes("chatgpt")) return true;
+  return !!status.data?.items.some((i) => i.key === "chatgpt" && (i.connected || i.in_mix));
+}
+
+function AreaLink({ a, path, due }: { a: Area; path: string; due?: number }) {
+  const active = isActive(path, a);
+  const Glyph = a.icon;
   return (
-    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
-      <rect x="2" y="2.5" width="14" height="13" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      <line x1="7" y1="3" x2="7" y2="15" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
+    <Link to={a.to} className={active ? "active" : undefined} aria-current={active ? "page" : undefined}>
+      <Glyph size={20} stroke={1.75} aria-hidden="true" focusable="false" />
+      <span>{a.label}</span>
+      {!!due && (
+        <span className="count" aria-label={`${due} due`}>
+          {due}
+        </span>
+      )}
+    </Link>
   );
 }
 
 export function Layout() {
-  const session = useSession();
   const dashboard = useDashboard();
-  const qc = useQueryClient();
-  const navigate = useNavigate();
+  const path = useLocation().pathname;
+  const chat = useChatShown();
   const [hidden, setHidden] = useState(railHidden);
   const showButton = useRef<HTMLButtonElement>(null);
   const hideButton = useRef<HTMLButtonElement>(null);
   const moved = useRef(false);
-  const logout = useMutation({
-    mutationFn: () => request<void>("/auth/logout", { method: "POST" }),
-    onSettled: () => {
-      qc.clear();
-      navigate("/login", { replace: true });
-    },
-  });
   const due = dashboard.data?.plan.items.filter((i) => i.category === "Review due" || i.category === "Relearn").length ?? 0;
+  const areas = [TODAY, COURSES, REVIEW, EXAMS, RESULTS, ...(chat ? [CHAT] : []), FOCUS];
 
   function toggle(next: boolean) {
     moved.current = true;
@@ -102,15 +141,15 @@ export function Layout() {
             title="Show menu (Ctrl+\)"
             onClick={() => toggle(false)}
           >
-            <MenuIcon />
+            <IconLayoutSidebar size={18} stroke={1.75} aria-hidden="true" focusable="false" />
           </button>
         )}
         <aside className="rail" id="rail">
           <div className="rail-top">
-            <NavLink to="/" className="brand" aria-label="RecallSpring home">
+            <Link to="/" className="brand" aria-label="RecallSpring, Today">
               <BrandMark />
-              RecallSpring
-            </NavLink>
+              <span className="brand-name">RecallSpring</span>
+            </Link>
             <button
               ref={hideButton}
               type="button"
@@ -121,32 +160,74 @@ export function Layout() {
               title="Hide menu (Ctrl+\)"
               onClick={() => toggle(true)}
             >
-              <MenuIcon />
+              <IconLayoutSidebar size={18} stroke={1.75} aria-hidden="true" focusable="false" />
             </button>
           </div>
           {!hidden && <FocusPill />}
-          <nav aria-label="Main">
-            {NAV.map((n) => (
-              <NavLink key={n.to} to={n.to} end={n.end}>
-                {n.label}
-                {n.to === "/review" && due > 0 && (
-                  <span className="count" aria-label={`${due} due`}>
-                    {due}
-                  </span>
-                )}
-              </NavLink>
+          <nav aria-label="Main" className="rail-nav">
+            {areas.map((a) => (
+              <AreaLink key={a.to} a={a} path={path} due={a === REVIEW ? due : undefined} />
             ))}
           </nav>
           <div className="rail-foot">
-            <span>Signed in as {session.data?.user.username}</span>
-            <button type="button" className="btn small" onClick={() => logout.mutate()} disabled={logout.isPending}>
-              Sign out
-            </button>
+            {chat && (
+              <Link
+                to="/chat"
+                className={`rail-icon phone-only${isActive(path, CHAT) ? " active" : ""}`}
+                aria-label="Chat"
+                aria-current={isActive(path, CHAT) ? "page" : undefined}
+              >
+                <IconMessage size={20} stroke={1.75} aria-hidden="true" focusable="false" />
+              </Link>
+            )}
+            <Link
+              to="/settings"
+              className={`rail-settings${under(path, "/settings") || under(path, "/history") ? " active" : ""}`}
+              aria-current={under(path, "/settings") ? "page" : undefined}
+            >
+              <IconSettings size={20} stroke={1.75} aria-hidden="true" focusable="false" />
+              <span className="rail-label">Settings</span>
+            </Link>
+            <Link
+              to="/guide"
+              className={`rail-icon${under(path, "/guide") ? " active" : ""}`}
+              aria-label="Help: the Guide"
+              title="Help: the Guide"
+              aria-current={under(path, "/guide") ? "page" : undefined}
+            >
+              <IconHelp size={20} stroke={1.75} aria-hidden="true" focusable="false" />
+            </Link>
           </div>
         </aside>
         <main className="main" id="main">
           <Outlet />
         </main>
+        <nav aria-label="Main" className="tabbar">
+          {TABS.map((a) => {
+            const active = isActive(path, a);
+            const Glyph = a.icon;
+            return (
+              <Link
+                key={a.to}
+                to={a.to}
+                className={`${a === TODAY ? "tab-today" : ""}${active ? " active" : ""}`.trim() || undefined}
+                aria-current={active ? "page" : undefined}
+              >
+                {a === TODAY ? (
+                  <BrandMark size={26} />
+                ) : (
+                  <Glyph size={22} stroke={1.75} aria-hidden="true" focusable="false" />
+                )}
+                <span>{a.label}</span>
+                {a === REVIEW && due > 0 && (
+                  <span className="tab-count" aria-label={`${due} due`}>
+                    {due}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
       </div>
     </PomodoroProvider>
   );

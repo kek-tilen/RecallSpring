@@ -5,7 +5,7 @@ import { greeting } from "./Home";
 import { ASSISTANTS } from "../assistant";
 import { request } from "../api";
 import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { bytes, dateLabel, dateTime, plural } from "../format";
 import { keys, useAssistants, useBackup, useConnector, useSession, useStudySettings } from "../queries";
 import { PreferencesEditor } from "./Import";
@@ -552,6 +552,28 @@ function ProfileForm() {
   );
 }
 
+/** Sign out (moved here from the menu, 2026-11-27): the menu keeps only the six areas, Settings and Help. */
+function SignOut() {
+  const session = useSession();
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const logout = useMutation({
+    mutationFn: () => request<void>("/auth/logout", { method: "POST" }),
+    onSettled: () => {
+      qc.clear();
+      navigate("/login", { replace: true });
+    },
+  });
+  return (
+    <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+      <span className="small">Signed in as {session.data?.user.username}</span>
+      <button type="button" className="btn small" onClick={() => logout.mutate()} disabled={logout.isPending}>
+        Sign out
+      </button>
+    </div>
+  );
+}
+
 /** The five parts of Settings, in page order (the contents beside the page link to them). */
 export const SECTIONS = [
   { id: "study", title: "Study", sub: "How much you study and how RecallSpring plans your time." },
@@ -677,6 +699,9 @@ export function SettingsPage() {
             <div className="grid cols-2" style={{ alignItems: "start" }}>
               <Card title="Profile" id="profile" level={3}>
                 <ProfileForm />
+              </Card>
+              <Card title="Sign-in" id="sign-in" level={3}>
+                <SignOut />
               </Card>
               <Card title="Running in the background" id="service" level={3}>
                 <ServiceStatus />

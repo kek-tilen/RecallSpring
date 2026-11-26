@@ -40,8 +40,10 @@ All text/action contrast must meet WCAG 2.2 AA; change tones as needed.
 
 ## Navigation hierarchy
 
-**Desktop (optional left rail)**: `Home`, `Courses`, `Study`, `Review`, `Insights`, `Library`, `Settings`. The rail can be hidden (button next to the logo or `Ctrl+\`, remembered on the device in `rs-rail`) so the page uses the whole width; a small button at the top left brings it back and takes the keyboard focus. On phones the rail is a top bar and cannot be hidden.  
-**Mobile** (deferred — desktop-first by owner decision; keep layouts responsive where cheap): bottom nav with `Home`, `Study`, `Review`, `Library` + overflow `More`; keyboard shortcuts not required for core use.
+**Six areas (2026-11-27)**: `Today` (Home, with the weekly review), `Courses` (each course with its concepts, material and notes), `Review`, `Exams` (academic only), `Results` (simulations and graded answers) and `Focus`; `Chat` is listed when ChatGPT is one of the learner's assistants (chosen, in the mix or connected). History lives in Settings › Data & backups, the Guide behind a help button, Sign out in Settings › Account & system. Pages that moved into an area keep it highlighted (Library, Notes and concepts → Courses; Week → Today; Simulations → Results). Until Library and Notes move into each course, the Courses page links to them.  
+**Desktop**: a rail with the RecallSpring symbol and name, an icon (Tabler, MIT) left of every label and the Review count; Settings and Help at the bottom. The active area uses the logo teal on a light sage tint. The rail can be hidden (button next to the logo or `Ctrl+\`, remembered on the device in `rs-rail`) so the page uses the whole width; a small button at the top left brings it back and takes the keyboard focus.  
+**Phones** (≤ 860 px): a top bar with the symbol, Settings and Help (and Chat when it is listed), and an opaque bottom bar `Review · Results · Today · Courses · Focus` with Today as the RecallSpring symbol in the middle (grey when another tab is active). Exams open from the exam card on Today and from a course.  
+**Look**: RecallSpring White is the "quiet paper" palette: a cool page tone `#F6F8F9`, white raised surfaces, hairlines instead of shadows; page titles in Newsreader (shipped with the app, OFL). The other themes keep their colours.
 
 ### Exams that are behind the learner (owner 2026-11-23)
 

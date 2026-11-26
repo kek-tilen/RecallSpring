@@ -244,6 +244,13 @@ export function CoursesPage() {
         title="Courses"
         sub="Organised by university, faculty and semester, plus your own interests. Each shows its next exam or goal and progress."
       >
+        {/* Library and Notes left the menu (2026-11-27); until they move into each course they open from here. */}
+        <Link to="/library" className="btn ghost">
+          Library
+        </Link>
+        <Link to="/notes" className="btn ghost">
+          Notes
+        </Link>
         <a href="#archived" className="btn ghost">
           Archived{archived.data ? ` (${archivedCount})` : ""}
         </a>

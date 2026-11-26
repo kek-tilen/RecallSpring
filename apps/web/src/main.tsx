@@ -5,6 +5,7 @@ import { RouterProvider } from "react-router";
 import { ApiError, setUnauthenticatedHandler } from "./api";
 import { router } from "./routes";
 import { applyTheme } from "./theme";
+import "@fontsource-variable/newsreader/opsz.css";
 import "./styles.css";
 
 const queryClient = new QueryClient({
