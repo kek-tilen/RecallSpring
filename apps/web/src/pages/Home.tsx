@@ -15,6 +15,7 @@ import type { AttentionItem, Dashboard, FocusSummary, PlanItem, TargetCapacity }
 const CATEGORY_TONE: Record<PlanItem["category"], string> = {
   "Learn next": "chip solid",
   "Review due": "chip warn",
+  Relearn: "chip warn",
   Strengthen: "chip warn",
   Practice: "chip good",
   Maintain: "chip",
@@ -131,6 +132,7 @@ export function todaySentence(d: Dashboard): string {
 const NEXT_VERB: Record<PlanItem["category"], string> = {
   "Learn next": "learn",
   "Review due": "review",
+  Relearn: "try again",
   Strengthen: "strengthen",
   Practice: "practise",
   Maintain: "keep fresh",
@@ -139,10 +141,16 @@ const NEXT_VERB: Record<PlanItem["category"], string> = {
 const SHORT_TAG: Record<PlanItem["category"], string> = {
   "Learn next": "Learn",
   "Review due": "Review",
+  Relearn: "Try again",
   Strengthen: "Strengthen",
   Practice: "Practise",
   Maintain: "Keep fresh",
 };
+
+/** Due reviews, including a weak concept's next try before its exam (ADR-014). */
+export function isReview(item: PlanItem): boolean {
+  return item.category === "Review due" || item.category === "Relearn";
+}
 
 /** ADR-013 §4: the exam a plan item works towards, for a quiet "Why?" link to Why this plan on its Readiness page. */
 export function examFor(d: Dashboard, item: PlanItem): TargetCapacity | null {
@@ -160,9 +168,8 @@ function WhyLink({ exam }: { exam: TargetCapacity }) {
 
 /** The one next step: a line of text and one button. */
 function NextStep({ item, a, exam }: { item: PlanItem; a: AssistantWords; exam: TargetCapacity | null }) {
-  const button =
-    item.category === "Review due"
-      ? { to: "/review", label: "Start reviews" }
+  const button = isReview(item)
+    ? { to: "/review", label: "Start reviews" }
       : a.key === "chatgpt"
         ? { to: "/chat", label: "Open Chat" }
         : { to: `/concepts/${item.concept_id}`, label: "Open concept" };
@@ -178,7 +185,7 @@ function NextStep({ item, a, exam }: { item: PlanItem; a: AssistantWords; exam: 
           </span>
         )}
       </p>
-      {item.category !== "Review due" && <p className="small muted">{continueHint(a, item.course_title)}</p>}
+      {!isReview(item) && <p className="small muted">{continueHint(a, item.course_title)}</p>}
       <div>
         <Link to={button.to} className="btn primary">
           {button.label}
@@ -213,7 +220,7 @@ const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "
 function WeekPanel({ d, focus }: { d: Dashboard; focus: FocusSummary | undefined }) {
   const days = nextDays(7);
   const soon = d.plan.targets.filter((t) => t.days_left >= 0 && t.days_left <= 7).sort((x, y) => x.days_left - y.days_left);
-  const due = d.plan.items.filter((i) => i.category === "Review due").length;
+  const due = d.plan.items.filter(isReview).length;
   return (
     <section className="card home-week" aria-labelledby="home-week-title">
       <div className="home-card-head">
@@ -342,7 +349,9 @@ function PlanCard({ d }: { d: Dashboard }) {
                 )}
               </div>
               <div className="plan-side">
-                <span className="muted small">{item.estimated_minutes} min</span>
+                <span className="muted small">
+                  {item.estimated_minutes} min{item.depth === "quick" ? " · quick check" : ""}
+                </span>
                 <StartFocus courseId={item.course_id} course={item.course_title} />
               </div>
             </li>

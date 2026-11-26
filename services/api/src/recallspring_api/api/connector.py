@@ -83,7 +83,7 @@ from ..schemas import (
     TargetUpdateIn,
     WebSourceIn,
 )
-from ..services import assistants, bloom, check_first, focus, overview, readiness, week
+from ..services import assistants, bloom, check_first, focus, overview, readiness, relearn, week
 from ..services import attempts as attempt_svc
 from ..services import explanations as explanation_svc
 from ..services import folders as folder_svc
@@ -100,7 +100,7 @@ from ..services.learning import save_chat_note as save_chat_note_svc
 from ..services.note_refs import references as note_references
 from ..services.ownership import course_alive, owned
 from ..services.planner import today_plan
-from ..services.reviews import concept_ids_for_question, recompute, review_queue
+from ..services.reviews import concept_ids_for_question, recompute, refresh_exam_overlays, review_queue
 from ..services.targets import (
     check_profile_topics,
     computed_topics,
@@ -172,6 +172,7 @@ def week_review(
 @router.get("/courses")
 def courses(ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     now = clock.now()
+    refresh_exam_overlays(db, ctx.user, now)
     rows = db.scalars(
         select(Course).where(Course.user_id == ctx.user.id, Course.deleted_at.is_(None)).order_by(Course.created_at)
     )
@@ -628,6 +629,9 @@ def record_one_assessment(
     offer = bloom.harder_offer(db, ctx.user.id, attempt, check_first.ceiling(course)) if course else None
     if offer is not None:
         body["offer_harder"] = offer  # owner 2026-11-25: harder questions once learning goes well
+    again = relearn.offer(db, ctx.user, attempt, now)
+    if again is not None:
+        body["relearn"] = again  # ADR-014: weak before an exam, another try later in the session
     if own is not None:
         # The learner had graded this answer themselves; tell them when the check differs by 2 or more.
         body["self_assessment"] = {
@@ -1153,6 +1157,7 @@ def record_assessments_batch(
                 "status": latest["status"],
                 "schedule": body["schedule"],
                 **({"offer_harder": body["offer_harder"]} if "offer_harder" in body else {}),
+                **({"relearn": body["relearn"]} if "relearn" in body else {}),
             }
         )
     return commit_with_response(db, ctx, payload, 200, {"results": results, "tell_the_learner": TELL_THE_LEARNER})

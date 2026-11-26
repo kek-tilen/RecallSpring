@@ -4,13 +4,23 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from ..learning.scheduler import Deferral, Evidence, KnownFromCheck, ReviewSchedule, local_day_start, replay
+from ..learning.scheduler import (
+    EXAM_TARGETS,
+    OVERLAY_CODES,
+    Deferral,
+    Evidence,
+    ExamDate,
+    KnownFromCheck,
+    ReviewSchedule,
+    local_day_start,
+    schedule,
+)
 from ..models import Assessment, Attempt, Concept, QuestionConcept, Quiz, ReviewDeferral, ReviewState, User
 
 
@@ -63,28 +73,49 @@ def _evidence_for_concept(
     return events
 
 
+def exam_dates(db: Session, concept_ids: list[uuid.UUID], today: date) -> dict[uuid.UUID, list[ExamDate]]:
+    """Upcoming exams (status upcoming, today or later) whose scope holds each concept (ADR-014 exam layer)."""
+    from .targets import live_targets, scope_concepts  # targets reaches this module through the planner
+
+    out: dict[uuid.UUID, list[ExamDate]] = {cid: [] for cid in concept_ids}
+    if not concept_ids:
+        return out
+    course_of = dict(db.execute(select(Concept.id, Concept.course_id).where(Concept.id.in_(concept_ids))).all())
+    for course_id in sorted(set(course_of.values()), key=str):
+        for target in live_targets(db, course_id):
+            if target.status != "upcoming" or target.due_date < today:
+                continue
+            scope = scope_concepts(db, target)
+            exam = ExamDate(target.name, target.due_date, target.goal, EXAM_TARGETS.get(target.goal, 0.90))
+            for concept_id, course in course_of.items():
+                if course == course_id and concept_id in scope:
+                    out[concept_id].append(exam)
+    return out
+
+
 def recompute(
     db: Session, user: User, concept_ids: list[uuid.UUID], now: datetime
 ) -> dict[uuid.UUID, ReviewSchedule | None]:
     tz = ZoneInfo(user.timezone)
     results: dict[uuid.UUID, ReviewSchedule | None] = {}
     db.flush()
+    exams = exam_dates(db, concept_ids, now.astimezone(tz).date())
     for concept_id in concept_ids:
-        schedule = replay(_evidence_for_concept(db, user.id, concept_id), tz)
+        schedule_ = schedule(_evidence_for_concept(db, user.id, concept_id), tz, exams[concept_id])
         row = db.get(ReviewState, (user.id, concept_id))
-        if schedule is None:
+        if schedule_ is None:
             if row is not None:
                 db.delete(row)
         else:
             values = dict(
-                step=schedule.step,
-                due_at=schedule.due_at,
-                last_review_at=schedule.last_review_at,
-                consecutive_successes=schedule.consecutive_successes,
-                lapse_count=schedule.lapse_count,
-                evidence_count=schedule.evidence_count,
-                policy_version=schedule.policy_version,
-                due_reason=schedule.reason.as_dict(),
+                step=schedule_.step,
+                due_at=schedule_.due_at,
+                last_review_at=schedule_.last_review_at,
+                consecutive_successes=schedule_.consecutive_successes,
+                lapse_count=schedule_.lapse_count,
+                evidence_count=schedule_.evidence_count,
+                policy_version=schedule_.policy_version,
+                due_reason=schedule_.reason.as_dict(),
                 recomputed_at=now,
             )
             if row is None:
@@ -92,12 +123,48 @@ def recompute(
             else:
                 for key, value in values.items():
                     setattr(row, key, value)
-        results[concept_id] = schedule
+        results[concept_id] = schedule_
     return results
+
+
+def recompute_course(db: Session, user: User, course_id: uuid.UUID, now: datetime) -> None:
+    """After a study target changed (date, goal, status, scope, deleted or restored): the exam layer of every
+    concept of the course with a review state follows."""
+    db.flush()
+    concept_ids = list(
+        db.scalars(
+            select(ReviewState.concept_id)
+            .join(Concept, Concept.id == ReviewState.concept_id)
+            .where(ReviewState.user_id == user.id, Concept.course_id == course_id)
+            .order_by(ReviewState.concept_id)
+        )
+    )
+    if concept_ids:
+        recompute(db, user, concept_ids, now)
+
+
+def refresh_exam_overlays(db: Session, user: User, now: datetime) -> None:
+    """A date the exam layer brought forward stops counting once its exam has passed: recompute those states so the
+    ladder's own date (or the next exam) applies. Called before due reviews are read; deterministic, no model."""
+    today = now.astimezone(ZoneInfo(user.timezone)).date()
+    stale = list(
+        db.scalars(
+            select(ReviewState.concept_id)
+            .where(
+                ReviewState.user_id == user.id,
+                ReviewState.due_reason["code"].astext.in_(OVERLAY_CODES),
+                ReviewState.due_reason["exam_date"].astext < today.isoformat(),
+            )
+            .order_by(ReviewState.concept_id)
+        )
+    )
+    if stale:
+        recompute(db, user, stale, now)
 
 
 def review_queue(db: Session, user: User, now: datetime, horizon_days: int) -> list[tuple[ReviewState, Concept]]:
     tz = ZoneInfo(user.timezone)
+    refresh_exam_overlays(db, user, now)
     # horizon 0: due right now; horizon N: everything due before the end of the N-th local day from today.
     window = (
         ReviewState.due_at <= now

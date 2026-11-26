@@ -283,6 +283,15 @@ def rationale(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
     not_on_paper = [c["term"] for c in in_scope.values() if c["id"] not in on_paper] if counted else []
     missing = [m["filename"] for m in papers_not_looked_at(db, profile)] if profile else []
     limits = _limits(profile, topics, not_on_paper, above, limit, len(in_scope), missing, db)
+    left = [i["term"] for i in plan.get("left_out", []) if i["course_id"] == course.id]
+    if left:
+        limits.append(
+            {
+                "code": "exam_tail_trimmed",
+                "message": f"Not enough time today for every review before {target.name}: {_listed(left)} "
+                "waited (lighter topics first). They stay due.",
+            }
+        )
 
     return {
         "policy_version": POLICY,

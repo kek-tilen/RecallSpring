@@ -490,7 +490,7 @@ export interface HistoryRow {
 }
 
 export interface PlanItem {
-  category: "Review due" | "Strengthen" | "Learn next" | "Practice" | "Maintain";
+  category: "Review due" | "Relearn" | "Strengthen" | "Learn next" | "Practice" | "Maintain";
   concept_id: string;
   term: string;
   course_id: string;
@@ -505,6 +505,8 @@ export interface PlanItem {
   difficulty: number;
   difficulty_source: string;
   sections: { section_id: string; citation_label: string; filename: string }[];
+  /** ADR-014: how deep a review goes (quick: one short question; relearn: feedback and another try). */
+  depth?: "quick" | "standard" | "relearn" | null;
 }
 
 export interface TargetCapacity {
@@ -537,6 +539,8 @@ export interface Plan {
     message: string;
   } | null;
   focus: { course_id: string; course_title: string; kind: CourseKind; until: string; message: string } | null;
+  /** ADR-014: work for the days before an exam that did not fit today; it stays due. */
+  left_out?: { concept_id: string; term: string; course_id: string; target: string | null; category: string }[];
 }
 
 export interface AttentionItem {

@@ -150,4 +150,15 @@ describe("calm home (ADR-012, variant A)", () => {
     expect(await screen.findByText("Add your first course")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Next step" })).toBeNull();
   });
+
+  it("counts a weak concept's next try before its exam as a review and marks quick checks (ADR-014)", async () => {
+    const relearn: PlanItem = { ...ITEM, category: "Relearn", concept_id: "c4", term: "Bias", depth: "relearn", estimated_minutes: 10 };
+    const quick: PlanItem = { ...ITEM, category: "Review due", concept_id: "c5", term: "Mantissa", depth: "quick", estimated_minutes: 3 };
+    renderHome(dashboard({ items: [relearn, quick] }));
+    const next = await screen.findByRole("region", { name: "Next step" });
+    expect(next.textContent).toContain("Next: try again Bias");
+    expect(next.querySelector("a.btn")?.textContent).toBe("Start reviews");
+    expect(screen.getByRole("region", { name: "This week" }).textContent).toContain("Reviews today2");
+    expect(screen.getByText("3 min · quick check")).toBeTruthy();
+  });
 });

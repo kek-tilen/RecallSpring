@@ -44,7 +44,7 @@ from ..models import (
 )
 from . import mastery
 from .learning import effective_status
-from .reviews import effective_assessment
+from .reviews import effective_assessment, refresh_exam_overlays
 from .targets import concept_weights, latest_profile, scope_concepts
 
 POLICY = "readiness-v1"
@@ -197,6 +197,7 @@ def _plural(n: int, one: str, many: str | None = None) -> str:
 
 def readiness(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> dict[str, Any]:
     target, course = _owned_target(db, user, target_id)
+    refresh_exam_overlays(db, user, now)
     today = now.astimezone(ZoneInfo(user.timezone)).date()
     days_left = (target.due_date - today).days
     ids = sorted(scope_concepts(db, target), key=str)

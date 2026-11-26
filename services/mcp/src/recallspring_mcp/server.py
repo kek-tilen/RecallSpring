@@ -97,6 +97,12 @@ Start of every study session in a course:
    HARDER QUESTIONS: when a grade you record returns offer_harder (two Solid answers in a row while learning),
    offer once, in one short sentence, harder questions on that part; on yes ask at offer_harder.level for its
    concept_ids, on no go on as planned. Never offer it on your own judgement or more than once per chunk.
+   BEFORE AN EXAM: each plan item has a depth. quick = one short question (Bloom 1-2); standard = one question in
+   the exam's style; relearn (category Relearn: not solid yet in the last week before the exam) = feedback and
+   another try. When a grade you record returns relearn, follow relearn.say: give feedback on the gaps from the
+   material (cite it), ask about it again later in the session after other questions with a varied question, stop
+   at relearn.solid_needed Solid answers or relearn.max_tries tries today. A correct answer later in the same
+   session is not mastery: never call it that.
    CHECK FIRST (optional, the learner's choice): when a new chapter or target starts and the learner may already
    know some of it, mention once, briefly and gently, that they can check first: a chapter, or a bit of everything
    for the target (or the course without one). Never insist; learning first stays the default. For a check use
@@ -568,11 +574,11 @@ mcp = MCPServer("RecallSpring", title="RecallSpring", version=__version__, instr
 
 @mcp.tool(annotations=READ)
 async def get_study_plan(minutes: int | None = None, course_id: str | None = None) -> str:
-    """Today's explained plan (Review due / Strengthen / Learn next / Practice / Maintain) within the learner's
-    available time, plus a capacity check per active target (work left vs. time left). course_id for one course or
-    interest (the learner's explicit choice: no priority rules apply); omit it for an overview across all courses
-    and interests, where "interests" explains how much time the interests get (university first or a share) and
-    "focus" the learner's focus. minutes overrides today's availability for this answer only."""
+    """Today's explained plan (Review due / Relearn / Strengthen / Learn next / Practice / Maintain) within the
+    learner's available time, plus a capacity check per active target (work left vs. time left). course_id for one
+    course or interest (the learner's explicit choice: no priority rules apply); omit it for an overview across all
+    courses and interests, where "interests" explains how much time the interests get (university first or a share)
+    and "focus" the learner's focus. minutes overrides today's availability for this answer only."""
     return as_json(await get_client().get("/plan", minutes=minutes, course_id=course_id))
 
 

@@ -80,7 +80,7 @@ def test_university_first_gives_interests_only_time_left_while_exams_are_on_trac
     course, kolokvij, ml = setup_behind(owner_api, conn)
 
     behind = plan(conn, minutes=120)  # 6 course items take 72 min; 48 min are free, but the kolokvij is at risk
-    assert behind["policy_version"] == "plan-v2" and set(kinds(behind)) == {"course"}
+    assert behind["policy_version"] == "plan-v3" and set(kinds(behind)) == {"course"}
     assert behind["targets"][0]["status"] == "at_risk"
     assert behind["interests"]["policy"] == "university_first" and behind["interests"]["planned_minutes"] == 0
     assert "University first: 1. kolokvij (Statistika) is at risk" in behind["interests"]["message"]

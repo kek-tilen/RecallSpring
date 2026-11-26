@@ -30,7 +30,7 @@ from ..models import (
 )
 from .planner import minutes_available
 from .readiness import state_counts
-from .reviews import effective_assessment
+from .reviews import effective_assessment, refresh_exam_overlays
 
 POLICY = "week-v1"
 SESSION_CAP_MINUTES = 240
@@ -82,6 +82,7 @@ def _average(grades: list[int]) -> float | None:
 
 def week_review(db: Session, user: User, now: datetime, weeks_ago: int = 0) -> dict[str, Any]:
     weeks_ago = max(0, min(MAX_WEEKS_BACK, weeks_ago))
+    refresh_exam_overlays(db, user, now)
     tz = ZoneInfo(user.timezone)
     today = now.astimezone(tz).date()
     monday = today - timedelta(days=today.weekday()) - timedelta(weeks=weeks_ago)

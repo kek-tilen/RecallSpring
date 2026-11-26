@@ -56,7 +56,7 @@ export function Layout() {
       navigate("/login", { replace: true });
     },
   });
-  const due = dashboard.data?.plan.items.filter((i) => i.category === "Review due").length ?? 0;
+  const due = dashboard.data?.plan.items.filter((i) => i.category === "Review due" || i.category === "Relearn").length ?? 0;
 
   function toggle(next: boolean) {
     moved.current = true;

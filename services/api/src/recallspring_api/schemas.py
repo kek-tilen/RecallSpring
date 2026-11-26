@@ -674,7 +674,7 @@ class PlanSectionRef(BaseModel):
 
 
 class PlanItemOut(BaseModel):
-    category: Literal["Review due", "Strengthen", "Learn next", "Practice", "Maintain"]
+    category: Literal["Review due", "Relearn", "Strengthen", "Learn next", "Practice", "Maintain"]
     concept_id: uuid.UUID
     term: str
     course_id: uuid.UUID
@@ -689,6 +689,16 @@ class PlanItemOut(BaseModel):
     difficulty: int
     difficulty_source: str
     sections: list[PlanSectionRef] = Field(default_factory=list)
+    # How deep a review goes (ADR-014): quick (one short question), standard, relearn (feedback and another try).
+    depth: Literal["quick", "standard", "relearn"] | None = None
+
+
+class PlanLeftOutOut(BaseModel):
+    concept_id: uuid.UUID
+    term: str
+    course_id: uuid.UUID
+    target: str | None = None
+    category: str
 
 
 class TargetCapacityOut(BaseModel):
@@ -734,6 +744,7 @@ class PlanOut(BaseModel):
     note: str
     interests: InterestPlanOut | None = None
     focus: FocusOut | None = None
+    left_out: list[PlanLeftOutOut] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------- connector settings (owner session)

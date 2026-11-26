@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import clock
 from ..errors import ApiError
 from ..models import (
     Concept,
@@ -702,6 +703,13 @@ def duplicate_groups(targets: list[StudyTarget]) -> dict[uuid.UUID, list[uuid.UU
     return out
 
 
+def _follow_exam(db: Session, user: User, course_id: uuid.UUID) -> None:
+    """Review dates follow a changed exam (ADR-014 exam layer)."""
+    from .reviews import recompute_course  # reviews imports this module lazily too
+
+    recompute_course(db, user, course_id, clock.now())
+
+
 def _brief(t: StudyTarget) -> dict[str, Any]:
     return {"id": str(t.id), "name": t.name, "kind": t.kind, "due_date": t.due_date.isoformat(), "status": t.status}
 
@@ -745,6 +753,7 @@ def create_target(db: Session, user: User, payload: TargetIn, request_id: str, *
         details={"name": payload.name, "due_date": payload.due_date.isoformat(), "origin": origin},
         request_id=request_id,
     )
+    _follow_exam(db, user, target.course_id)
     return target
 
 
@@ -780,6 +789,8 @@ def update_target(
         details={**changes, "origin": origin},
         request_id=request_id,
     )
+    if changes:
+        _follow_exam(db, user, target.course_id)
     return target
 
 
@@ -805,6 +816,7 @@ def delete_target(db: Session, user: User, target_id: uuid.UUID, request_id: str
         details=_brief(target),
         request_id=request_id,
     )
+    _follow_exam(db, user, target.course_id)
     return target
 
 
@@ -822,6 +834,7 @@ def restore_target(db: Session, user: User, target_id: uuid.UUID, request_id: st
         details=_brief(target),
         request_id=request_id,
     )
+    _follow_exam(db, user, target.course_id)
     return target
 
 
@@ -888,4 +901,5 @@ def merge_targets(
         },
         request_id=request_id,
     )
+    _follow_exam(db, user, into.course_id)
     return into

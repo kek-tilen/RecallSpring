@@ -42,6 +42,7 @@ const BASIS: Record<string, string> = {
 const CATEGORY_WORD: Record<string, string> = {
   "Learn next": "Learn",
   "Review due": "Review",
+  Relearn: "Try again",
   Strengthen: "Strengthen",
   Practice: "Practise",
   Maintain: "Keep fresh",

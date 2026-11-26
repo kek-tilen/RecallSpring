@@ -1,7 +1,7 @@
 # ADR-014 — Exam-aware reviews: an exam layer now, FSRS-6 in shadow, then the switch
 
-Status: accepted 2026-11-26 (owner in chat: answered the design questions, then reviewed this ADR). Not built yet;
-see Rollout. Extends ADR-003 (`rs-interval-v1`), ADR-009 (`rs-interval-v2`, Check first), the planner of ADR-005 and
+Status: accepted 2026-11-26 (owner in chat: answered the design questions, then reviewed this ADR). Rollout step 1
+done 2026-11-26; see Rollout. Extends ADR-003 (`rs-interval-v1`), ADR-009 (`rs-interval-v2`, Check first), the planner of ADR-005 and
 ADR-007 (`plan-v2`) and the exam weights of ADR-013.
 
 ## Context
@@ -115,7 +115,7 @@ with three deterministic depths:
 | Depth | When | What the assistant does | Estimate |
 |---|---|---|---|
 | `quick` | A reliable concept brought forward by the cap, or a `Maintain` item | One short question, Bloom 1–2 | 3 min |
-| `standard` | Any other due review | One question in the exam's style at the concept's practice level | 6 min |
+| `standard` | Any other due review | One question in the exam's style at the concept's practice level | 4 min (today's review estimate) |
 | `relearn` | A weak concept in the last 7 days | Feedback and another try until the criterion (§2), at most 4 attempts | 10 min |
 
 - Each plan item gets `depth`, and `why_selected` says why. A new category, `Relearn`, joins the plan's categories.
@@ -269,7 +269,11 @@ and with the owner's approval for the owner's instance.
 
 1. **Exam layer and depths:** `rs-interval-v3` overlay; the `exam_cap` and `relearn` reasons; `relearn` in grade
    responses; `plan-v3` depths, the `Relearn` category and the trimming order; the `exam_tail_trimmed` limit;
-   instructions in every assistant text. The defaults come from `goal`. No migration.
+   instructions in every assistant text. The defaults come from `goal`. No migration. **Done 2026-11-26**
+   (`learning/scheduler.py` `apply_exam_layer`, `services/reviews.py` `exam_dates` / `recompute_course` /
+   `refresh_exam_overlays`, `services/relearn.py`, `plan-v3` in `services/planner.py`; tests in
+   `tests/test_exam_layer.py`). Dates follow a target when it is created, changed, deleted, restored or merged; a
+   date brought forward stops counting once its exam has passed (recomputed before due reviews are read).
 2. **"Before this exam" choice:** migration for `study_targets.exam_retention`; the Exams tab control and the
    connector field.
 3. **Answer timing:** migration for `attempts.answer_seconds`; reported by the answer forms; estimates per depth.
