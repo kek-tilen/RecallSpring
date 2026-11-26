@@ -4650,12 +4650,13 @@ math mtable mtd {
   cursor: help;
 }
 .help-tip-btn:hover, .help-tip-btn:focus-visible { color: var(--primary); border-color: var(--primary); }
+/* Fixed to the viewport while shown (HelpTip places it), so a table's scroll box or a card never cuts it off. */
 .help-tip-text {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translateX(-50%);
-  z-index: 30;
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -100%);
+  z-index: 1000;
   width: max-content;
   max-width: min(320px, 80vw);
   padding: 8px 10px;
@@ -4674,7 +4675,8 @@ math mtable mtd {
   transition: opacity 0.12s;
   pointer-events: none;
 }
-.help-tip:hover .help-tip-text, .help-tip-btn:focus-visible + .help-tip-text { visibility: visible; opacity: 1; }
+.help-tip-text.below { transform: translate(-50%, 0); }
+.help-tip-text.open { visibility: visible; opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .help-tip-text { transition: none; } }
 
 /* Settings: one long page in five sections, with contents beside it that mark the section being read. */

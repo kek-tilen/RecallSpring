@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ApiError } from "../api";
 import { BAND_LABEL, DIFFICULTY_SOURCE, STUDY_LABEL, gradeHelp, gradeLabel } from "../format";
@@ -152,14 +152,60 @@ export function GradeChip({ grade, status }: { grade: number | null | undefined;
 }
 
 /** A small "?" that explains something on hover or keyboard focus. */
+/** Room the tip needs above the "?" before it opens below instead. */
+const TIP_ROOM = 150;
+/** Half the tip's widest size plus a margin: its centre stays this far from the window's edges. */
+const TIP_HALF = 172;
+
+/**
+ * A small "?" with an explanation on hover or keyboard focus. The tip is placed in the viewport (position: fixed),
+ * above the "?" or below it near the top, so a table's scroll box or a card never cuts it off; scrolling hides it.
+ */
 export function HelpTip({ text, label }: { text: string; label: string }) {
   const id = useId();
+  const btn = useRef<HTMLButtonElement>(null);
+  const [at, setAt] = useState<{ left: number; top: number; below: boolean } | null>(null);
+  const show = () => {
+    const r = btn.current?.getBoundingClientRect();
+    if (!r) return;
+    const below = r.top < TIP_ROOM;
+    const centre = r.left + r.width / 2;
+    const left = Math.min(Math.max(centre, TIP_HALF), Math.max(TIP_HALF, window.innerWidth - TIP_HALF));
+    setAt({ left, top: below ? r.bottom + 8 : r.top - 8, below });
+  };
+  const hide = () => setAt(null);
+  useEffect(() => {
+    if (!at) return;
+    const away = () => setAt(null);
+    window.addEventListener("scroll", away, true);
+    window.addEventListener("resize", away);
+    return () => {
+      window.removeEventListener("scroll", away, true);
+      window.removeEventListener("resize", away);
+    };
+  }, [at]);
   return (
-    <span className="help-tip">
-      <button type="button" className="help-tip-btn" aria-label={label} aria-describedby={id}>
+    <span className="help-tip" onMouseEnter={show} onMouseLeave={hide}>
+      <button
+        ref={btn}
+        type="button"
+        className="help-tip-btn"
+        aria-label={label}
+        aria-describedby={id}
+        onFocus={show}
+        onBlur={hide}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") hide();
+        }}
+      >
         ?
       </button>
-      <span role="tooltip" id={id} className="help-tip-text">
+      <span
+        role="tooltip"
+        id={id}
+        className={`help-tip-text${at ? " open" : ""}${at?.below ? " below" : ""}`}
+        style={at ? { left: at.left, top: at.top } : undefined}
+      >
         {text}
       </span>
     </span>

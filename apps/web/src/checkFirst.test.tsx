@@ -129,4 +129,27 @@ describe("grade help", () => {
     expect(tip.textContent).toContain("correct: you know it");
     expect(tip.textContent).toContain("it is not your points");
   });
+
+  it("places the tip in the viewport on hover or focus, so a table's scroll box cannot cut it off", async () => {
+    const { GradeChip } = await import("./components/ui");
+    wrap(<GradeChip grade={3} status="final" />);
+    const help = screen.getByRole("button", { name: "What does this grade mean?" });
+    const tip = document.getElementById(help.getAttribute("aria-describedby")!)!;
+    expect(tip.classList.contains("open")).toBe(false);
+    const rect = (top: number) => () => ({ top, bottom: top + 18, left: 600, right: 618, width: 18, height: 18, x: 600, y: top, toJSON: () => ({}) });
+    help.getBoundingClientRect = rect(400);
+    fireEvent.mouseEnter(help.parentElement!);
+    expect(tip.classList.contains("open")).toBe(true);
+    expect(tip.classList.contains("below")).toBe(false);
+    expect(tip.style.top).toBe("392px"); // above the "?"
+    fireEvent.mouseLeave(help.parentElement!);
+    expect(tip.classList.contains("open")).toBe(false);
+    // near the top of the window it opens below; Escape closes it
+    help.getBoundingClientRect = rect(40);
+    fireEvent.focus(help);
+    expect(tip.classList.contains("below")).toBe(true);
+    expect(tip.style.top).toBe("66px");
+    fireEvent.keyDown(help, { key: "Escape" });
+    expect(tip.classList.contains("open")).toBe(false);
+  });
 });
