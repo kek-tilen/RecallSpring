@@ -53,6 +53,7 @@ from ..schemas import (
     ConnectorAssessmentIn,
     ConnectorAttemptIn,
     ConnectorConceptsIn,
+    ConnectorPaceIn,
     ConnectorQuestionsIn,
     ConnectorSessionIn,
     ConnectorSourceTextIn,
@@ -83,7 +84,7 @@ from ..schemas import (
     TargetUpdateIn,
     WebSourceIn,
 )
-from ..services import assistants, bloom, check_first, focus, overview, readiness, relearn, week
+from ..services import assistants, bloom, check_first, explanation_pace, focus, overview, readiness, relearn, week
 from ..services import attempts as attempt_svc
 from ..services import explanations as explanation_svc
 from ..services import folders as folder_svc
@@ -823,6 +824,7 @@ def course_context(
         else None
     )
     view["focus_time"] = focus.course_focus(db, ctx.user, course.id, clock.now())
+    view["explanation_pace"] = explanation_pace.view(ctx.user, course)
     to_check = self_svc.unchecked(db, ctx.user, course.id)
     view["self_assessments_to_check"] = len(to_check)
     # The oldest few, so an assistant can offer to check them right away (get_answer / get_attempt, then grade).
@@ -1018,6 +1020,28 @@ def set_availability(
     db.flush()
     body = {"weekly_minutes": user.weekly_minutes, **details, "interest_percent": user.interest_percent}
     return commit_with_response(db, ctx, payload, 200, body)
+
+
+@router.post("/explanation-pace")
+def save_explanation_pace(
+    payload: ConnectorPaceIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Save the explanation pace the learner asked for: for one course (pace null = follow the default again) or as
+    their default. Only after the learner said yes to saving it. Audited."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    user = db.get(User, ctx.user.id, with_for_update=True)
+    assert user is not None
+    course = None
+    if payload.course_id is not None:
+        course = owned(db, Course, payload.course_id, user.id)
+        explanation_pace.set_for_course(db, user.id, course, payload.pace, ctx.request_id, origin="connector")
+    elif payload.pace is None:
+        raise ApiError(422, "pace_required", "Give the pace to save as the default.")
+    else:
+        explanation_pace.set_default(db, user, payload.pace, ctx.request_id, origin="connector")
+    db.flush()
+    return commit_with_response(db, ctx, payload, 200, explanation_pace.view(user, course))
 
 
 @router.post("/focus")

@@ -8,6 +8,7 @@ import { Async, BandChip, BandMeter, Card, Difficulty, Empty, ErrorNote, GradeCh
 import { CourseDialog, CourseDot, FocusControl, groupPath } from "../components/organise";
 import { TargetDialog } from "../components/TargetDialog";
 import { CheckChip, CheckFirstPanel, PracticeLimitControl } from "../components/CheckFirst";
+import { ExplanationPaceControl } from "../components/ExplanationPace";
 import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
 import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, attemptKind, dateLabel, dateTime, gradeLabel, gradedBy, plural, relativeDay } from "../format";
 import { keys, useCourseOverview, useGroups, useSources } from "../queries";
@@ -109,6 +110,7 @@ export function CoursePage() {
                     <BandMeter progress={o.progress} />
                     <p className="tiny muted">{o.note}</p>
                     {o.practice_limit && <PracticeLimitControl courseId={o.course.id} limit={o.practice_limit} />}
+                    <ExplanationPaceControl courseId={o.course.id} />
                   </div>
                 </Card>
               </div>

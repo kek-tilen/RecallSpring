@@ -24,7 +24,11 @@ export interface User {
   assistant: AssistantChoice | null;
   assistant_mix?: AssistantKey[];
   greeting_name?: string | null;
+  /** how assistants explain new material by default (owner 2026-11-26) */
+  explanation_pace?: ExplanationPace;
 }
+
+export type ExplanationPace = "step" | "balanced" | "chunks" | "auto";
 
 export interface SessionInfo {
   user: User;
@@ -756,6 +760,8 @@ export interface Course {
   kind: CourseKind;
   color: CourseColor | null;
   group_id: string | null;
+  /** null = the learner's default explanation pace */
+  explanation_pace?: ExplanationPace | null;
 }
 
 /** A Library file a note links with [name](source:<id>) or shows with ![name](source:<id>). */

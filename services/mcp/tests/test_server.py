@@ -573,6 +573,23 @@ async def test_readiness_and_weekly_review_tools(api: FakeApi) -> None:
     assert "get_weekly_review" in text and "get_exam_readiness" in text
 
 
+async def test_explanation_pace_is_saved_only_as_asked(api: FakeApi) -> None:
+    # owner notes 2026-11-26, part D: a pace asked for in a chat holds for it; saving needs the learner's yes
+    api.route("POST", "/explanation-pace", 200, {"pace": "step", "source": "course"})
+    async with Client(mcp) as client:
+        instructions = client.instructions or ""
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        await client.call_tool("set_explanation_pace", {"pace": "step", "course_id": "c1"})
+        await client.call_tool("set_explanation_pace", {"pace": "chunks"})
+    assert "PACE:" in instructions and "set_explanation_pace only on their yes" in instructions
+    assert "only after they said yes" in (tools["set_explanation_pace"].description or "")
+    sent = [(r.url.path.removeprefix("/api/v1/connector"), json.loads(r.content)) for r in api.requests]
+    assert sent == [
+        ("/explanation-pace", {"pace": "step", "course_id": "c1"}),
+        ("/explanation-pace", {"pace": "chunks"}),
+    ]
+
+
 async def test_interest_tools_call_their_routes(api: FakeApi) -> None:
     api.route("POST", "/courses", 201, {"id": "c1", "kind": "interest"})
     api.route("POST", "/courses/c1/goal", 200, {"goal": "pandas"})

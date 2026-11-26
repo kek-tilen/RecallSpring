@@ -7,7 +7,7 @@ import { ASSISTANTS } from "../assistant";
 import { CopyButton } from "../components/Copy";
 import { Card, ErrorNote, PageHead } from "../components/ui";
 import { keys, useSession } from "../queries";
-import type { AssistantChoice, AssistantKey, SessionInfo, User } from "../types";
+import type { AssistantChoice, AssistantKey, ExplanationPace, SessionInfo, User } from "../types";
 
 /**
  * A new install (plan-without-claude.md, Phase 3): the first visit creates the account (FirstRunForm, shown on the
@@ -276,6 +276,7 @@ export function useSaveProfile() {
       assistant_mix?: AssistantKey[];
       timezone?: string;
       greeting_name?: string | null;
+      explanation_pace?: ExplanationPace;
     }) =>
       request<User>("/settings/profile", { method: "PUT", json: body }),
     onSuccess: (user) => {

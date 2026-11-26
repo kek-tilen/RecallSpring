@@ -15,8 +15,8 @@ from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import not_found
 from ..models import Concept, ConceptSource, Course, SourceSection, SyllabusItem
-from ..schemas import ConceptIn, ConceptOut, CourseIn, CourseOut, SyllabusItemIn, SyllabusItemOut
-from ..services import check_first, course_delete
+from ..schemas import ConceptIn, ConceptOut, CourseIn, CourseOut, ExplanationPace, SyllabusItemIn, SyllabusItemOut
+from ..services import check_first, course_delete, explanation_pace
 from ..services.courses import ensure_new_title
 from ..services.events import audit, learning_event
 from ..services.ownership import owned
@@ -200,6 +200,25 @@ def create_concept(
     db.flush()
     db.refresh(concept)
     return commit_with_response(db, ctx, payload, 201, concept_view(db, concept))
+
+
+class ExplanationPaceIn(BaseModel):
+    pace: ExplanationPace | None = Field(default=None, description="null = follow the learner's default")
+
+
+@router.put("/courses/{course_id}/explanation-pace")
+def set_explanation_pace(
+    course_id: uuid.UUID, payload: ExplanationPaceIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """How assistants explain new material in this course (owner notes 2026-11-26); null = the learner's default.
+    Audited."""
+    key = {"explanation_pace": str(course_id), **payload.model_dump()}
+    if replay := replay_if_seen(db, ctx, key):
+        return replay
+    course = owned(db, Course, course_id, ctx.user.id)
+    explanation_pace.set_for_course(db, ctx.user.id, course, payload.pace, ctx.request_id, origin="web")
+    db.flush()
+    return commit_with_response(db, ctx, key, 200, explanation_pace.view(ctx.user, course))
 
 
 class PracticeLimitIn(BaseModel):

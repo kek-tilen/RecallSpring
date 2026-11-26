@@ -10,6 +10,7 @@ import { bytes, dateLabel, dateTime, plural } from "../format";
 import { keys, useAssistants, useBackup, useConnector, useSession, useStudySettings } from "../queries";
 import { PreferencesEditor } from "./Import";
 import { ChatGptPanel } from "../components/ChatGpt";
+import { ExplanationPaceDefault } from "../components/ExplanationPace";
 import { ServiceStatus } from "../components/ServiceStatus";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
 import type { AssistantClient, AssistantKey, AssistantsStatus, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
@@ -632,6 +633,9 @@ export function SettingsPage() {
               </Card>
               <Card title="Study preferences" level={3}>
                 <PreferencesEditor />
+              </Card>
+              <Card title="Explanation pace" id="pace" level={3}>
+                <ExplanationPaceDefault />
               </Card>
             </div>
           </Section>

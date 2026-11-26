@@ -232,6 +232,9 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
   example from the material, how it connects to what came before and the usual mistakes, with page citations.
   Then open_summary_form so I summarise in my own words, then 2-3 short check questions (create_questions +
   open_answer_form).
+  The size of each part follows explanation_pace in get_study_context (step by step, balanced, larger chunks, or
+  auto: you adapt); every pace explains completely. When I ask for another pace, follow it for this conversation
+  and offer once to save it for this course or as my default (set_explanation_pace, only on my yes).
   When a grade you record returns offer_harder (two Solid answers in a row), offer me harder questions on that
   part once; on yes ask at its level.
 - Before an exam every plan item has a depth: quick (one short question), standard (one question in the exam's

@@ -206,6 +206,11 @@ Implemented (2026-11-21, ADR-008):
   come for each one chosen. Home shows a
   short nudge while none is chosen.
 - **Settings layout** (owner 2026-11-23): one long page in five sections, each with a one-line purpose: **Study** (study time and balance, study preferences), **Assistants** (your assistants, ChatGPT preview, assistant connector), **Data & backups** (backups, History), **Appearance** (theme) and **Account & system** (profile, running in the background). Contents beside the page (a row of tabs on narrow screens) link to the sections and mark the one being read (`aria-current`); the owner preferred this to sub-pages because the left rail is already full. Old links (`/settings#chatgpt`, `#profile`, `#service`, `#connector`, `#assistants`) still open at their card or section; `#backups` is new.
+- **Explanation pace** (owner 2026-11-26, migration 0035): Settings → Study has the default for every course (Step
+  by step / Balanced / Larger chunks / Auto, with what each means); a course page has `Explanations` with `Default
+  (…)` or its own pace. Every pace explains completely; only the size of each part changes. A pace asked for in a
+  chat holds for that conversation; Claude and Codex offer once to save it (ChatGPT in Chat points to the course
+  page or Settings).
 - **Settings → Profile:** username, session end and editable time zone. Saving a new time zone reloads every view,
   because "today" depends on it.
 - **Settings → Assistants** (owner 2026-11-22, replaces the assistant picker in Profile): Claude, Codex and ChatGPT,

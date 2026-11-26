@@ -26,6 +26,8 @@ class LoginIn(BaseModel):
 
 AssistantKey = Literal["claude", "codex", "chatgpt", "antigravity"]
 AssistantChoice = Literal["claude", "codex", "chatgpt", "antigravity", "mix"]
+# How assistants explain new material (migration 0035, owner notes 2026-11-26; services/explanation_pace.py).
+ExplanationPace = Literal["step", "balanced", "chunks", "auto"]
 
 
 class UserOut(_Out):
@@ -35,6 +37,7 @@ class UserOut(_Out):
     assistant: AssistantChoice | None = None
     assistant_mix: list[AssistantKey] = []
     greeting_name: str | None = None
+    explanation_pace: ExplanationPace = "auto"
 
 
 class FirstRunIn(BaseModel):
@@ -54,6 +57,8 @@ class ProfileIn(BaseModel):
     assistant_mix: list[AssistantKey] | None = Field(default=None, max_length=4)
     # What Home calls the learner; null or blank = no name ("Good evening").
     greeting_name: str | None = Field(default=None, max_length=40)
+    # The default explanation pace for every course (a course may choose its own).
+    explanation_pace: ExplanationPace | None = None
 
 
 class SessionOut(BaseModel):
@@ -87,6 +92,8 @@ class CourseOut(_Out):
     focus_until: date | None = None
     color: str | None = None
     group_id: uuid.UUID | None = None
+    # null = the learner's default explanation pace
+    explanation_pace: ExplanationPace | None = None
     revision: int
     created_at: datetime
     updated_at: datetime
@@ -1016,6 +1023,13 @@ class DifficultyItem(BaseModel):
 class DifficultyIn(BaseModel):
     rated_by: Literal["claude", "learner"]
     items: list[DifficultyItem] = Field(min_length=1, max_length=60)
+
+
+class ConnectorPaceIn(BaseModel):
+    """Save the explanation pace the learner asked for (owner notes 2026-11-26)."""
+
+    pace: ExplanationPace | None = None
+    course_id: uuid.UUID | None = Field(default=None, description="this course only; none = the learner's default")
 
 
 class AvailabilityIn(BaseModel):

@@ -105,6 +105,10 @@ Start of every study session in a course:
    grade; never rewrite their note). Then 2-3 short check questions (Bloom 1-2, create_questions +
    open_answer_form). If the learner says they already know a topic (e.g. from lectures), ask and use
    mark_concepts_known. RecallSpring refuses practice on unstudied concepts.
+   PACE: get_study_context's explanation_pace sets the size of each part (step by step, balanced, larger chunks,
+   or auto: you adapt; its how says what that means). Every pace explains completely and concretely; only the size
+   changes. When the learner asks for another pace in the conversation, follow it for this conversation and offer
+   once to save it for this course or as their default; set_explanation_pace only on their yes.
    HARDER QUESTIONS: when a grade you record returns offer_harder (two Solid answers in a row while learning),
    offer once, in one short sentence, harder questions on that part; on yes ask at offer_harder.level for its
    concept_ids, on no go on as planned. Never offer it on your own judgement or more than once per chunk.
@@ -1324,6 +1328,20 @@ async def set_concept_difficulty(rated_by: Literal["claude", "learner"], items: 
             "/concepts/difficulty", {"rated_by": rated_by, "items": [i.model_dump() for i in items]}
         )
     )
+
+
+@mcp.tool(annotations=APPEND)
+async def set_explanation_pace(
+    pace: Literal["step", "balanced", "chunks", "auto"] | None, course_id: str | None = None
+) -> str:
+    """Save the explanation pace the learner asked for, only after they said yes to saving it: with course_id for
+    that course (pace null = follow their default again), without it as their default for every course. step = step
+    by step, balanced, chunks = larger chunks, auto = you adapt. A pace asked for in a chat without saving holds for
+    that conversation only."""
+    payload: dict[str, Any] = {"pace": pace}
+    if course_id is not None:
+        payload["course_id"] = course_id
+    return as_json(await get_client().post("/explanation-pace", payload))
 
 
 @mcp.tool(annotations=APPEND)
