@@ -1,7 +1,7 @@
 # ADR-014 — Exam-aware reviews: an exam layer now, FSRS-6 in shadow, then the switch
 
 Status: accepted 2026-11-26 (owner in chat: answered the design questions, then reviewed this ADR). Rollout steps 1
-to 3 done 2026-11-26; see Rollout. Extends ADR-003 (`rs-interval-v1`), ADR-009 (`rs-interval-v2`, Check first), the planner of ADR-005 and
+to 4 done 2026-11-26; see Rollout. Extends ADR-003 (`rs-interval-v1`), ADR-009 (`rs-interval-v2`, Check first), the planner of ADR-005 and
 ADR-007 (`plan-v2`) and the exam weights of ADR-013.
 
 ## Context
@@ -298,7 +298,17 @@ and with the owner's approval for the owner's instance.
    its draft, so a reload loses nothing. An assistant's transcription of a chat answer is never timed. With no timed
    answers the plan is unchanged; the policy stays `plan-v3`.
 4. **FSRS-6 shadow:** the pinned dependency, the `review_shadow` migration, both variants and the
-   `shadow-report` command.
+   `shadow-report` command. **Done 2026-11-26** (`fsrs==6.3.3` with hashes in `requirements.lock`, MIT, its only
+   dependency `typing-extensions`; migration 0033; `learning/fsrs_shadow.py` and `services/shadow.py`, rebuilt by
+   `services/reviews.py` `recompute` for every replayed concept; `services/shadow_report.py` and
+   `recallspring shadow-report [--username <name>] [--save]`; tests in `tests/test_review_shadow.py`). Details
+   settled while building it: the exam of a row is the nearest target after the review whose scope holds the
+   concept, any status but cancelled, so the report can look back at passed exams; `capped_due` is FSRS's date with
+   the Check first overlay and the exam cap; a Check first result counts only as a concept's very first review
+   (after practice it is a diagnostic); a failure in the shadow is logged without learner data and never stops an
+   answer or a grade (a savepoint). `--save` writes Markdown and JSON to `local-data/reports/` (next to the uploaded
+   files), which is never committed. The shadow starts empty: `recallspring recompute-reviews` fills it once from
+   the existing evidence.
 5. **Phase B,** after the owner's checkpoint on the report: the switch, the global settings and value per minute.
 
 ## Consequences

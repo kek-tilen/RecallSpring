@@ -21,7 +21,18 @@ from ..learning.scheduler import (
     local_day_start,
     schedule,
 )
-from ..models import Assessment, Attempt, Concept, QuestionConcept, Quiz, ReviewDeferral, ReviewState, User
+from ..models import (
+    Assessment,
+    Attempt,
+    Concept,
+    Question,
+    QuestionConcept,
+    Quiz,
+    ReviewDeferral,
+    ReviewState,
+    User,
+)
+from . import shadow
 
 
 def effective_assessment(assessments: list[Assessment]) -> Assessment | None:
@@ -40,27 +51,32 @@ def concept_ids_for_question(db: Session, question_id: uuid.UUID) -> list[uuid.U
 
 
 def _evidence_for_concept(
-    db: Session, user_id: uuid.UUID, concept_id: uuid.UUID
+    db: Session, user_id: uuid.UUID, concept_id: uuid.UUID, details: shadow.Details | None = None
 ) -> list[Evidence | KnownFromCheck | Deferral]:
+    """The concept's evidence and deferrals. ``details`` (for the FSRS-6 shadow) gets each graded attempt's
+    evaluator kind and Bloom level."""
     rows = db.execute(
-        select(Attempt, Assessment)
+        select(Attempt, Assessment, Question.bloom_level)
         .join(QuestionConcept, QuestionConcept.question_id == Attempt.question_id)
+        .join(Question, Question.id == Attempt.question_id)
         .join(Assessment, Assessment.attempt_id == Attempt.id)
         .outerjoin(Quiz, Quiz.id == Attempt.quiz_id)
         .where(QuestionConcept.concept_id == concept_id, Attempt.user_id == user_id)
         # Diagnostic pre-tests show what is already known; they never drive the review schedule (ADR-006).
         .where(or_(Quiz.id.is_(None), Quiz.mode != "diagnostic"))
     ).all()
-    by_attempt: dict[uuid.UUID, tuple[Attempt, list[Assessment]]] = {}
+    by_attempt: dict[uuid.UUID, tuple[Attempt, list[Assessment], int | None]] = {}
     grouped: dict[uuid.UUID, list[Assessment]] = defaultdict(list)
-    for attempt, assessment in rows:
-        by_attempt[attempt.id] = (attempt, grouped[attempt.id])
+    for attempt, assessment, bloom_level in rows:
+        by_attempt[attempt.id] = (attempt, grouped[attempt.id], bloom_level)
         grouped[attempt.id].append(assessment)
     events: list[Evidence | KnownFromCheck | Deferral] = []
-    for attempt, assessments in by_attempt.values():
+    for attempt, assessments, bloom_level in by_attempt.values():
         eff = effective_assessment(assessments)
         if eff is not None:
             events.append(Evidence(attempt.submitted_at, attempt.id, eff.grade, eff.status, eff.confidence))  # type: ignore[arg-type]
+            if details is not None:
+                details[attempt.id] = (eff.evaluator_kind, bloom_level)
     deferrals = db.scalars(
         select(ReviewDeferral).where(ReviewDeferral.user_id == user_id, ReviewDeferral.concept_id == concept_id)
     )
@@ -100,8 +116,11 @@ def recompute(
     results: dict[uuid.UUID, ReviewSchedule | None] = {}
     db.flush()
     exams = exam_dates(db, concept_ids, now.astimezone(tz).date())
+    shadow_exams = shadow.exams_for(db, concept_ids)
     for concept_id in concept_ids:
-        schedule_ = schedule(_evidence_for_concept(db, user.id, concept_id), tz, exams[concept_id])
+        details: shadow.Details = {}
+        events = _evidence_for_concept(db, user.id, concept_id, details)
+        schedule_ = schedule(events, tz, exams[concept_id])
         row = db.get(ReviewState, (user.id, concept_id))
         if schedule_ is None:
             if row is not None:
@@ -123,6 +142,8 @@ def recompute(
             else:
                 for key, value in values.items():
                     setattr(row, key, value)
+        # FSRS-6 in shadow (ADR-014 §5): stored beside the ladder, never shown and never used for dates.
+        shadow.rebuild(db, user, concept_id, events, details, shadow_exams[concept_id], now)
         results[concept_id] = schedule_
     return results
 

@@ -130,6 +130,14 @@ folder: 36 tables, every row count equal to the manifest, Alembic revision match
 checksums, that day's answers and notes present, and the API started and answered `ready` on the copy. The throwaway
 database and folder were then removed.
 
+### FSRS-6 shadow report (ADR-014 §5)
+
+`recallspring shadow-report [--username <name>] [--save]` prints what FSRS-6 in shadow would have done, for the
+owner's checkpoint before phase B. It only reads (no model calls, nothing changes). `--save` also writes Markdown
+and JSON to `local-data/reports/` next to the uploaded files: private learner data, never committed, never sent
+anywhere. After installing migration 0033 run `recallspring recompute-reviews` once, so the shadow covers answers
+given before it existed. A failure in the shadow is logged without learner data and never stops an answer or a grade.
+
 Still required before a VPS release: an encrypted copy **off the VPS** to an owner-approved destination (owner choice
 2 in docs/10) and a restore drill there; the local backups above do not replace it.
 

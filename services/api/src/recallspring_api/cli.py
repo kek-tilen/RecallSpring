@@ -11,6 +11,9 @@ recallspring backup-restore --database <new> [--snapshot <name>|latest] [--stora
                                                  (restores into a NEW database / folder; never overwrites)
 recallspring recompute-reviews                   (replays every review state with the current scheduler policy;
                                                  a derived cache, evidence untouched, no model calls)
+recallspring shadow-report [--username <name>] [--save]
+                                                 (what FSRS-6 in shadow would have done; local, no model calls;
+                                                 --save writes it under local-data/reports)
 """
 
 from __future__ import annotations
@@ -256,6 +259,54 @@ def recompute_reviews() -> int:
     return 0
 
 
+def reports_dir() -> Path:
+    """Private reports next to the uploaded files (local-data/reports by default; never committed)."""
+    from .config import get_settings
+
+    return get_settings().storage_dir.parent / "reports"
+
+
+def shadow_report(username: str | None, save: bool) -> int:
+    """ADR-014 §5: the FSRS-6 shadow against the ladder, for the owner's checkpoint before phase B. Reads only; no
+    model calls. Run recompute-reviews once first so the shadow covers answers given before it existed."""
+    import json
+
+    from .models import ReviewShadow
+    from .services import shadow_report as report
+
+    now = clock.now()
+    with new_session() as db:
+        query = select(User).order_by(User.created_at)
+        if username:
+            query = query.where(User.username == username)
+        users = list(db.scalars(query))
+        if username and not users:
+            print(f"No account named {username}.", file=sys.stderr)
+            return 1
+        texts, data = [], []
+        for user in users:
+            has_rows = db.scalar(select(ReviewShadow.id).where(ReviewShadow.user_id == user.id).limit(1))
+            if not username and has_rows is None:
+                continue
+            built = report.build(db, user, now)
+            data.append(built)
+            texts.append(report.render(built))
+        db.rollback()  # read only
+    if not texts:
+        print("No shadow data yet. Run `recallspring recompute-reviews` once, then answer and grade as usual.")
+        return 0
+    text = "\n".join(texts)
+    print(text)
+    if save:
+        folder = reports_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        stamp = now.strftime("%Y%m%d-%H%M%S")
+        (folder / f"shadow-report-{stamp}.md").write_text(text, encoding="utf-8")
+        (folder / f"shadow-report-{stamp}.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
+        print(f"Saved in {folder} (shadow-report-{stamp}.md and .json; private, never committed).")
+    return 0
+
+
 def serve_api(host: str, port: int, log_file: Path | None) -> int:
     """scripts/start-local.ps1 runs this without a window, logging to local-data/logs/api.log."""
     import uvicorn
@@ -301,6 +352,9 @@ def main(argv: list[str] | None = None) -> int:
     rs.add_argument("--database", required=True, help="name of a database that does not exist yet")
     rs.add_argument("--storage", type=Path, help="an empty or new folder for the uploaded files")
     sub.add_parser("recompute-reviews", help="replay every review state with the current scheduler policy")
+    sr = sub.add_parser("shadow-report", help="what FSRS-6 in shadow would have done (ADR-014; local only)")
+    sr.add_argument("--username", help="one account (default: every account with shadow data)")
+    sr.add_argument("--save", action="store_true", help="also write the report under local-data/reports")
     args = parser.parse_args(argv)
     if args.command in ("backup", "backup-status", "backup-restore"):
         import logging
@@ -319,6 +373,8 @@ def main(argv: list[str] | None = None) -> int:
         return serve_api(args.host, args.port, args.log_file)
     if args.command == "recompute-reviews":
         return recompute_reviews()
+    if args.command == "shadow-report":
+        return shadow_report(args.username, args.save)
     if args.command == "worker":
         import logging
 
