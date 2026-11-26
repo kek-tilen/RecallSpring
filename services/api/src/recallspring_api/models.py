@@ -17,6 +17,7 @@ from sqlalchemy import (
     Computed,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -443,6 +444,52 @@ class ReviewDeferral(Base):
     deferred_at: Mapped[datetime] = _created()
     until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     reason: Mapped[str | None] = mapped_column(String(300))
+
+
+class ReviewShadow(Base):
+    """FSRS-6 computed in shadow (ADR-014 §5, migration 0033): derived, rebuilt by every replay of a concept's review
+    state and never edited. One row per variant and review (a concept's first certain answer of a local day, or a
+    Check first result). Never shown in the web app or the connector and never used for dates; read only by
+    ``recallspring shadow-report``. R is a model estimate, not a measure of mastery."""
+
+    __tablename__ = "review_shadow"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    concept_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("concepts.id"), nullable=False, index=True)
+    variant: Mapped[str] = mapped_column(String(20), nullable=False)  # rs-fsrs6-v1 | rs-fsrs6-v1a
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)  # the concept's review number, from 1
+    source: Mapped[str] = mapped_column(String(12), nullable=False)  # answer | check_first
+    attempt_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("attempts.id"), index=True)
+    local_date: Mapped[date] = mapped_column(Date, nullable=False)
+    grade: Mapped[int | None] = mapped_column(SmallInteger)  # None for Check first
+    rating: Mapped[int] = mapped_column(SmallInteger, nullable=False)  # 1 Again, 2 Hard, 3 Good, 4 Easy
+    bloom_level: Mapped[int | None] = mapped_column(SmallInteger)
+    evaluator_kind: Mapped[str | None] = mapped_column(String(20))
+    confidence: Mapped[str | None] = mapped_column(String(10))
+    elapsed_days: Mapped[int | None] = mapped_column(Integer)  # None for the first review
+    r_before: Mapped[float | None] = mapped_column(Float)
+    s_before: Mapped[float | None] = mapped_column(Float)
+    d_before: Mapped[float | None] = mapped_column(Float)
+    s_after: Mapped[float] = mapped_column(Float, nullable=False)
+    d_after: Mapped[float] = mapped_column(Float, nullable=False)
+    fsrs_due: Mapped[date] = mapped_column(Date, nullable=False)  # FSRS's own date
+    capped_due: Mapped[date] = mapped_column(Date, nullable=False)  # with the Check first overlay and the exam cap
+    target_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("study_targets.id"))  # the concept's next exam
+    exam_date: Mapped[date | None] = mapped_column(Date)
+    exam_target: Mapped[float | None] = mapped_column(Float)  # T
+    exam_r: Mapped[float | None] = mapped_column(Float)  # R on the exam morning after this review
+    library_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    params_hash: Mapped[str] = mapped_column(String(16), nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_review_shadow_review", "user_id", "concept_id", "variant", "local_date", unique=True),
+        CheckConstraint("variant IN ('rs-fsrs6-v1','rs-fsrs6-v1a')", name="variant"),
+        CheckConstraint("source IN ('answer','check_first')", name="source"),
+        CheckConstraint("rating BETWEEN 1 AND 4", name="rating"),
+        CheckConstraint("grade IS NULL OR grade BETWEEN 0 AND 4", name="grade"),
+    )
 
 
 # --------------------------------------------------------------------------- audit and idempotency
