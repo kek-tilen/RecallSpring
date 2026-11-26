@@ -9,7 +9,10 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
+from sqlalchemy import select
 
+from recallspring_api import cli
+from recallspring_api.db import new_session
 from recallspring_api.learning.scheduler import (
     Deferral,
     Evidence,
@@ -19,6 +22,7 @@ from recallspring_api.learning.scheduler import (
     replay,
     schedule,
 )
+from recallspring_api.models import AuditEvent, ReviewState
 
 from .conftest import Api, ConnectorApi, FrozenClock
 
@@ -283,3 +287,37 @@ def test_the_plan_relearns_weak_concepts_and_says_what_waited(
     limits = owner_api.get(f"/targets/{target['id']}/rationale").json()["limits"]
     (trimmed,) = [m for m in limits if m["code"] == "exam_tail_trimmed"]
     assert waited["term"] in trimmed["message"] and "They stay due." in trimmed["message"]
+
+
+def test_recompute_reviews_replays_states_of_an_older_policy(
+    owner_api: Api, conn: ConnectorApi, frozen: FrozenClock, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ids = owner_api.course_with_question()
+    conn.post("/concepts/known", {"concept_ids": [ids["concept_id"]], "reason": "Covered in lectures."})
+    for days in (0, 1, 3):
+        frozen.advance(days=days)
+        _solid(owner_api, conn, ids["question_id"])
+    target = {
+        "course_id": ids["course_id"],
+        "kind": "kolokvij",
+        "name": "1. kolokvij",
+        "due_date": "2026-11-29",
+        "scope_description": "Everything so far",
+        "goal": "exam_only",
+    }
+    assert owner_api.post("/targets", target).status_code == 201
+    with new_session() as db:  # as a state computed by rs-interval-v2 before the exam layer existed
+        row = db.scalars(select(ReviewState).where(ReviewState.concept_id == uuid.UUID(ids["concept_id"]))).one()
+        assert row.due_reason["code"] == "exam_cap"
+        row.due_at = datetime.fromisoformat(row.due_reason["policy_due_at"])
+        row.due_reason = {"code": "promoted", "message": "Old.", "policy_version": "rs-interval-v2"}
+        row.policy_version = "rs-interval-v2"
+        db.commit()
+    assert _reason(owner_api)["code"] == "promoted"
+
+    assert cli.main(["recompute-reviews"]) == 0
+    assert "Replayed 1 review state(s) with rs-interval-v3; 1 got a new date or reason." in capsys.readouterr().out
+    assert _reason(owner_api)["code"] == "exam_cap"
+    with new_session() as db:
+        event = db.scalars(select(AuditEvent).where(AuditEvent.action == "reviews.recomputed")).one()
+        assert event.details["policy_version"] == "rs-interval-v3" and event.details["changed"] == 1

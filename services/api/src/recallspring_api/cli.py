@@ -9,6 +9,8 @@ recallspring backup [--if-due]                   (database + uploaded files, che
 recallspring backup-status                       (last backup, kept snapshots, location)
 recallspring backup-restore --database <new> [--snapshot <name>|latest] [--storage <empty folder>]
                                                  (restores into a NEW database / folder; never overwrites)
+recallspring recompute-reviews                   (replays every review state with the current scheduler policy;
+                                                 a derived cache, evidence untouched, no model calls)
 """
 
 from __future__ import annotations
@@ -212,6 +214,41 @@ def backup_restore(snapshot: str, database: str, storage: Path | None) -> int:
     return 0
 
 
+def recompute_reviews() -> int:
+    """Replay every review state with the current scheduler policy, e.g. once after a new policy version (ADR-014:
+    the exam layer of rs-interval-v3 applies to concepts practised before it). Review states are a derived cache:
+    the evidence is not touched, and the same evidence always gives the same schedule. Audited per account."""
+    from .learning.scheduler import POLICY_VERSION
+    from .models import ReviewState
+    from .services.reviews import recompute
+
+    now = clock.now()
+    total = changed = 0
+    with new_session() as db:
+        for user in db.scalars(select(User).order_by(User.created_at)).all():
+            before = {
+                r.concept_id: (r.due_at, r.due_reason.get("code"))
+                for r in db.scalars(select(ReviewState).where(ReviewState.user_id == user.id))
+            }
+            if not before:
+                continue
+            after = recompute(db, user, sorted(before, key=str), now)
+            moved = sum(1 for cid, s in after.items() if s is None or (s.due_at, s.reason.code) != before[cid])
+            audit(
+                db,
+                actor_id=user.id,
+                action="reviews.recomputed",
+                target_type="user",
+                target_id=user.id,
+                details={"policy_version": POLICY_VERSION, "states": len(before), "changed": moved},
+            )
+            total += len(before)
+            changed += moved
+        db.commit()
+    print(f"Replayed {total} review state(s) with {POLICY_VERSION}; {changed} got a new date or reason.")
+    return 0
+
+
 def serve_api(host: str, port: int, log_file: Path | None) -> int:
     """scripts/start-local.ps1 runs this without a window, logging to local-data/logs/api.log."""
     import uvicorn
@@ -256,6 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     rs.add_argument("--snapshot", default="latest", help="snapshot name (see backup-status) or 'latest'")
     rs.add_argument("--database", required=True, help="name of a database that does not exist yet")
     rs.add_argument("--storage", type=Path, help="an empty or new folder for the uploaded files")
+    sub.add_parser("recompute-reviews", help="replay every review state with the current scheduler policy")
     args = parser.parse_args(argv)
     if args.command in ("backup", "backup-status", "backup-restore"):
         import logging
@@ -272,6 +310,8 @@ def main(argv: list[str] | None = None) -> int:
         return connector_token(args.username, args.label, args.file or default_token_file(args.client), args.client)
     if args.command == "serve":
         return serve_api(args.host, args.port, args.log_file)
+    if args.command == "recompute-reviews":
+        return recompute_reviews()
     if args.command == "worker":
         import logging
 

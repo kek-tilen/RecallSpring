@@ -274,6 +274,8 @@ and with the owner's approval for the owner's instance.
    `refresh_exam_overlays`, `services/relearn.py`, `plan-v3` in `services/planner.py`; tests in
    `tests/test_exam_layer.py`). Dates follow a target when it is created, changed, deleted, restored or merged; a
    date brought forward stops counting once its exam has passed (recomputed before due reviews are read).
+   Concepts practised before the upgrade get the layer at their next answer, or at once with
+   `recallspring recompute-reviews` (replays every review state; evidence untouched, audited).
 2. **"Before this exam" choice:** migration for `study_targets.exam_retention`; the Exams tab control and the
    connector field.
 3. **Answer timing:** migration for `attempts.answer_seconds`; reported by the answer forms; estimates per depth.
