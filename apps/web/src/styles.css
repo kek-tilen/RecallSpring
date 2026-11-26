@@ -4944,6 +4944,9 @@ details.c2c-version > summary {
   margin-left: auto;
   white-space: nowrap;
 }
+.home-plan-in {
+  margin-top: 2px;
+}
 .home-card-head {
   display: flex;
   justify-content: space-between;

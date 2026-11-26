@@ -175,3 +175,8 @@ def test_new_material_is_learned_in_the_order_of_the_material(owner_api: Api, co
     assert "study p. 1" in items[0]["why_selected"]
     ctx = conn.get(f"/courses/{cid}/context").json()
     assert "Learn first" in ctx["rules"][0]
+    assert "completely and concretely" in ctx["rules"][0] and "Never assume" in ctx["rules"][0]
+    from recallspring_api.services.chat_tools import INSTRUCTIONS, PLANNING
+
+    assert "Never assume what the learner has studied" in INSTRUCTIONS and "completely" in INSTRUCTIONS
+    assert "go through today's plan" in PLANNING

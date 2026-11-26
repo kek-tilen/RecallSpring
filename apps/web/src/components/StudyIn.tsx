@@ -5,7 +5,8 @@ import { useAssistants, useSession } from "../queries";
 import type { AssistantKey, AssistantsStatus } from "../types";
 
 /**
- * "Study in…" on a course card (ADR-012 §3). Only links the makers document are used:
+ * "Study in…" on a course card (ADR-012 §3), and "Go through today's plan in…" on Home (owner 2026-11-26): the same
+ * menu with a planning message for all courses. Only links the makers document are used:
  * - Claude Desktop: `claude://claude.ai/new?q=` prefills a new chat (support.claude.com, "Open Claude Desktop with a link").
  * - Codex (ChatGPT desktop app): `codex://new?prompt=` prefills a new chat (learn.chatgpt.com, Commands → Deep links).
  * - Antigravity has no documented link for a folder or a chat, so the start message is copied only.
@@ -24,6 +25,9 @@ export function startMessage(course: { id: string; title: string }) {
   return `Let's study ${course.title} (course_id ${course.id}).`;
 }
 
+/** Home's "Go through today's plan in…": the assistant plans today across all courses (no course_id). */
+export const PLAN_MESSAGE = "Let's go through today's plan in RecallSpring: all my courses, and how to split my time today.";
+
 async function copy(text: string) {
   try {
     await navigator.clipboard.writeText(text);
@@ -36,7 +40,7 @@ async function copy(text: string) {
 /** The learner's own assistants: the connected ones, else the welcome page's choice, else all four. */
 export function offeredAssistants(status: AssistantsStatus | undefined, chosen: string | null | undefined): AssistantKey[] {
   const order = ASSISTANTS.map((a) => a.key);
-  const connected = status?.items.filter((i) => i.connected).map((i) => i.key) ?? [];
+  const connected = status?.items?.filter((i) => i.connected).map((i) => i.key) ?? [];
   const mix = status?.mix ?? [];
   const pick = connected.length
     ? connected
@@ -63,7 +67,8 @@ function remembered(): AssistantKey | null {
   }
 }
 
-export function StudyIn({ course }: { course: { id: string; title: string } }) {
+/** With a course: study it. Without one: go through today's plan across all courses (Home). */
+export function StudyIn({ course }: { course?: { id: string; title: string } }) {
   const navigate = useNavigate();
   const status = useAssistants();
   const chosen = useSession().data?.user?.assistant;
@@ -84,7 +89,8 @@ export function StudyIn({ course }: { course: { id: string; title: string } }) {
 
   async function study(key: AssistantKey | "copy") {
     setOpen(false);
-    const text = startMessage(course);
+    const text = course ? startMessage(course) : PLAN_MESSAGE;
+    const folder = course ? "the course's study folder" : "the Planning study folder";
     if (key !== "copy") {
       setLast(key);
       try {
@@ -94,7 +100,8 @@ export function StudyIn({ course }: { course: { id: string; title: string } }) {
       }
     }
     if (key === "chatgpt") {
-      navigate(`/chat/new?course=${encodeURIComponent(course.id)}`);
+      // a course chat starts with that course picked; the plan starts a planning chat with the message in the box
+      navigate(course ? `/chat/new?course=${encodeURIComponent(course.id)}` : `/chat/new?message=${encodeURIComponent(text)}`);
       return;
     }
     const copied = await copy(text);
@@ -104,12 +111,12 @@ export function StudyIn({ course }: { course: { id: string; title: string } }) {
       setNote(`Claude Desktop opens a new chat with the start message ready to send.${also}`);
     } else if (key === "codex") {
       launcher.open(`codex://new?prompt=${encodeURIComponent(text)}`);
-      setNote(`Codex opens a new chat with the start message ready; choose the course's study folder as its workspace.${also}`);
+      setNote(`Codex opens a new chat with the start message ready; choose ${folder} as its workspace.${also}`);
     } else if (key === "antigravity") {
       setNote(
         copied
-          ? `Start message copied. Open the course's study folder in Antigravity and paste it.`
-          : `Copy this into Antigravity, in the course's study folder: ${text}`,
+          ? `Start message copied. Open ${folder} in Antigravity and paste it.`
+          : `Copy this into Antigravity, in ${folder}: ${text}`,
       );
     } else {
       setNote(copied ? "Start message copied." : `Copy this: ${text}`);
@@ -119,14 +126,20 @@ export function StudyIn({ course }: { course: { id: string; title: string } }) {
   return (
     <div className="study-in" ref={box}>
       {/* Always a choice, never a default launch (owner 2026-11-23); the last one used is only marked. */}
-      <button type="button" className="btn small primary" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        Study in…
+      <button
+        type="button"
+        className={course ? "btn small primary" : "btn small"}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        {course ? "Study in…" : "Go through today's plan in…"}
       </button>
       {open && (
         <div
           className="study-in-menu"
           role="menu"
-          aria-label={`Study ${course.title} in`}
+          aria-label={course ? `Study ${course.title} in` : "Go through today's plan in"}
           onKeyDown={(e) => {
             if (e.key === "Escape") setOpen(false);
           }}

@@ -177,6 +177,16 @@ describe("Plain and Ghost chats (ADR-012 §5)", () => {
     await waitFor(() => expect((screen.getByLabelText("What this chat is for") as HTMLSelectElement).value).toBe("k1"));
   });
 
+  it("Go through today's plan in… → Chat waits with the message in a planning conversation, never sends it", async () => {
+    const sent: { method: string; path: string; body: unknown }[] = [];
+    serve(sent);
+    show(`/chat/new?message=${encodeURIComponent("Let's go through today's plan.")}`);
+    await screen.findByRole("option", { name: "Study: Biology 101" });
+    expect((screen.getByLabelText("What this chat is for") as HTMLSelectElement).value).toBe("");
+    expect((screen.getByLabelText("Message to ChatGPT") as HTMLTextAreaElement).value).toBe("Let's go through today's plan.");
+    expect(sent.some((s) => s.path === "/ai/chatgpt/messages/stream")).toBe(false);
+  });
+
   it("a plain chat has no RecallSpring switch and says so to the server", async () => {
     const sent: { method: string; path: string; body: unknown }[] = [];
     serve(sent);

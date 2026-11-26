@@ -115,6 +115,8 @@ describe("calm home (ADR-012, variant A)", () => {
     const next = screen.getByRole("region", { name: "Next step" });
     expect(next.textContent).toContain("Next: learn IEEE 754 · Computer Architecture");
     expect(next.querySelectorAll("a.btn")).toHaveLength(1);
+    // today's plan across all courses can be taken to an assistant (owner 2026-11-26)
+    expect(screen.getByRole("button", { name: "Go through today's plan in…" }).getAttribute("aria-haspopup")).toBe("menu");
     expect(screen.getByRole("region", { name: "Then today" }).textContent).toContain("Two's complement");
 
     const week = screen.getByRole("region", { name: "This week" });

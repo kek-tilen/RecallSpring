@@ -520,6 +520,18 @@ async def test_instructions_and_quiz_tool_put_learning_first() -> None:
     assert "not studied yet first" in prompt.messages[0].content.text
 
 
+async def test_instructions_teach_completely_never_assume_and_plan_today() -> None:
+    # owner notes 2026-11-26: explanations complete and concrete, never assume something was covered, and
+    # Home's "Go through today's plan in…" splits today's time across all courses
+    async with Client(mcp) as client:
+        prompt = await client.get_prompt("start-studying", {"course": "KV"})
+        instructions = client.instructions or ""
+    assert "completely and concretely, never only" in instructions and "worked example" in instructions
+    assert "NEVER ASSUME what the learner has studied" in instructions and "as you know" in instructions
+    assert "TODAY'S PLAN" in instructions and "get_study_plan without" in instructions
+    assert "never assume I studied" in prompt.messages[0].content.text
+
+
 async def test_readiness_and_weekly_review_tools(api: FakeApi) -> None:
     api.route("GET", "/readiness", 200, {"summary": {"weak": 1}, "next_steps": ["Strengthen 1 weak concept"]})
     api.route("GET", "/week", 200, {"summary": ["Active on 2 of 5 days"]})

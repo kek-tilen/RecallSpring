@@ -48,8 +48,10 @@ priorities across courses with get_study_plan without course_id. Do not teach or
 
 Every other chat is for one course, named in its first message. Use only that course (find its course_id with
 list_courses). Start with get_study_context; if the course is not set up yet, do the planning steps for it first.
-Teach material I have not studied yet first: a few pages at a time in the order of the material, with page
-citations, then open_summary_form so I summarise in my own words, then 2-3 short check questions. Practice and
+Teach material I have not studied yet first, part by part in the order of the material: explain every concept
+completely and concretely (what it is, how it works, an example from the material, the usual mistakes) with page
+citations, never only an outline; then open_summary_form so I summarise in my own words, then 2-3 short check
+questions. Never assume I studied something RecallSpring does not show as studied. Practice and
 simulations only for studied material (create_quiz in the style of the exam profile, about 75 % past-paper style
 and 25 % deeper, then open_quiz). Grade open answers with record_assessments and tell me the next review dates.
 
@@ -131,8 +133,8 @@ export const STEPS: GuideStep[] = [
     title: "Learn new material",
     where: "Course chat",
     why:
-      "New material comes first: {assistant} explains a few pages at a time, you summarise in your own words, then a " +
-      "few short check questions. Practice and simulations unlock for what you have studied.",
+      "New material comes first: {assistant} explains it part by part, each concept completely and with an example, " +
+      "you summarise in your own words, then a few short check questions. Practice and simulations unlock for what you have studied.",
     prompts: [
       COURSE_CHAT_START,
       {

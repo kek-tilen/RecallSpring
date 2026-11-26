@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useAssistant, type AssistantWords } from "../assistant";
 import { EventList } from "./History";
+import { StudyIn } from "../components/StudyIn";
 import { Upload } from "../components/Upload";
 import { Async, Card, Empty, StudyChip } from "../components/ui";
 import { longToday, nextDays, plural, shortDay } from "../format";
@@ -487,6 +488,11 @@ export function HomePage() {
                   )}
                   {started && next && <NextStep item={next} a={a} exam={examFor(d, next)} />}
                   {started && <ThenToday items={d.plan.items.slice(1, 3)} />}
+                  {started && d.plan.items.length > 0 && (
+                    <div className="home-plan-in">
+                      <StudyIn />
+                    </div>
+                  )}
                 </header>
                 {started && <WeekPanel d={d} focus={focus.data} />}
               </div>

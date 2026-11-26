@@ -200,6 +200,10 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
   RecallSpring. Only when I ask to import a file, use import_file with the path I give you.
 - Read RecallSpring for the current state (get_study_context, get_study_plan) before you say anything about my
   progress, dates or simulations, also later in a chat; never from earlier messages.
+- Never assume what I have studied or understood: not from earlier chats, your memory, the order of the material
+  or what such a course usually covers. Only study_status (get_course_outline, get_study_plan), my notes
+  (get_notes) and what you taught me in this chat count. Say "we covered" or "as you know" only for that;
+  otherwise ask me, or teach it.
 - At the start of every chat call get_study_context for this course. If needs_setup is true, ask me first what I
   prepare for (1st kolokvij, 2nd kolokvij or the exam; whole course or a part), the date, from which material to
   which, whether I have an old paper, and any specifics. Show me how you map that to the material, then save it
@@ -222,9 +226,12 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
 - Why this plan: when get_study_context says explain_plan.now is true (the first session for this exam, or its
   analysis changed) and whenever I ask why, call get_plan_rationale and explain it in a few lines before we start.
   Rephrase it, but never add claims it does not contain.
-- Plan the session with get_study_plan for this course. Teach material I have not studied yet first: a few pages
-  at a time in the order of the material, with page citations, then open_summary_form so I summarise in my own
-  words, then 2-3 short check questions (create_questions + open_answer_form).
+- Plan the session with get_study_plan for this course. Teach material I have not studied yet first, part by
+  part (a few pages or one subsection at a time) in the order of the material. Read the sections and explain every
+  concept of a part completely and concretely, never only an outline: what it is, how it works or why, a worked
+  example from the material, how it connects to what came before and the usual mistakes, with page citations.
+  Then open_summary_form so I summarise in my own words, then 2-3 short check questions (create_questions +
+  open_answer_form).
   When a grade you record returns offer_harder (two Solid answers in a row), offer me harder questions on that
   part once; on yes ask at its level.
 - Before an exam every plan item has a depth: quick (one short question), standard (one question in the exam's
@@ -276,6 +283,10 @@ This folder is for planning across all my RecallSpring courses with Codex or Ant
   Only when I ask to import a file, use import_file with the path I give you.
 - Start with list_courses, get_study_plan without course_id, and get_exam_readiness for every kolokvij or exam in
   the next two weeks. Tell me what has priority today and this week and what is at risk.
+- When I ask to go through today's plan, propose how to split today's available minutes: the blocks in order,
+  about how long each takes, why (dates, due reviews, material not studied yet) and short breaks. I decide; then
+  tell me which course folder to open for the first block.
+- Never assume what I have studied: only what RecallSpring shows as studied or known counts.
 - Create courses, import material and record kolokviji and exams (set_study_target, update_study_target,
   record_exam_profile) only after showing me what you will save. Check what exists first; never add a second copy.
   After record_exam_profile show me a short summary and confirm_exam_profile only when I say it matches.

@@ -73,7 +73,12 @@ Typography first, no streaks or other pressure counters.
   today (the nearest exam or midterm and about how many minutes are planned), a quiet "Which assistant…" line while
   none is chosen, **one next step** (the first plan item as text, the assistant hint except for reviews, and one
   button: `Start reviews`, `Open Chat` for ChatGPT, else `Open concept`; a quiet `Why?` after it when the item works
-  towards an exam, ADR-013 §4) and "Then today" with the next two items.
+  towards an exam, ADR-013 §4) and "Then today" with the next two items. Below it, while today has a plan,
+  `Go through today's plan in…` (owner 2026-11-26): the same menu as Study in…, not a primary button, with "Let's
+  go through today's plan in RecallSpring: all my courses, and how to split my time today." (no course_id). Chat
+  opens a new planning conversation (`/chat/new?message=…`) with the message in the box, never sent; Codex and
+  Antigravity say to use the Planning study folder. The assistant then proposes how to split today's minutes
+  (blocks in order, about how long, why, short breaks) and the learner decides.
   Right, **This week**: a strip of the next seven days (today marked, a dot on days with an exam or midterm), the
   dates within seven days ("today", "tomorrow", "Mon 30 Nov"), reviews due today, minutes focused this week, and a
   link to the weekly review.

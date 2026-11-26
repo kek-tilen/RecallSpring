@@ -587,9 +587,11 @@ def study_context(db: Session, course: Course, today: date, style_percent: int =
             )
         ],
         "rules": [
-            "Learn first: concepts that are not_studied are taught (explain, then the learner summarises in the "
-            "summary form) before any practice or simulation. RecallSpring refuses practice on unstudied concepts "
-            "unless the learner says they already know them or asks for a diagnostic pre-test.",
+            "Learn first: concepts that are not_studied are taught (explain each part completely and concretely, "
+            "then the learner summarises in the summary form) before any practice or simulation. RecallSpring "
+            "refuses practice on unstudied concepts unless the learner says they already know them or asks for a "
+            "diagnostic pre-test. Never assume the learner studied something that is not studied or known here, "
+            "or that you did not teach in this conversation.",
             "Material of passed targets is in maintenance: keep reviewing it, but give priority to the active target.",
             f"About {style_percent} % of practice questions follow the style of the target's exam profile (past "
             f"papers); the other {100 - style_percent} % are deeper Bloom 4-5 questions for understanding.",
@@ -635,8 +637,9 @@ def _interest_context(db: Session, course: Course, today: date) -> dict[str, Any
         "rules": [
             "This is a personal interest, not a university course: there is no exam and no deadline. Work toward "
             "the learner's goal; save it with set_interest_goal when it is missing or changes.",
-            "Learn first still applies: teach material that is not_studied (explain, then the learner summarises "
-            "in the summary form) before practice. Prefer applied exercises, small projects and real data (Bloom "
+            "Learn first still applies: teach material that is not_studied (explain each part completely and "
+            "concretely, then the learner summarises in the summary form) before practice; never assume it was "
+            "studied. Prefer applied exercises, small projects and real data (Bloom "
             "3-6) over exam-style questions.",
             "University comes first unless the learner chose otherwise: get_study_plan shows how much time the "
             "interests get today. Set a focus (set_focus) or a share of the day (set_availability interest_percent) "

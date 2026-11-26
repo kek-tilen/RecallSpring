@@ -1027,6 +1027,7 @@ function Composer({
   photoCourse,
   noAttachments = false,
   noTools = false,
+  draft,
 }: {
   canSend: boolean;
   models: Model[];
@@ -1048,8 +1049,13 @@ function Composer({
   noAttachments?: boolean;
   /** A plain chat: never RecallSpring's tools. */
   noTools?: boolean;
+  /** Text to start a new conversation with (Home's "Go through today's plan in… → Chat"); never sent by itself. */
+  draft?: string | null;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(draft ?? "");
+  useEffect(() => {
+    if (draft) setText(draft);
+  }, [draft]);
   const photos = usePhotos(photoCourse, CHAT_FOLDER);
   const box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -1275,6 +1281,8 @@ export function ChatPage() {
   const [search] = useSearchParams();
   const [studyCourse, setStudyCourse] = useState(() => (currentId ? "" : (search.get("course") ?? "")));
   const askedCourse = currentId ? null : search.get("course");
+  // "Go through today's plan in… → Chat" on Home opens /chat/new?message=…: the message waits in the box.
+  const startText = currentId ? null : (search.get("message")?.slice(0, 2000) ?? null);
   useEffect(() => {
     if (askedCourse) setStudyCourse(askedCourse);
   }, [askedCourse]);
@@ -1643,6 +1651,7 @@ export function ChatPage() {
               photoCourse={current?.course?.id ?? newCourse}
               noAttachments={ghostActive}
               noTools={plainMode}
+              draft={startText}
               visuals={visuals}
               onVisuals={(on) => {
                 setVisuals(on);
