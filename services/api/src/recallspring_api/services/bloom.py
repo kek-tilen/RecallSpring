@@ -8,8 +8,7 @@ and self-assessed grades never move the ramp up. Once the top level is reached, 
 suggests the level that was practised least recently, so earlier levels keep coming back. An exam profile's Bloom
 mix, when the course has one, takes precedence (the assistants' instructions say so); this is the default without it.
 The practice limit (``courses.bloom_ceiling``, 2-6; services/check_first.py ``ceiling``) caps both: the ramp then
-ends, and mixes, at the limit. Without one it is 5, or 6 while an upcoming exam paper asks for Create (owner notes
-2026-11-26).
+ends, and mixes, at the limit. Without one it is 5, or 6 while an upcoming exam paper asks for Create (2026-11-26).
 Levels 1-2 (recall and the check questions after a summary) belong to learning, not to the ramp, and Check first
 (diagnostic) answers never move it.
 """
@@ -21,11 +20,12 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..learning.scheduler import grade_text
 from ..models import Assessment, Attempt, Concept, Question, QuestionConcept, Quiz
+from . import quiz_filters
 from .reviews import effective_assessment
 
 RAMP = (3, 4, 5, 6)
@@ -33,7 +33,7 @@ LABEL = {2: "Understand", 3: "Apply", 4: "Analyze", 5: "Evaluate", 6: "Create"}
 MAX_LEVEL = 6
 DEFAULT_LEVEL = 5  # the limit when the learner set none and no exam paper asks for 6 Create
 CREATE = 6
-# Owner notes 2026-11-26: at 6 Create recommend a more capable model.
+# 2026-11-26: at 6 Create recommend a more capable model.
 CREATE_TIP = (
     "Bloom 6 Create asks you to design, plan or produce something of your own, and judging it well is hard: use the "
     "most capable model your assistant offers (a thinking or reasoning model) for these questions and their grading."
@@ -107,7 +107,7 @@ def suggestions(
         .outerjoin(Quiz, Quiz.id == Attempt.quiz_id)
         .where(QuestionConcept.concept_id.in_(concept_ids), Attempt.user_id == user_id, Question.bloom_level >= 3)
         # A Check first answer shows the current level; it never moves the ramp (owner decision 2026-11-22).
-        .where(or_(Quiz.id.is_(None), Quiz.mode != "diagnostic"))
+        .where(quiz_filters.counts_for_schedule())  # nor does a same-day retake (seen questions)
     ).all()
     per_attempt: dict[tuple[uuid.UUID, uuid.UUID], tuple[Attempt, int, list[Assessment]]] = {}
     for concept_id, attempt, level, assessment in rows:
@@ -144,7 +144,7 @@ def harder_offer(db: Session, user_id: uuid.UUID, attempt: Attempt, ceiling: int
             Attempt.kind == "answer",
             Question.course_id == question.course_id,
             Question.bloom_level <= LEARNING_LEVELS,
-            or_(Quiz.id.is_(None), Quiz.mode != "diagnostic"),
+            quiz_filters.counts_for_schedule(),
         )
         .order_by(Attempt.submitted_at.desc(), Attempt.id.desc())
         .limit(OFFER_STREAK + 1)

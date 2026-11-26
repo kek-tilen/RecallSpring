@@ -529,7 +529,7 @@ async def test_instructions_and_quiz_tool_put_learning_first() -> None:
 
 
 async def test_instructions_teach_completely_never_assume_and_plan_today() -> None:
-    # owner notes 2026-11-26: explanations complete and concrete, never assume something was covered, and
+    # 2026-11-26: explanations complete and concrete, never assume something was covered, and
     # Home's "Go through today's plan in…" splits today's time across all courses
     async with Client(mcp) as client:
         prompt = await client.get_prompt("start-studying", {"course": "KV"})
@@ -541,7 +541,7 @@ async def test_instructions_teach_completely_never_assume_and_plan_today() -> No
 
 
 async def test_instructions_cover_bloom_six_create() -> None:
-    # owner notes 2026-11-26: 6 Create only at a limit of 6, with the tip to use a more capable model
+    # 2026-11-26: 6 Create only at a limit of 6, with the tip to use a more capable model
     async with Client(mcp) as client:
         instructions = client.instructions or ""
     assert "6 Create only when" in instructions and "BLOOM 6" in instructions
@@ -549,7 +549,7 @@ async def test_instructions_cover_bloom_six_create() -> None:
 
 
 async def test_instructions_cover_reviews_from_memory() -> None:
-    # owner 2026-11-26: "Review in…" asks one new question from memory per due concept; an explanation is not a review
+    # 2026-11-26: "Review in…" asks one new question from memory per due concept; an explanation is not a review
     async with Client(mcp) as client:
         instructions = client.instructions or ""
     assert "REVIEWS:" in instructions and "one new question from memory" in instructions
@@ -574,7 +574,7 @@ async def test_readiness_and_weekly_review_tools(api: FakeApi) -> None:
 
 
 async def test_explanation_pace_is_saved_only_as_asked(api: FakeApi) -> None:
-    # owner notes 2026-11-26, part D: a pace asked for in a chat holds for it; saving needs the learner's yes
+    # 2026-11-26: a pace asked for in a chat holds for it; saving needs the learner's yes
     api.route("POST", "/explanation-pace", 200, {"pace": "step", "source": "course"})
     async with Client(mcp) as client:
         instructions = client.instructions or ""
@@ -588,6 +588,19 @@ async def test_explanation_pace_is_saved_only_as_asked(api: FakeApi) -> None:
         ("/explanation-pace", {"pace": "step", "course_id": "c1"}),
         ("/explanation-pace", {"pace": "chunks"}),
     ]
+
+
+async def test_retake_quiz_reuses_the_questions(api: FakeApi) -> None:
+    # 2026-11-26: a retake is a new version; the first stays the benchmark
+    api.route("POST", "/quizzes/q1/retake", 201, {"quiz_id": "q2", "version": 2})
+    async with Client(mcp) as client:
+        instructions = client.instructions or ""
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        await client.call_tool("retake_quiz", {"quiz_id": "q1", "scope": "not_full"})
+    assert "RETAKES:" in instructions and "benchmark" in instructions and "practice only" in instructions
+    assert "Only when the learner asks" in (tools["retake_quiz"].description or "")
+    sent = [(r.url.path.removeprefix("/api/v1/connector"), json.loads(r.content)) for r in api.requests]
+    assert sent == [("/quizzes/q1/retake", {"scope": "not_full"})]
 
 
 async def test_interest_tools_call_their_routes(api: FakeApi) -> None:
@@ -935,7 +948,7 @@ async def test_the_forms_pass_on_the_time_on_each_question(api: FakeApi) -> None
 
 
 async def test_the_forms_offer_unsure_once_there_is_an_answer(api: FakeApi) -> None:
-    """Owner 2026-11-26: "I don't know" while the box is empty, "Unsure" once there is text; graded normally."""
+    """2026-11-26: "I don't know" while the box is empty, "Unsure" once there is text; graded normally."""
     api.route("POST", "/attempts", 201, {"attempt_id": "a1", "status": "saved", "saved_at": "2026-11-26T10:00:00Z"})
     api.route("POST", "/quizzes/q1/draft", 200, {"saved_at": "2026-11-26T10:00:00Z", "revision": 1})
     async with Client(mcp) as client:

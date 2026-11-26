@@ -75,6 +75,7 @@ from ..schemas import (
     QuizDraftIn,
     QuizIn,
     QuizSubmitIn,
+    RetakeIn,
     ReviewQueueOut,
     SearchHitOut,
     SearchOut,
@@ -1157,8 +1158,35 @@ def quiz_results(
     quiz_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
     """Grading view for the assistant: answers, keys, rubrics, which open answers still need a grade and the
-    grading scale."""
-    return {**quiz_svc.results_view(db, _quiz(db, ctx, quiz_id)), "grading_scale": GRADING_SCALE}
+    grading scale. With retakes, ``comparison`` shows every version per question (the first is the benchmark)."""
+    quiz = _quiz(db, ctx, quiz_id)
+    return {
+        **quiz_svc.results_view(db, quiz),
+        "comparison": quiz_svc.comparison(db, quiz),
+        "grading_scale": GRADING_SCALE,
+    }
+
+
+@router.post("/quizzes/{quiz_id}/retake", status_code=201)
+def retake_quiz(
+    quiz_id: uuid.UUID, payload: RetakeIn, ctx: WriteCtx = Depends(connector_write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Only when the learner asks: a new version of a submitted simulation with the same questions (scope "all", or
+    "not_full" = only those without full points). Then open_quiz with the new quiz_id."""
+    key = {"retake": str(quiz_id), **payload.model_dump()}
+    if replay := replay_if_seen(db, ctx, key):
+        return replay
+    source = _quiz(db, ctx, quiz_id, lock=True)
+    quiz = quiz_svc.retake(db, ctx.user, source, payload.scope, "connector", ctx.request_id)
+    body = {
+        "quiz_id": str(quiz.id),
+        "version": quiz.version,
+        "items": len(quiz_svc.form_view(db, quiz)["items"]),
+        "time_limit_minutes": quiz.time_limit_minutes,
+        "next": "open_quiz with this quiz_id. The same questions again: the first version stays the benchmark, and "
+        "taken today after an earlier version it is practice only (it does not change the review schedule).",
+    }
+    return commit_with_response(db, ctx, key, 201, body)
 
 
 @router.post("/assessments/batch")

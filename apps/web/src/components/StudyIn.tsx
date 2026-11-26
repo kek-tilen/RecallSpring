@@ -5,8 +5,8 @@ import { useAssistants, useSession } from "../queries";
 import type { AssistantKey, AssistantsStatus } from "../types";
 
 /**
- * "Study in…" on a course card (ADR-012 §3), and "Go through today's plan in…" on Home (owner 2026-11-26): the same
- * menu with a planning message for all courses. "Review in…" on Review and on a concept page (owner 2026-11-26): the same
+ * "Study in…" on a course card (ADR-012 §3), and "Go through today's plan in…" on Home (2026-11-26): the same
+ * menu with a planning message for all courses. "Review in…" on Review and on a concept page (2026-11-26): the same
  * menu with a review message, so a due concept leads to a question from memory. Only links the makers document are used:
  * - Claude Desktop: `claude://claude.ai/new?q=` prefills a new chat (support.claude.com, "Open Claude Desktop with a link").
  * - Codex (ChatGPT desktop app): `codex://new?prompt=` prefills a new chat (learn.chatgpt.com, Commands → Deep links).
@@ -26,7 +26,7 @@ export function startMessage(course: { id: string; title: string }) {
   return `Let's study ${course.title} (course_id ${course.id}).`;
 }
 
-/** A review from memory: everything due in a course, or one concept (its practice level, graded; owner 2026-11-26). */
+/** A review from memory: everything due in a course, or one concept (its practice level, graded; 2026-11-26). */
 export type ReviewOf = { concept?: { id: string; term: string }; due?: boolean };
 
 export function reviewMessage(course: { id: string; title: string }, review: ReviewOf) {
@@ -79,7 +79,16 @@ function remembered(): AssistantKey | null {
 }
 
 /** With a course: study it (or review it). Without one: go through today's plan across all courses (Home). */
-export function StudyIn({ course, review }: { course?: { id: string; title: string }; review?: ReviewOf }) {
+export function StudyIn({
+  course,
+  review,
+  ask,
+}: {
+  course?: { id: string; title: string };
+  review?: ReviewOf;
+  /** any other start message for the course, e.g. "Similar, new questions" for a simulation (2026-11-26) */
+  ask?: { label: string; message: string };
+}) {
   const navigate = useNavigate();
   const status = useAssistants();
   const chosen = useSession().data?.user?.assistant;
@@ -88,7 +97,7 @@ export function StudyIn({ course, review }: { course?: { id: string; title: stri
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const box = useRef<HTMLDivElement>(null);
-  const label = !review ? "Study" : review.due === false ? "Practise" : "Review";
+  const label = ask ? ask.label : !review ? "Study" : review.due === false ? "Practise" : "Review";
 
   useEffect(() => {
     if (!open) return;
@@ -101,7 +110,7 @@ export function StudyIn({ course, review }: { course?: { id: string; title: stri
 
   async function study(key: AssistantKey | "copy") {
     setOpen(false);
-    const text = course ? (review ? reviewMessage(course, review) : startMessage(course)) : PLAN_MESSAGE;
+    const text = ask ? ask.message : course ? (review ? reviewMessage(course, review) : startMessage(course)) : PLAN_MESSAGE;
     const folder = course ? "the course's study folder" : "the Planning study folder";
     if (key !== "copy") {
       setLast(key);
@@ -114,7 +123,7 @@ export function StudyIn({ course, review }: { course?: { id: string; title: stri
     if (key === "chatgpt") {
       // a course chat starts with that course picked; the plan starts a planning chat with the message in the box
       const withCourse = course ? `course=${encodeURIComponent(course.id)}` : "";
-      const withMessage = !course || review ? `message=${encodeURIComponent(text)}` : "";
+      const withMessage = !course || review || ask ? `message=${encodeURIComponent(text)}` : "";
       navigate(`/chat/new?${[withCourse, withMessage].filter(Boolean).join("&")}`);
       return;
     }
@@ -142,10 +151,10 @@ export function StudyIn({ course, review }: { course?: { id: string; title: stri
       {/* Always a choice, never a default launch (owner 2026-11-23); the last one used is only marked. */}
       <button
         type="button"
-        className={course && review?.due !== false ? "btn small primary" : "btn small"}
+        className={course && !ask && review?.due !== false ? "btn small primary" : "btn small"}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={review && course ? `${label} ${review.concept?.term ?? course.title} in` : undefined}
+        aria-label={ask ? `${label} in` : review && course ? `${label} ${review.concept?.term ?? course.title} in` : undefined}
         onClick={() => setOpen(!open)}
       >
         {course ? `${label} in…` : "Go through today's plan in…"}
@@ -154,7 +163,7 @@ export function StudyIn({ course, review }: { course?: { id: string; title: stri
         <div
           className="study-in-menu"
           role="menu"
-          aria-label={course ? `${label} ${review?.concept?.term ?? course.title} in` : "Go through today's plan in"}
+          aria-label={ask ? `${label} in` : course ? `${label} ${review?.concept?.term ?? course.title} in` : "Go through today's plan in"}
           onKeyDown={(e) => {
             if (e.key === "Escape") setOpen(false);
           }}

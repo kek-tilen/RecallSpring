@@ -1,12 +1,139 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
+import { request } from "../api";
 import { CopyButton } from "../components/Copy";
+import { StudyIn } from "../components/StudyIn";
 import { AwaitingGrade, QuizForm } from "../components/QuizForm";
 import { MathText } from "../components/Markdown";
-import { Async, Card, Empty, GradeChip, PageHead } from "../components/ui";
+import { Async, Card, Empty, ErrorNote, GradeChip, PageHead } from "../components/ui";
 import { ATTEMPT_KIND, dateLabel, dateTime, gradedBy, plural } from "../format";
-import { courseTitles, useCourses, useQuiz, useQuizzes } from "../queries";
-import type { QuizItemView, QuizSummary } from "../types";
+import { courseTitles, keys, useCourses, useQuiz, useQuizzes } from "../queries";
+import type { QuizComparison, QuizItemView, QuizSummary, QuizView } from "../types";
+
+/** A retake answers seen questions; the first version stays the benchmark (2026-11-26). */
+export function VersionChips({ q }: { q: { version?: number; same_day_practice?: boolean } }) {
+  if (!q.version || q.version < 2) return null;
+  return (
+    <>
+      <span className="chip" title="The same questions again; the first version stays the benchmark.">
+        Version {q.version} · seen questions
+      </span>
+      {q.same_day_practice && (
+        <span className="chip" title="Taken the same day as an earlier version: it does not change your review schedule.">
+          Practice only
+        </span>
+      )}
+    </>
+  );
+}
+
+export function similarMessage(quiz: { quiz_id: string; title: string; course_id: string }) {
+  return `Let's do a new simulation like "${quiz.title}" (quiz_id ${quiz.quiz_id}, course_id ${quiz.course_id}): similar, new questions on the same topics, kinds and Bloom levels, never the same questions.`;
+}
+
+/** Take a submitted simulation again, or ask for similar, new questions (2026-11-26). */
+function Retake({ quiz, course }: { quiz: QuizView; course: string }) {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const missed = quiz.items.filter((i) => (i.earned ?? 0) < i.points).length;
+  const pending = quiz.pending_items ?? 0;
+  const go = useMutation({
+    mutationFn: (scope: "all" | "not_full") =>
+      request<{ quiz_id: string; version: number }>(`/quizzes/${quiz.quiz_id}/retake`, { method: "POST", json: { scope } }),
+    onSuccess: (made) => {
+      void qc.invalidateQueries({ queryKey: ["quizzes"] });
+      void qc.invalidateQueries({ queryKey: keys.course(quiz.course_id) });
+      navigate(`/simulations/${made.quiz_id}`);
+    },
+  });
+  return (
+    <Card title="Take it again">
+      <div className="stack" style={{ gap: 10 }}>
+        <p className="small" style={{ margin: 0 }}>
+          A retake is a new version with the same questions; this one stays as it is, and the versions are compared per
+          question. The first version stays the benchmark. Taken the same day as an earlier version, a retake is practice only:
+          it does not change your review schedule.
+        </p>
+        <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+          <button type="button" className="btn small" disabled={go.isPending} onClick={() => go.mutate("all")}>
+            Retake all questions
+          </button>
+          <button
+            type="button"
+            className="btn small"
+            disabled={go.isPending || pending > 0 || missed === 0}
+            onClick={() => go.mutate("not_full")}
+          >
+            Retake questions without full points ({missed})
+          </button>
+          <StudyIn course={{ id: quiz.course_id, title: course }} ask={{ label: "Similar, new questions", message: similarMessage(quiz) }} />
+        </div>
+        {pending > 0 && <span className="tiny muted">Retaking only the missed questions waits until every answer is graded.</span>}
+        {go.error && <ErrorNote error={go.error} />}
+      </div>
+    </Card>
+  );
+}
+
+function points(v: { earned: number | null } | null, max: number) {
+  if (!v) return "—";
+  return v.earned === null ? "awaiting a grade" : `${v.earned} / ${max}`;
+}
+
+/** Every version side by side, per question of the first version (2026-11-26). */
+function Comparison({ c, current }: { c: QuizComparison; current: string }) {
+  return (
+    <Card title="All versions" meta={plural(c.versions.length, "version")}>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Question</th>
+              {c.versions.map((v) => (
+                <th key={v.quiz_id} className="nowrap">
+                  {v.quiz_id === current ? (
+                    `Version ${v.version}`
+                  ) : (
+                    <Link to={`/simulations/${v.quiz_id}`}>Version {v.version}</Link>
+                  )}
+                  <div className="tiny muted">
+                    {v.version === 1 ? "Benchmark" : v.scope === "not_full" ? "Missed only" : "All questions"}
+                    {v.same_day_practice ? " · practice only" : ""}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {c.questions.map((q) => (
+              <tr key={q.question_id}>
+                <td>
+                  {q.position}. <MathText text={q.prompt.length > 90 ? `${q.prompt.slice(0, 90)}…` : q.prompt} />
+                </td>
+                {q.versions.map((v, i) => (
+                  <td key={c.versions[i]!.quiz_id} className="nowrap">
+                    {points(v, q.points)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            <tr>
+              <td>
+                <strong>Total</strong>
+              </td>
+              {c.versions.map((v) => (
+                <td key={v.quiz_id} className="nowrap">
+                  {v.status === "submitted" ? `${v.earned_points} / ${v.max_points}` : "Not submitted"}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
 
 function Score({ q }: { q: Pick<QuizSummary, "status" | "earned_points" | "max_points" | "pending_items"> }) {
   if (q.status === "open") return <span className="chip warn">Not submitted</span>;
@@ -44,6 +171,11 @@ export function QuizTable({ quizzes, titles }: { quizzes: QuizSummary[]; titles?
                   {q.title}
                 </Link>
                 {q.mode === "diagnostic" && <span className="chip" style={{ marginLeft: 8 }}>Diagnostic</span>}
+                {(q.version ?? 1) > 1 && (
+                  <span style={{ marginLeft: 8 }}>
+                    <VersionChips q={q} />
+                  </span>
+                )}
               </td>
               {titles && <td className="small">{titles[q.course_id] ?? ""}</td>}
               <td>{q.items}</td>
@@ -172,6 +304,7 @@ export function SimulationPage() {
                 }
               >
                 {quiz.mode === "diagnostic" && <span className="chip">Diagnostic</span>}
+                <VersionChips q={quiz} />
                 {submitted && (
                   <Score
                     q={{ status: quiz.status, earned_points: quiz.earned_points ?? 0, max_points: quiz.max_points ?? 0, pending_items: quiz.pending_items ?? 0 }}
@@ -188,6 +321,8 @@ export function SimulationPage() {
               )}
               {submitted && !!quiz.pending_items && <AwaitingGrade quiz={quiz} />}
               {submitted && quiz.note && <p className="small muted">{quiz.note}</p>}
+              {quiz.comparison && <Comparison c={quiz.comparison} current={quiz.quiz_id} />}
+              {submitted && quiz.mode === "practice" && <Retake quiz={quiz} course={titles[quiz.course_id] ?? "this course"} />}
               {submitted && (
                 <label className="row small">
                   <input type="checkbox" checked={onlyMissed} onChange={(e) => setOnlyMissed(e.target.checked)} />

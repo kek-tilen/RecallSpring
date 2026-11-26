@@ -196,6 +196,7 @@ function Simulations({ r }: { r: ExamReadiness }) {
                 : "Submitted"
               : "Not submitted"}
             {q.mode === "diagnostic" ? " · diagnostic" : ""}
+            {(q.version ?? 1) > 1 ? ` · version ${q.version}, seen questions${q.same_day_practice ? " (practice only)" : ""}` : ""}
           </span>
         </li>
       ))}

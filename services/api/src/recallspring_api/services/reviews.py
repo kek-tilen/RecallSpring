@@ -7,7 +7,7 @@ from collections import defaultdict
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..learning.scheduler import (
@@ -32,7 +32,7 @@ from ..models import (
     ReviewState,
     User,
 )
-from . import shadow
+from . import quiz_filters, shadow
 
 
 def effective_assessment(assessments: list[Assessment]) -> Assessment | None:
@@ -62,8 +62,9 @@ def _evidence_for_concept(
         .join(Assessment, Assessment.attempt_id == Attempt.id)
         .outerjoin(Quiz, Quiz.id == Attempt.quiz_id)
         .where(QuestionConcept.concept_id == concept_id, Attempt.user_id == user_id)
-        # Diagnostic pre-tests show what is already known; they never drive the review schedule (ADR-006).
-        .where(or_(Quiz.id.is_(None), Quiz.mode != "diagnostic"))
+        # Diagnostic pre-tests show what is already known; they never drive the review schedule (ADR-006). Nor do
+        # same-day retakes of a simulation (2026-11-26): they are practice on seen questions.
+        .where(quiz_filters.counts_for_schedule())
     ).all()
     by_attempt: dict[uuid.UUID, tuple[Attempt, list[Assessment], int | None]] = {}
     grouped: dict[uuid.UUID, list[Assessment]] = defaultdict(list)

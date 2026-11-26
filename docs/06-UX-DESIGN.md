@@ -74,7 +74,7 @@ Typography first, no streaks or other pressure counters.
   none is chosen, **one next step** (the first plan item as text, the assistant hint except for reviews, and one
   button: `Start reviews`, `Open Chat` for ChatGPT, else `Open concept`; a quiet `Why?` after it when the item works
   towards an exam, ADR-013 §4) and "Then today" with the next two items. Below it, while today has a plan,
-  `Go through today's plan in…` (owner 2026-11-26): the same menu as Study in…, not a primary button, with "Let's
+  `Go through today's plan in…` (2026-11-26): the same menu as Study in…, not a primary button, with "Let's
   go through today's plan in RecallSpring: all my courses, and how to split my time today." (no course_id). Chat
   opens a new planning conversation (`/chat/new?message=…`) with the message in the box, never sent; Codex and
   Antigravity say to use the Planning study folder. The assistant then proposes how to split today's minutes
@@ -130,7 +130,7 @@ Components:
 - Tutor controls: `Explain`, `Give an example`, `Show a visual`, `Quiz me`, `Check my reasoning`, `Next question`.
 - Practice limit on the course page: `Automatic (…)` (5 Evaluate, or 6 Create while an exam paper asks for it, with
   the reason below) or a level of the learner's own, 2 Understand to 6 Create; at 6 a note recommends a more capable
-  model (owner 2026-11-26).
+  model (2026-11-26).
 - Question bar: `Bloom level 3–6`, `Mixed / Progressive`, `Closed notes / Open notes`, optional `Hint`.
 - Attempt composer autosaves drafts but **submission is explicit**. Assessment feedback distinguished from model-generated suggestions.
 - `Why this question?` link reveals concepts, difficulty rationale and source coverage.
@@ -206,7 +206,7 @@ Implemented (2026-11-21, ADR-008):
   come for each one chosen. Home shows a
   short nudge while none is chosen.
 - **Settings layout** (owner 2026-11-23): one long page in five sections, each with a one-line purpose: **Study** (study time and balance, study preferences), **Assistants** (your assistants, ChatGPT preview, assistant connector), **Data & backups** (backups, History), **Appearance** (theme) and **Account & system** (profile, running in the background). Contents beside the page (a row of tabs on narrow screens) link to the sections and mark the one being read (`aria-current`); the owner preferred this to sub-pages because the left rail is already full. Old links (`/settings#chatgpt`, `#profile`, `#service`, `#connector`, `#assistants`) still open at their card or section; `#backups` is new.
-- **Explanation pace** (owner 2026-11-26, migration 0035): Settings → Study has the default for every course (Step
+- **Explanation pace** (2026-11-26, migration 0035): Settings → Study has the default for every course (Step
   by step / Balanced / Larger chunks / Auto, with what each means); a course page has `Explanations` with `Default
   (…)` or its own pace. Every pace explains completely; only the size of each part changes. A pace asked for in a
   chat holds for that conversation; Claude and Codex offer once to save it (ChatGPT in Chat points to the course
@@ -228,7 +228,13 @@ Implemented (2026-11-21, ADR-008):
 
 Built 2026-11-21 (plan-without-claude.md, Phase 0). When an assistant cannot show RecallSpring's forms in its chat, it gives the learner a link:
 
-- **`/answer/:questionId`:** the question (never the rubric), a text field, `I used my notes or the material`, `Save answer` and `I don't know`; once there is an answer (text or a photo), `Unsure` (a toggle, aria-pressed) takes the place of `I don't know` (owner 2026-11-26; the same in Chat's form, the simulation form's open questions and the connector's answer and simulation forms). The mark is saved with the answer, shown as "Answered · unsure" under Answers and "Unsure" on simulation results, and graded normally. A note says when the question was answered before (a new answer is another attempt). After saving: the time and "Go back to your assistant and tell it you are done".
+- **Simulation retakes** (`/simulations/:id`, 2026-11-26, migration 0036): a submitted simulation has `Take it
+  again` with `Retake all questions`, `Retake questions without full points (n)` (waits until every answer is graded)
+  and `Similar, new questions in…` (the Study in… menu with a message asking for new questions on the same topics,
+  kinds and Bloom levels). A retake opens as a new version; `All versions` compares them per question with totals,
+  the first marked `Benchmark`. A later version shows `Version n · seen questions`, and `Practice only` when it was
+  taken the same day as an earlier one; the list of simulations and Readiness show the same labels.
+- **`/answer/:questionId`:** the question (never the rubric), a text field, `I used my notes or the material`, `Save answer` and `I don't know`; once there is an answer (text or a photo), `Unsure` (a toggle, aria-pressed) takes the place of `I don't know` (2026-11-26; the same in Chat's form, the simulation form's open questions and the connector's answer and simulation forms). The mark is saved with the answer, shown as "Answered · unsure" under Answers and "Unsure" on simulation results, and graded normally. A note says when the question was answered before (a new answer is another attempt). After saving: the time and "Go back to your assistant and tell it you are done".
 - **`/summary`:** the chunk's title, what was covered and the topics (only topics of that course; an incomplete link says so), a text field (may stay empty) and `Save summary`. Saved exactly as the learner's note; the topics count as studied.
 - Both keep a draft in the browser until it is saved and reuse one request key, so a retry never saves twice.
 - **Settings → Assistant connector:** `New token for Claude Desktop` / `New token for Codex`; the token table shows which assistant each token is for. Feedback on concepts and simulations reads "Feedback from Codex · model".
@@ -270,7 +276,7 @@ Implemented:
   material" marked), the kinds of questions on the paper against what was practised and the practice limit,
   today's work for this course tied to its topics with "How RecallSpring orders the work" folded, the time check,
   and "What this cannot tell you" (the server's limits). It ends with "not a prediction of your grade".
-- **Review** (`/review`, owner 2026-11-26): `Review now` lists each course with due concepts and its `Review in…`
+- **Review** (`/review`, 2026-11-26): `Review now` lists each course with due concepts and its `Review in…`
   menu (the `Study in…` menu with a review message: one question from memory per due concept, graded); then
   Overdue, Today and the next 14 days with Snooze. A **concept page** starts with what to do now: `Study first`
   (not studied), `Review now` (due) or `Practise` (before the date), each with its menu and a message naming the

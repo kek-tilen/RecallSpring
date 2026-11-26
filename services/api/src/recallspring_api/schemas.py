@@ -26,7 +26,7 @@ class LoginIn(BaseModel):
 
 AssistantKey = Literal["claude", "codex", "chatgpt", "antigravity"]
 AssistantChoice = Literal["claude", "codex", "chatgpt", "antigravity", "mix"]
-# How assistants explain new material (migration 0035, owner notes 2026-11-26; services/explanation_pace.py).
+# How assistants explain new material (migration 0035, 2026-11-26; services/explanation_pace.py).
 ExplanationPace = Literal["step", "balanced", "chunks", "auto"]
 
 
@@ -1026,10 +1026,16 @@ class DifficultyIn(BaseModel):
 
 
 class ConnectorPaceIn(BaseModel):
-    """Save the explanation pace the learner asked for (owner notes 2026-11-26)."""
+    """Save the explanation pace the learner asked for (2026-11-26)."""
 
     pace: ExplanationPace | None = None
     course_id: uuid.UUID | None = Field(default=None, description="this course only; none = the learner's default")
+
+
+class RetakeIn(BaseModel):
+    """Take a submitted simulation again (2026-11-26): every question, or only those without full points."""
+
+    scope: Literal["all", "not_full"] = "all"
 
 
 class AvailabilityIn(BaseModel):

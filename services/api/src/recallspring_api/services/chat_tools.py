@@ -127,7 +127,10 @@ differs by 2 or more (the result says self_assessment.differs), explain kindly w
 - Questions and open simulation items always need expected_points (the learner checks against them when you are \
 not available): short, checkable points, each from a section you read.
 - Simulations of an exam: create_quiz (the learner gets a link to take it), wait; then get_answer with quiz_id and \
-record_assessments for the open answers.
+record_assessments for the open answers. When it is graded, mention once that they can retake it on its page in \
+RecallSpring (every question, or only those without full points; the first version stays the benchmark and a \
+retake the same day is practice only), or ask you for similar, new questions: then create_quiz on the same \
+concepts, kinds and Bloom levels, never the same prompts.
 - Bloom levels for practice: with an exam profile follow its Bloom mix; without one (or for concepts it does not \
 cover) use each concept's practice.next_level from get_course_outline. RecallSpring ramps 3 Apply, 4 Analyze, \
 5 Evaluate (6 Create only when practice_limit.level is 6) as final answers reach Solid, steps back after a 0-1 \

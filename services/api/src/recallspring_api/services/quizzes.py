@@ -1,13 +1,21 @@
 """Exam simulations (kolokvij practice): several questions in one form, drafts, persist-first submission,
-deterministic grading of multiple-choice items and a points summary. Open answers are graded by Claude."""
+deterministic grading of multiple-choice items and a points summary. Open answers are graded by Claude.
+
+Retakes (2026-11-26, migration 0036): a submitted simulation can be taken again, all of it or only the
+questions without full points. A retake is a new version that reuses the same questions; earlier versions stay as
+they were and a per-question comparison shows every version. The first version stays the benchmark; later versions
+are "seen questions". A retake submitted the same day as an earlier version is practice only (``same_day_practice``):
+graded and shown, but out of the review schedule and the Bloom ramp (services/quiz_filters.py)."""
 
 from __future__ import annotations
 
+import math
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from .. import clock
@@ -155,6 +163,8 @@ def form_view(db: Session, quiz: Quiz) -> dict[str, Any]:
         "title": quiz.title,
         "status": quiz.status,
         "mode": quiz.mode,
+        "version": quiz.version,
+        "retake_of": str(quiz.retake_of) if quiz.retake_of else None,
         "time_limit_minutes": quiz.time_limit_minutes,
         "opened_at": quiz.opened_at.isoformat() if quiz.opened_at else None,
         "deadline": deadline(quiz).isoformat() if deadline(quiz) else None,
@@ -214,6 +224,16 @@ def submit(
     Items left empty count as "I don't know"."""
     if quiz.status == "submitted":
         return
+    if quiz.retake_of is not None:
+        # The same day as an earlier version: practice on seen questions, out of the schedule (2026-11-26).
+        tz = ZoneInfo(user.timezone)
+        today = clock.now().astimezone(tz).date()
+        quiz.same_day_practice = any(
+            q.submitted_at is not None and q.submitted_at.astimezone(tz).date() == today
+            for q in family(db, quiz)
+            if q.id != quiz.id
+        )
+        db.flush()
     items = _items(db, quiz)
     known = {str(q.id) for _, q in items}
     given = _answers_map(answers)
@@ -291,7 +311,12 @@ def submit(
         entity_type="quiz",
         entity_id=quiz.id,
         event_type="quiz.submitted",
-        payload={"items": len(items), "mode": quiz.mode},
+        payload={
+            "items": len(items),
+            "mode": quiz.mode,
+            "version": quiz.version,
+            "same_day_practice": quiz.same_day_practice,
+        },
         request_id=request_id,
     )
     if quiz.mode == "diagnostic":
@@ -382,12 +407,151 @@ def results_view(db: Session, quiz: Quiz, *, for_learner: bool = False) -> dict[
         "pending_items": pending,
         "complete": pending == 0 and quiz.status == "submitted",
         "mode": quiz.mode,
+        "version": quiz.version,
+        "retake_of": str(quiz.retake_of) if quiz.retake_of else None,
+        "seen_questions": quiz.version > 1,
+        "same_day_practice": quiz.same_day_practice,
         "items": out_items,
         "note": (
             "Diagnostic pre-test: it shows what you already know and does not change your review schedule. "
             if quiz.mode == "diagnostic"
             else ""
         )
+        + _retake_note(quiz)
         + "Open answers are graded by your assistant (an AI estimate you can challenge); multiple-choice items are "
         "graded by RecallSpring from the answer key.",
+    }
+
+
+# ---------------------------------------------------------------- retakes (2026-11-26, migration 0036)
+
+RETAKE_SCOPES = ("all", "not_full")
+
+
+def _retake_note(quiz: Quiz) -> str:
+    if quiz.version == 1:
+        return ""
+    note = f"Version {quiz.version}: the same questions again (seen questions); the first version stays the benchmark. "
+    if quiz.same_day_practice:
+        note += "Taken the same day as an earlier version, it is practice only: graded and shown, but it does not "
+        note += "change your review schedule. "
+    return note
+
+
+def family(db: Session, quiz: Quiz) -> list[Quiz]:
+    """The first version and all its retakes, oldest version first."""
+    root_id = quiz.retake_of or quiz.id
+    return list(
+        db.scalars(select(Quiz).where(or_(Quiz.id == root_id, Quiz.retake_of == root_id)).order_by(Quiz.version))
+    )
+
+
+def retake(db: Session, user: User, source: Quiz, scope: str, origin: str, request_id: str | None) -> Quiz:
+    """A new version with the same questions: every question of the first version ("all"), or only the questions of
+    ``source`` without full points ("not_full"; every answer of ``source`` must be graded for that)."""
+    if source.mode != "practice":
+        raise ApiError(409, "not_a_simulation", "Only simulations can be retaken; a check is taken once.")
+    if source.status != "submitted":
+        raise ApiError(409, "quiz_not_submitted", "Submit this simulation before taking it again.")
+    versions = family(db, source)
+    root = versions[0]
+    total = len(_items(db, root))
+    items = _items(db, root)
+    if scope == "not_full":
+        items = _items(db, source)
+        results = results_view(db, source)
+        if results["pending_items"]:
+            raise ApiError(
+                409,
+                "grading_pending",
+                "Some answers still wait for a grade: retake every question, or wait until they are graded.",
+            )
+        missed = {i["question_id"] for i in results["items"] if (i["earned"] or 0) < i["points"]}
+        items = [(item, q) for item, q in items if str(q.id) in missed]
+        if not items:
+            raise ApiError(409, "nothing_to_retake", "Every question has full points.")
+    version = max(q.version for q in versions) + 1
+    limit = root.time_limit_minutes
+    if limit and len(items) < total:
+        limit = max(1, math.ceil(limit * len(items) / total))
+    now = clock.now()
+    quiz = Quiz(
+        user_id=user.id,
+        course_id=source.course_id,
+        target_id=source.target_id,
+        title=f"{root.title[:180]} · version {version}",
+        time_limit_minutes=limit,
+        mode="practice",
+        provenance={"created_via": origin, "retake_of": str(root.id), "from_version": source.version, "scope": scope},
+        retake_of=root.id,
+        version=version,
+        created_at=now,
+    )
+    db.add(quiz)
+    db.flush()
+    for position, (item, question) in enumerate(items, start=1):
+        db.add(QuizItem(quiz_id=quiz.id, position=position, question_id=question.id, points=item.points))
+    db.flush()
+    learning_event(
+        db,
+        user_id=user.id,
+        entity_type="quiz",
+        entity_id=quiz.id,
+        event_type="quiz.retake_created",
+        payload={"retake_of": str(root.id), "version": version, "scope": scope, "items": len(items), "origin": origin},
+        request_id=request_id,
+    )
+    return quiz
+
+
+def comparison(db: Session, quiz: Quiz) -> dict[str, Any] | None:
+    """Every version of the simulation side by side, per question of the first version (None without retakes)."""
+    versions = family(db, quiz)
+    if len(versions) < 2:
+        return None
+    views = {q.id: results_view(db, q, for_learner=True) if q.status == "submitted" else None for q in versions}
+    rows = []
+    for item, question in _items(db, versions[0]):
+        cells: list[dict[str, Any] | None] = []
+        for q in versions:
+            view = views[q.id]
+            entry = next((i for i in view["items"] if i["question_id"] == str(question.id)), None) if view else None
+            cells.append(
+                {
+                    "version": q.version,
+                    "quiz_id": str(q.id),
+                    "earned": entry["earned"],
+                    "grade": entry["grade"],
+                    "kind": entry["kind"],
+                    "assessment_status": entry["assessment_status"],
+                }
+                if entry
+                else None
+            )
+        rows.append(
+            {
+                "position": item.position,
+                "question_id": str(question.id),
+                "prompt": question.prompt,
+                "points": item.points,
+                "versions": cells,
+            }
+        )
+    return {
+        "benchmark_quiz_id": str(versions[0].id),
+        "versions": [
+            {
+                "version": q.version,
+                "quiz_id": str(q.id),
+                "status": q.status,
+                "scope": (q.provenance or {}).get("scope", "first"),
+                "submitted_at": q.submitted_at.isoformat() if q.submitted_at else None,
+                "earned_points": views[q.id]["earned_points"] if views[q.id] else None,
+                "max_points": views[q.id]["max_points"] if views[q.id] else None,
+                "pending_items": views[q.id]["pending_items"] if views[q.id] else None,
+                "same_day_practice": q.same_day_practice,
+            }
+            for q in versions
+        ],
+        "questions": rows,
     }

@@ -167,6 +167,11 @@ Start of every study session in a course:
    get_self_assessments_to_check, then get_attempt and record_assessment for each; your grade replaces theirs.
    When it differs by 2 or more (self_assessment.differs in the result), explain which expected points decided it.
    Every question and open simulation item needs expected_points: short, checkable, each from a section you read.
+   RETAKES: when a simulation is graded, offer once: retake every question, retake only the questions without full
+   points (retake_quiz with scope "not_full", then open_quiz), or similar, new questions (a new create_quiz on the
+   same concepts, kinds and Bloom levels; never the same prompts). A retake reuses the questions: the first version
+   stays the benchmark, later ones are seen questions, and a retake the same day is practice only (it does not
+   change the review schedule). Compare versions with get_quiz_results' comparison, question by question.
    CONCEPT-TO-CLARITY (C2C): when the learner wants to explain a concept in their own words, or asks for C2C
    (offer it after a discussion or when an explanation would help; never insist), open_explanation_form for that
    concept. Each save is a new version of their explanation, kept exactly. When it is saved, get_explanation, compare
@@ -428,7 +433,7 @@ class QuizAnswerIn(BaseModel):
     text: str | None = None
     dont_know: bool = False
     guessing: bool = False  # a closed answer marked as a guess: never counts as known
-    unsure: bool = False  # an open answer marked as unsure: graded normally (owner 2026-11-26)
+    unsure: bool = False  # an open answer marked as unsure: graded normally (2026-11-26)
     answer_seconds: int | None = None  # measured by the form (ADR-014 §3)
 
 
@@ -1428,6 +1433,15 @@ async def get_quiz_results(quiz_id: str) -> str:
         if item.get("answer"):
             item["answer"] = learner_material(item["answer"], kind="learner_answer")
     return as_json(data)
+
+
+@mcp.tool(annotations=APPEND)
+async def retake_quiz(quiz_id: str, scope: Literal["all", "not_full"] = "all") -> str:
+    """Only when the learner asks to take a submitted simulation again: a new version with the same questions,
+    every question ("all") or only those without full points ("not_full"; every answer must be graded first). The
+    earlier versions stay as they were. Then open_quiz with the returned quiz_id. For new questions instead, use
+    create_quiz."""
+    return as_json(await get_client().post(f"/quizzes/{quiz_id}/retake", {"scope": scope}))
 
 
 class AssessmentDraft(BaseModel):

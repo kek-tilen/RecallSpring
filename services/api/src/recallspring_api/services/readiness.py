@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..errors import ApiError, not_found
@@ -42,7 +42,7 @@ from ..models import (
     SyllabusItem,
     User,
 )
-from . import mastery
+from . import mastery, quiz_filters
 from .learning import effective_status
 from .reviews import effective_assessment, refresh_exam_overlays
 from .targets import concept_weights, latest_profile, scope_concepts
@@ -123,7 +123,7 @@ def _last_feedback(db: Session, user_id: uuid.UUID, concept_ids: list[uuid.UUID]
         .join(Question, Question.id == Attempt.question_id)
         .outerjoin(Quiz, Quiz.id == Attempt.quiz_id)
         .where(QuestionConcept.concept_id.in_(concept_ids), Attempt.user_id == user_id)
-        .where(or_(Quiz.id.is_(None), Quiz.mode != "diagnostic"))
+        .where(quiz_filters.counts_for_schedule())
     ).all()
     per_attempt: dict[uuid.UUID, list[Assessment]] = defaultdict(list)
     meta: dict[uuid.UUID, tuple[Attempt, str, set[uuid.UUID]]] = {}
@@ -323,9 +323,10 @@ def readiness(db: Session, user: User, target_id: uuid.UUID, now: datetime) -> d
     from .overview import quiz_summary  # overview imports many services; keep this module light to import
 
     simulations = [quiz_summary(db, q) for q in quizzes[:5]]
-    recent_simulation = any(
+    recent_simulation = any(  # a retake answers seen questions: only a first version counts as a fresh simulation
         q.status == "submitted"
         and q.mode != "diagnostic"
+        and q.version == 1
         and q.submitted_at
         and now - q.submitted_at < timedelta(days=7)
         for q in quizzes

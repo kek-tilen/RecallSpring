@@ -18,7 +18,7 @@ from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import not_found
 from ..models import Concept, Course, Quiz
-from ..schemas import QuizDraftIn, QuizSubmitIn
+from ..schemas import QuizDraftIn, QuizSubmitIn, RetakeIn
 from ..services import calendar, overview, week
 from ..services import quizzes as quiz_svc
 from ..services.ownership import course_alive, owned
@@ -95,7 +95,12 @@ def get_quiz(quiz_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = 
     """Open simulations show questions only (no answer keys); submitted ones show answers, grades and keys."""
     quiz = _quiz(db, quiz_id, ctx.user.id)
     view = form_view(db, quiz) if quiz.status == "open" else results_view(db, quiz)
-    return {"course_id": str(quiz.course_id), "created_at": quiz.created_at.isoformat(), **view}
+    return {
+        "course_id": str(quiz.course_id),
+        "created_at": quiz.created_at.isoformat(),
+        **view,
+        "comparison": quiz_svc.comparison(db, quiz),
+    }
 
 
 @router.get("/attempts")
@@ -158,6 +163,20 @@ def submit_quiz(
     db.flush()
     body = {"course_id": str(quiz.course_id), "created_at": quiz.created_at.isoformat(), **results_view(db, quiz)}
     return commit_with_response(db, ctx, payload, 200, body)
+
+
+@router.post("/quizzes/{quiz_id}/retake", status_code=201)
+def retake_quiz(
+    quiz_id: uuid.UUID, payload: RetakeIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """A new version of a submitted simulation with the same questions (all, or those without full points); the
+    earlier versions stay as they were (2026-11-26)."""
+    key = {"retake": str(quiz_id), **payload.model_dump()}
+    if replay := replay_if_seen(db, ctx, key):
+        return replay
+    source = _quiz(db, quiz_id, ctx.user.id, lock=True)
+    quiz = quiz_svc.retake(db, ctx.user, source, payload.scope, "web", ctx.request_id)
+    return commit_with_response(db, ctx, key, 201, {"quiz_id": str(quiz.id), "version": quiz.version})
 
 
 # ---------------------------------------------------------------- calendar export

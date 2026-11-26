@@ -24,7 +24,7 @@ export interface User {
   assistant: AssistantChoice | null;
   assistant_mix?: AssistantKey[];
   greeting_name?: string | null;
-  /** how assistants explain new material by default (owner 2026-11-26) */
+  /** how assistants explain new material by default (2026-11-26) */
   explanation_pace?: ExplanationPace;
 }
 
@@ -135,7 +135,7 @@ export interface PracticeLimit {
   level: number;
   label: string;
   set_by_learner: boolean;
-  /** without a limit of the learner's own: why it is 5, or 6 when an exam paper asks for Create (owner 2026-11-26) */
+  /** without a limit of the learner's own: why it is 5, or 6 when an exam paper asks for Create (2026-11-26) */
   automatic?: string | null;
   exam_profile_above: { target_id: string; target: string; share: number; confirmed: boolean } | null;
   warning: string | null;
@@ -313,6 +313,33 @@ export interface QuizSummary {
   earned_points: number | null;
   max_points: number | null;
   pending_items: number | null;
+  /** retakes (2026-11-26): 1 = the first version (the benchmark); later ones answer seen questions */
+  version?: number;
+  retake_of?: string | null;
+  same_day_practice?: boolean;
+}
+
+/** Every version of a simulation side by side (2026-11-26); null without retakes. */
+export interface QuizComparison {
+  benchmark_quiz_id: string;
+  versions: {
+    version: number;
+    quiz_id: string;
+    status: "open" | "submitted";
+    scope: "first" | "all" | "not_full";
+    submitted_at: string | null;
+    earned_points: number | null;
+    max_points: number | null;
+    pending_items: number | null;
+    same_day_practice: boolean;
+  }[];
+  questions: {
+    position: number;
+    question_id: string;
+    prompt: string;
+    points: number;
+    versions: ({ version: number; quiz_id: string; earned: number | null; grade: number | null; kind: string | null } | null)[];
+  }[];
 }
 
 export interface CourseOverview {
@@ -495,6 +522,11 @@ export interface QuizView {
   complete?: boolean;
   items: QuizItemView[];
   note?: string;
+  version?: number;
+  retake_of?: string | null;
+  seen_questions?: boolean;
+  same_day_practice?: boolean;
+  comparison?: QuizComparison | null;
 }
 
 export interface HistoryRow {
