@@ -15,3 +15,4 @@ pypdf
 pypdfium2  # renders PDF pages as images for Claude (BSD-3/Apache-2.0, PDFium)
 pillow  # converts TIFF/BMP and oversized pictures for Claude, in the isolated render process (MIT-CMU)
 python-multipart
+fsrs==6.3.3  # FSRS-6 review model, computed in shadow only (ADR-014 §5; MIT, Open Spaced Repetition)
