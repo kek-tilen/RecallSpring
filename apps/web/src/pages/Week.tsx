@@ -151,6 +151,13 @@ export function WeekPage() {
   const go = (n: number) => setParams(n ? { weeks_ago: String(n) } : {}, { replace: true });
   return (
     <div className="page">
+      {/* The weekly review is Today's second view (UI direction, 2026-11-27). */}
+      <nav className="views" aria-label="Today">
+        <Link to="/">Today</Link>
+        <Link to="/week" aria-current="page">
+          This week
+        </Link>
+      </nav>
       <PageHead title="Weekly review" sub="What RecallSpring recorded in one week, Monday to Sunday, and the exams ahead.">
         <div className="row">
           <button type="button" className="btn" onClick={() => go(weeksAgo + 1)} disabled={weeksAgo >= 52}>

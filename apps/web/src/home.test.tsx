@@ -164,3 +164,13 @@ describe("calm home (ADR-012, variant A)", () => {
     expect(screen.getByText("3 min · quick check")).toBeTruthy();
   });
 });
+
+describe("Today (UI direction, 2026-11-27)", () => {
+  it("lists the exams ahead in the week panel, each opening its exam with its status", async () => {
+    renderHome(dashboard());
+    const week = await screen.findByRole("region", { name: "This week" });
+    const exam = week.querySelector('.home-exams a[href="/exams/t1"]');
+    expect(exam?.textContent).toBe("1st midterm · Computer Architecture");
+    expect(week.querySelector(".home-exams")?.textContent).toContain("On track");
+  });
+});

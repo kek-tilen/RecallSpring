@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useAssistant, type AssistantWords } from "../assistant";
 import { EventList } from "./History";
 import { StudyIn } from "../components/StudyIn";
 import { Upload } from "../components/Upload";
 import { Async, Card, Empty, StudyChip } from "../components/ui";
 import { longToday, nextDays, plural, shortDay } from "../format";
-import { useDashboard, useFocusSummary, useSession } from "../queries";
+import { useCourses, useDashboard, useFocusSummary, useSession } from "../queries";
+import { CourseDot, cc } from "../components/organise";
 import { usePomodoro } from "../components/Pomodoro";
 import type { AttentionItem, Dashboard, FocusSummary, PlanItem, TargetCapacity } from "../types";
 
@@ -217,10 +218,15 @@ function ThenToday({ items }: { items: PlanItem[] }) {
 
 const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" });
 
-/** The next seven days from today: dates, reviews due today, minutes focused. */
+/**
+ * The next seven days from today (the strip opens the weekly review), reviews due today, minutes focused, and the
+ * exams ahead with their status. Exams are marked in their course's colour (UI direction, 2026-11-27).
+ */
 function WeekPanel({ d, focus }: { d: Dashboard; focus: FocusSummary | undefined }) {
+  const navigate = useNavigate();
+  const colors = new Map((useCourses().data ?? []).map((c) => [c.id, c.color]));
   const days = nextDays(7);
-  const soon = d.plan.targets.filter((t) => t.days_left >= 0 && t.days_left <= 7).sort((x, y) => x.days_left - y.days_left);
+  const ahead = d.plan.targets.filter((t) => t.days_left >= 0).sort((x, y) => x.days_left - y.days_left);
   const due = d.plan.items.filter(isReview).length;
   return (
     <section className="card home-week" aria-labelledby="home-week-title">
@@ -230,7 +236,8 @@ function WeekPanel({ d, focus }: { d: Dashboard; focus: FocusSummary | undefined
           Weekly review
         </Link>
       </div>
-      <ol className="home-strip">
+      {/* A click anywhere on the strip opens the weekly review; keyboard users have the link above. */}
+      <ol className="home-strip" onClick={() => navigate("/week")}>
         {days.map((day, i) => {
           const dates = d.plan.targets.filter((t) => t.due_date.slice(0, 10) === day);
           const label = `${shortDay(day)}${dates.length ? `: ${dates.map((t) => `${t.target}, ${t.course_title}`).join("; ")}` : ""}`;
@@ -243,21 +250,15 @@ function WeekPanel({ d, focus }: { d: Dashboard; focus: FocusSummary | undefined
                 {Number(day.slice(8, 10))}
               </span>
               <span className="home-strip-dot" aria-hidden="true">
-                {dates.length > 0 ? "●" : ""}
+                {dates.slice(0, 2).map((t) => (
+                  <span key={t.target_id} className={`course-dot ${cc(colors.get(t.course_id))}`} />
+                ))}
               </span>
             </li>
           );
         })}
       </ol>
       <ul className="home-rows">
-        {soon.map((t) => (
-          <li key={t.target_id}>
-            <Link to={`/courses/${t.course_id}?tab=targets`}>
-              {t.target} · {t.course_title}
-            </Link>
-            <span className="muted">{when(t)}</span>
-          </li>
-        ))}
         <li>
           <Link to="/review">Reviews today</Link>
           <span className="muted">{due}</span>
@@ -267,6 +268,27 @@ function WeekPanel({ d, focus }: { d: Dashboard; focus: FocusSummary | undefined
           <span className="muted">{focus ? `${focus.week_minutes} min` : "–"}</span>
         </li>
       </ul>
+      {ahead.length > 0 && (
+        <>
+          <h3 className="home-week-sub">Exams</h3>
+          <ul className="home-rows home-exams">
+            {ahead.slice(0, 4).map((t) => (
+              <li key={t.target_id}>
+                <span className="home-exam">
+                  <CourseDot color={colors.get(t.course_id)} />
+                  <span>
+                    <Link to={`/exams/${t.target_id}`}>
+                      {t.target} · {t.course_title}
+                    </Link>
+                    <span className="muted small home-exam-when">{when(t)}</span>
+                  </span>
+                </span>
+                <span className={CAPACITY[t.status].tone}>{CAPACITY[t.status].label}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   );
 }
@@ -507,7 +529,10 @@ export function HomePage() {
                   </div>
                 )}
                 <div className="grid cols-3">
-                  <AttentionCard items={d.attention} />
+                  {/* On phones only this card stays, and only when something needs attention. */}
+                  <div className={d.attention.length ? "home-attn" : "home-attn empty"}>
+                    <AttentionCard items={d.attention} />
+                  </div>
                   <Card title="Recent activity" action={<Link to="/history" className="small">All</Link>}>
                     <EventList rows={d.recent.slice(0, 4)} compact />
                   </Card>

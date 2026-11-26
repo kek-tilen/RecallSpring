@@ -5259,3 +5259,91 @@ details.c2c-version > summary {
     padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* ------------------------------------------------------------------ Today (UI direction, 2026-11-27) */
+
+.home-strip {
+  cursor: pointer;
+}
+
+.home-strip-dot {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+}
+
+.home-strip-dot .course-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.home-week-sub {
+  margin: 14px 0 2px;
+  font-size: 0.92rem;
+}
+
+.home-exams li {
+  align-items: center;
+}
+
+.home-exam {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.home-rows li > span.home-exam {
+  align-items: baseline;
+  white-space: normal;
+}
+
+.home-exam .course-dot {
+  width: 9px;
+  height: 9px;
+}
+
+.home-exam-when {
+  display: block;
+}
+
+.home-exams .chip {
+  flex: none;
+}
+
+/* Today's two views: Today and the weekly review. */
+.views {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.views a {
+  padding: 6px 14px;
+  border-radius: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 550;
+  font-size: 0.9rem;
+}
+
+.views a[aria-current="page"] {
+  background: var(--surface-elevated);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+@media (max-width: 860px) {
+  /* Phones: the essentials only (UI direction, 2026-11-27). The full plan, recent activity, upload and what
+     RecallSpring holds stay on larger screens; "Needs attention" stays when something does. */
+  .home-detail-head,
+  .home-detail-split,
+  .home-holds,
+  .home-detail .grid.cols-3 > :not(.home-attn),
+  .home-attn.empty {
+    display: none;
+  }
+}
