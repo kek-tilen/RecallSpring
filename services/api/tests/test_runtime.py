@@ -85,3 +85,14 @@ def test_serve_runs_uvicorn_without_its_console_logging(
     assert calls == [("recallspring_api.main:app", {"host": "127.0.0.1", "port": 4318, "log_config": None})]
     assert cli.main(["serve", "--port", "4319"]) == 0
     assert calls[1] == ("recallspring_api.main:app", {"host": "127.0.0.1", "port": 4319})
+
+
+def test_commands_read_the_api_env_from_any_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from recallspring_api import config
+
+    api_env, local_env = config.Settings.model_config["env_file"]  # type: ignore[misc]
+    assert api_env == Path(config.__file__).resolve().parents[2] / ".env" and local_env == ".env"
+    (tmp_path / ".env").write_text("RS_SESSION_TTL_HOURS=7\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("RS_SESSION_TTL_HOURS", raising=False)
+    assert config.Settings().session_ttl_hours == 7  # a .env in the current folder still wins

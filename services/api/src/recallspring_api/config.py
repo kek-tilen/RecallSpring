@@ -1,4 +1,8 @@
-"""Application settings, read from environment variables prefixed ``RS_`` (or a local ``.env``)."""
+"""Application settings, read from environment variables prefixed ``RS_`` (or a local ``.env``).
+
+The ``.env`` of services/api is read from whichever folder a command runs in (e.g. ``recallspring shadow-report``
+from the home folder); a ``.env`` in the current folder still overrides it, and environment variables override both.
+"""
 
 from __future__ import annotations
 
@@ -10,10 +14,11 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
+_API_ENV = Path(__file__).resolve().parents[2] / ".env"  # services/api/.env (absent in an installed package)
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="RS_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="RS_", env_file=(_API_ENV, ".env"), extra="ignore")
 
     environment: Literal["development", "test", "production"] = "development"
     database_url: str = Field(
