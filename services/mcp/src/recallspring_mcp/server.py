@@ -139,6 +139,11 @@ Start of every study session in a course:
    create_questions + open_answer_form. If your app cannot show RecallSpring's forms, these tools return a
    RecallSpring link instead: give it to the learner, wait until they say they answered, then call get_answer (or
    get_quiz_results).
+   REVIEWS: when the learner asks to review what is due (in a course, or one concept by its concept_id), call
+   get_due_reviews (with course_id) and get_course_outline. Per due concept ask one new question from memory at its
+   practice.next_level, never above practice_limit.level; show no material, earlier answer or summary first.
+   create_questions + open_answer_form (several concepts: create_quiz + open_quiz), then grade as below;
+   RecallSpring sets the next review date. A Concept-to-Clarity explanation is not a review.
    ANSWERS IN THE CHAT: when the learner answers in the chat instead of a form, ask once per session whether
    answers given in the chat should count in RecallSpring; their answer holds for the session. If yes: the question
    must be in RecallSpring (create_questions first, expected points from sections you read), then

@@ -132,6 +132,10 @@ answer, and once the top level is solid suggests mixed levels; mix concepts and 
 level only. Never go above practice_limit.level (the learner's choice, or automatic: 5, or 6 while an exam paper \
 asks for Create); if practice_limit.warning is set, explain it once and let the learner decide. If \
 practice_limit.model_tip is set, tell the learner once that a more capable model asks and grades Create better.
+- Reviews: when the learner asks to review what is due (in a course, or one concept by its concept_id), call \
+get_due_reviews and get_course_outline; per due concept ask one new question from memory at its practice.next_level, \
+never above practice_limit.level, with no material, earlier answer or summary first; then grade it. RecallSpring sets \
+the next review date. A Concept-to-Clarity explanation is not a review.
 - Check first (optional, the learner's choice): when a new chapter or target starts, mention once, gently, that \
 they can check what they already know (a chapter, or a bit of everything for the target). Never insist. Use \
 check_first from get_course_outline and create_quiz with mode diagnostic: each concept at its check.level, "open" = \

@@ -6,7 +6,7 @@ import { Async, Card, Empty, ErrorNote, PageHead } from "../components/ui";
 import { dateLabel, daysFromToday, plural, relativeDay } from "../format";
 import { courseTitles, keys, useCourses } from "../queries";
 import type { ReviewItem } from "../types";
-import { useAssistant } from "../assistant";
+import { StudyIn } from "../components/StudyIn";
 
 function Row({ item, course }: { item: ReviewItem; course: string }) {
   const qc = useQueryClient();
@@ -58,16 +58,41 @@ function Row({ item, course }: { item: ReviewItem; course: string }) {
   );
 }
 
+/** Owner 2026-11-26: the page says what is due, and per course starts the review itself with the learner's assistant. */
+function ReviewNow({ items, titles }: { items: ReviewItem[]; titles: Record<string, string> }) {
+  const due = new Map<string, number>();
+  for (const i of items) if (i.is_due) due.set(i.course_id, (due.get(i.course_id) ?? 0) + 1);
+  if (due.size === 0) return null;
+  const total = [...due.values()].reduce((a, b) => a + b, 0);
+  return (
+    <Card title="Review now" meta={`${plural(total, "concept")} due`}>
+      <p className="small muted" style={{ marginTop: 0 }}>
+        Your assistant asks one question from memory per concept and grades it; RecallSpring then sets the next date.
+      </p>
+      <ul className="list review-now">
+        {[...due.entries()].map(([courseId, n]) => (
+          <li key={courseId} className="row" style={{ justifyContent: "space-between" }}>
+            <span>
+              <span style={{ fontWeight: 600 }}>{titles[courseId] ?? "Course"}</span>
+              <span className="muted small"> · {plural(n, "concept")} due</span>
+            </span>
+            <StudyIn course={{ id: courseId, title: titles[courseId] ?? "this course" }} review={{}} />
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 export function ReviewPage() {
   const q = useQuery({ queryKey: keys.reviews, queryFn: () => get<{ items: ReviewItem[]; note: string }>("/reviews/due", { horizon_days: 14 }) });
   const courses = useCourses();
   const titles = courseTitles(courses.data);
-  const a = useAssistant();
   return (
     <div className="page">
       <PageHead
         title="Review"
-        sub={`RecallSpring schedules reviews from your graded answers. Practise them ${a.where}: say “Review what is due”.`}
+        sub="RecallSpring schedules reviews from your graded answers. Review in… starts a review with your assistant: questions from memory, graded."
       />
       <Async q={q} lines={6}>
         {(data) => {
@@ -79,6 +104,7 @@ export function ReviewPage() {
           }
           return (
             <div className="stack" style={{ gap: 20 }}>
+              <ReviewNow items={data.items} titles={titles} />
               {[
                 { title: "Overdue", items: overdue },
                 { title: "Today", items: today },

@@ -265,6 +265,12 @@ Implemented:
   material" marked), the kinds of questions on the paper against what was practised and the practice limit,
   today's work for this course tied to its topics with "How RecallSpring orders the work" folded, the time check,
   and "What this cannot tell you" (the server's limits). It ends with "not a prediction of your grade".
+- **Review** (`/review`, owner 2026-11-26): `Review now` lists each course with due concepts and its `Review in…`
+  menu (the `Study in…` menu with a review message: one question from memory per due concept, graded); then
+  Overdue, Today and the next 14 days with Snooze. A **concept page** starts with what to do now: `Study first`
+  (not studied), `Review now` (due) or `Practise` (before the date), each with its menu and a message naming the
+  concept. Concept-to-Clarity stays below, folded and marked optional: an explanation is not a review and does
+  not move the date.
 - **Weekly review** (`/week`, and a "This week" card on Today): plain summary sentences, numbers, a 0-4 grade
   distribution as a labelled table, per course, reviews, exams in the next three weeks; earlier weeks one click
   back.

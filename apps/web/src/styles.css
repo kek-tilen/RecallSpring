@@ -5031,3 +5031,21 @@ details.c2c-version > summary {
 .home-holds {
   margin: 0;
 }
+
+/* Concept page: Concept-to-Clarity folded under the review action (owner 2026-11-26). */
+.c2c-fold > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.c2c-fold[open] > summary {
+  margin-bottom: 8px;
+}
+.review-now .study-in {
+  max-width: 360px;
+  text-align: right;
+}
+.review-now .study-in-menu {
+  right: 0;
+  left: auto;
+  text-align: left;
+}

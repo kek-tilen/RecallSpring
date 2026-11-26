@@ -117,6 +117,7 @@ def test_study_folders_are_read_only_and_keep_your_edits(tmp_path: Path, monkeyp
     # Codex is where the learner studies most (owner 2026-11-26): the rules are in every folder
     assert "Never assume what I have studied" in agents and "completely and concretely" in agents
     assert "6 Create only when practice_limit.level is 6" in agents and "practice_limit.model_tip" in agents
+    assert "one new question from memory" in agents and "Concept-to-Clarity explanation is not a review" in agents
     planning = (root / "Planning" / "AGENTS.md").read_text(encoding="utf-8")
     assert "go through today's plan" in planning and "Never assume what I have studied" in planning
     assert "interest" in (root / "CON (course)" / "AGENTS.md").read_text(encoding="utf-8")

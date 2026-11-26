@@ -548,6 +548,14 @@ async def test_instructions_cover_bloom_six_create() -> None:
     assert "practice_limit.model_tip" in instructions and "more capable model" in instructions
 
 
+async def test_instructions_cover_reviews_from_memory() -> None:
+    # owner 2026-11-26: "Review in…" asks one new question from memory per due concept; an explanation is not a review
+    async with Client(mcp) as client:
+        instructions = client.instructions or ""
+    assert "REVIEWS:" in instructions and "one new question from memory" in instructions
+    assert "A Concept-to-Clarity explanation is not a review" in instructions
+
+
 async def test_readiness_and_weekly_review_tools(api: FakeApi) -> None:
     api.route("GET", "/readiness", 200, {"summary": {"weak": 1}, "next_steps": ["Strengthen 1 weak concept"]})
     api.route("GET", "/week", 200, {"summary": ["Active on 2 of 5 days"]})

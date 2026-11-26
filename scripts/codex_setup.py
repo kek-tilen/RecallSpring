@@ -247,6 +247,10 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
   back one level after a weak answer, then mixed. Mix concepts and levels in a quiz, never above
   practice_limit.level. If practice_limit.model_tip is set, tell me once that a more capable model (a thinking or
   reasoning model) asks and grades Create questions better.
+- Reviews: when I ask to review what is due (this course, or one concept by its concept_id), use get_due_reviews
+  and get_course_outline; per due concept one new question from memory at its practice.next_level, never above
+  practice_limit.level, with no material, earlier answer or summary first; then grade it. RecallSpring sets the
+  next review date. A Concept-to-Clarity explanation is not a review.
 - Check first is my choice: when a new chapter or target starts, mention it once, gently. Use check_first from
   get_course_outline and create_quiz with mode diagnostic; afterwards green = known, yellow = explain only the
   gaps (I may skip the summary), red = learn it first.

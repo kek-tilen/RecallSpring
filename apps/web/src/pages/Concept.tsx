@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router";
 import { MathText } from "../components/Markdown";
 import { ClarityPanel } from "../components/Clarity";
+import { StudyIn } from "../components/StudyIn";
 import { Async, BandChip, Card, Difficulty, Empty, GradeChip, PageHead, StudyChip } from "../components/ui";
 import { ATTEMPT_KIND, CAPTURED_VIA, DIFFICULTY_SOURCE, STUDY_SOURCE, dateLabel, dateTime, gradedBy, plural, relativeDay } from "../format";
 import { useConcept, useCourses } from "../queries";
@@ -29,6 +30,34 @@ export function ConceptPage() {
 
               <div className="split">
                 <div className="stack" style={{ gap: 20 }}>
+                  {/* Owner 2026-11-26: what to do with this concept now comes first; an explanation is not a review. */}
+                  {(() => {
+                    const forCourse = { id: c.course_id, title: course?.title ?? "this course" };
+                    const concept = { id: c.id, term: c.term };
+                    if (c.study_status === "not_studied") {
+                      return (
+                        <Card title="Study first" tint>
+                          <p className="small" style={{ marginTop: 0 }}>
+                            Not studied yet: learn it with your assistant first; practice and reviews come after.
+                          </p>
+                          <StudyIn course={forCourse} />
+                        </Card>
+                      );
+                    }
+                    const due = !!c.review?.is_due;
+                    return (
+                      <Card title={due ? "Review now" : "Practise"} tint={due}>
+                        <p className="small" style={{ marginTop: 0 }}>
+                          {due
+                            ? "Due for review. Your assistant asks one new question from memory at your practice level and grades it; RecallSpring then sets the next date."
+                            : c.review
+                              ? `Next review ${dateLabel(c.review.due_at)} (${relativeDay(c.review.due_at)}). You can practise before then: a new question from memory, graded.`
+                              : "A new question from memory at your practice level, graded; the first graded answer schedules reviews."}
+                        </p>
+                        <StudyIn course={forCourse} review={{ concept, due }} />
+                      </Card>
+                    );
+                  })()}
                   <Card title="What it is">
                     {c.definition_draft ? (
                       <p className="reading pre">{c.definition_draft}</p>
@@ -81,8 +110,12 @@ export function ConceptPage() {
                       </ul>
                     )}
                   </Card>
-                  <Card title="Concept-to-Clarity" meta="Your explanation in versions">
-                    <ClarityPanel conceptId={c.id} />
+                  <Card title="Concept-to-Clarity" meta="Optional · not a review">
+                    <details className="c2c-fold">
+                      <summary>Explain it in your own words</summary>
+                      <p className="tiny muted">Trains understanding with feedback, not a grade; it does not change the review date.</p>
+                      <ClarityPanel conceptId={c.id} />
+                    </details>
                   </Card>
                 </div>
 
