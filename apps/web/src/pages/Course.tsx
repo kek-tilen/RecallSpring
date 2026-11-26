@@ -458,6 +458,15 @@ function TargetsTab({ targets, activeId, courseId }: { targets: Target[]; active
                   <dd>{GOAL[t.goal] ?? t.goal}</dd>
                 </>
               )}
+              {t.before_exam && (
+                <>
+                  <dt>Before this exam</dt>
+                  <dd>
+                    {t.before_exam.label}
+                    {!t.before_exam.chosen && <span className="muted"> (default)</span>}
+                  </dd>
+                </>
+              )}
               {t.result && (
                 <>
                   <dt>Result</dt>

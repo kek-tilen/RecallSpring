@@ -102,7 +102,9 @@ Start of every study session in a course:
    another try. When a grade you record returns relearn, follow relearn.say: give feedback on the gaps from the
    material (cite it), ask about it again later in the session after other questions with a varied question, stop
    at relearn.solid_needed Solid answers or relearn.max_tries tries today. A correct answer later in the same
-   session is not mastery: never call it that.
+   session is not mastery: never call it that. A target's before_exam (regular reviews only, an extra review
+   before the exam, or intense) is the learner's choice: change it with update_study_target only when they clearly
+   ask, and say it in words, never as a chance of remembering.
    CHECK FIRST (optional, the learner's choice): when a new chapter or target starts and the learner may already
    know some of it, mention once, briefly and gently, that they can check first: a chapter, or a bit of everything
    for the target (or the course without one). Never insist; learning first stays the default. For a check use
@@ -1124,11 +1126,15 @@ async def set_study_target(
     scope: list[ScopeEntry] | None = None,
     notes: str | None = None,
     goal: Literal["exam_only", "long_term"] = "long_term",
+    before_exam: Literal["default", "regular", "extra_review", "intense"] = "default",
 ) -> str:
     """Record what the learner prepares for, after asking them. name e.g. "2. kolokvij"; due_date YYYY-MM-DD;
     scope_description = the learner's own words, verbatim; scope = your mapping to sources, page ranges, topics or
     concepts from get_course_outline (confirm it with the learner first; empty = whole course); notes = specifics
-    (allowed aids, question types, what the lecturer emphasises). Other chats may already have recorded this exam:
+    (allowed aids, question types, what the lecturer emphasises). before_exam = how the reviews go in the days
+    before the exam: regular (regular reviews only), extra_review (an extra review before the exam when the last
+    one would be long before it), intense (reviews closer together; needs noticeably more reviews); keep default
+    (the goal's default) unless the learner chose. Other chats may already have recorded this exam:
     check get_study_context first. If RecallSpring answers target_exists, do not create it again - use
     update_study_target with the target_id it names (add the new details there)."""
     payload = {
@@ -1140,6 +1146,7 @@ async def set_study_target(
         "scope": [s.model_dump() for s in scope or []],
         "notes": notes,
         "goal": goal,
+        "before_exam": before_exam,
     }
     return as_json(await get_client().post("/targets", payload))
 
@@ -1153,15 +1160,19 @@ async def update_study_target(
     scope_description: str | None = None,
     scope: list[ScopeEntry] | None = None,
     notes: str | None = None,
+    before_exam: Literal["default", "regular", "extra_review", "intense"] | None = None,
 ) -> str:
     """Update a target when the learner tells you: passed or failed (with result), a moved date, a refined scope
-    or new specifics. Passed material moves to maintenance; a failed target stays active for the retake."""
+    or new specifics. Passed material moves to maintenance; a failed target stays active for the retake.
+    before_exam only on the learner's clear request: regular, extra_review or intense (as in set_study_target);
+    default goes back to the goal's default. Review dates follow at once."""
     payload: dict[str, Any] = {
         "status": status,
         "result": result,
         "due_date": due_date,
         "scope_description": scope_description,
         "notes": notes,
+        "before_exam": before_exam,
     }
     if scope is not None:
         payload["scope"] = [s.model_dump() for s in scope]

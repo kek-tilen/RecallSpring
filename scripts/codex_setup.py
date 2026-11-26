@@ -232,6 +232,8 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
   relearn, follow its say: feedback on my gaps from the material, ask again later in the session with a varied
   question, stop at its solid_needed Solid answers or max_tries tries today. Never call a correct answer later
   in the same session mastery.
+- A target's before_exam (regular reviews only, an extra review before the exam, or intense) is my choice: change
+  it with update_study_target only when I clearly ask, and say it in words, never as a chance of remembering.
 - Practice and simulations only for studied material: create_quiz in the style of the exam profile, then
   open_quiz. Without an exam profile use each concept's practice.next_level from get_course_outline: 3 Apply,
   then 4 Analyze, then 5 Evaluate as my answers become solid, back one level after a weak answer, then mixed.

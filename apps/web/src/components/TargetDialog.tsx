@@ -3,9 +3,28 @@ import { useState, type FormEvent } from "react";
 import { ApiError, request } from "../api";
 import { dateLabel } from "../format";
 import { useCourses, useSources, useStudySettings, useTargets } from "../queries";
-import type { ScopeItem, Target } from "../types";
+import type { BeforeExam, ScopeItem, Target } from "../types";
 import { useInvalidateOrganisation } from "./organise";
 import { Confirm, ErrorNote, Modal } from "./ui";
+
+/** ADR-014 §4: the per-exam choice for the days before it (the goal's default unless the learner picks another). */
+export const BEFORE_EXAM: { value: BeforeExam; label: string; hint: string }[] = [
+  {
+    value: "regular",
+    label: "Regular reviews only",
+    hint: "Reviews keep their usual spacing, even when the next one falls after the exam.",
+  },
+  {
+    value: "extra_review",
+    label: "An extra review before the exam",
+    hint: "When your last review would be long before the exam, one more comes the day before it.",
+  },
+  {
+    value: "intense",
+    label: "Intense",
+    hint: "Reviews come closer together before the exam. This needs noticeably more reviews.",
+  },
+];
 
 interface MaterialRow {
   source_id: string;
@@ -57,6 +76,10 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
   const [scopeText, setScopeText] = useState(target?.scope_description ?? "");
   const [notes, setNotes] = useState(target?.notes ?? "");
   const [rows, setRows] = useState<MaterialRow[]>(toRows(target?.scope ?? []));
+  const goalDefault: BeforeExam = target?.before_exam?.goal_default ?? "regular";
+  const [beforeExam, setBeforeExam] = useState<BeforeExam>(target?.before_exam?.choice ?? goalDefault);
+  // Picking the goal's default stores no choice, so the target follows its goal again.
+  const beforeExamValue = beforeExam === goalDefault ? "default" : beforeExam;
   const textSources = (sources.data ?? []).filter((s) => s.kind !== "image");
   const study = useStudySettings();
   const allTargets = useTargets();
@@ -94,6 +117,7 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
             scope_description: scopeText.trim(),
             notes: notes.trim() || null,
             scope,
+            before_exam: beforeExamValue,
           },
         });
       }
@@ -106,6 +130,7 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
       if (scopeText.trim() !== target.scope_description) body.scope_description = scopeText.trim();
       if (notes.trim() !== (target.notes ?? "") && notes.trim()) body.notes = notes.trim();
       if (JSON.stringify(rows) !== JSON.stringify(toRows(target.scope))) body.scope = scope;
+      if (beforeExam !== (target.before_exam?.choice ?? goalDefault)) body.before_exam = beforeExamValue;
       if (Object.keys(body).length === 0) return Promise.resolve(null);
       return request(`/targets/${target.id}`, { method: "PATCH", json: body });
     },
@@ -272,6 +297,39 @@ export function TargetDialog({ target, courseId, open, onClose, onDeleted }: {
               Add material
             </button>
           </div>
+        </fieldset>
+        <fieldset className="stack" style={{ border: 0, padding: 0, margin: 0, gap: 6 }}>
+          <legend className="small" style={{ fontWeight: 600 }}>
+            Before this exam
+          </legend>
+          <span className="small muted">
+            How your reviews go in the days before it. Concepts that are not solid yet get another try with feedback in
+            the last week, whatever you choose.
+          </span>
+          {BEFORE_EXAM.map((o) => (
+            <label key={o.value} className="choice">
+              <input
+                type="radio"
+                name="before-exam"
+                value={o.value}
+                checked={beforeExam === o.value}
+                onChange={() => setBeforeExam(o.value)}
+              />
+              <span className="stack" style={{ gap: 2 }}>
+                <span>
+                  {o.label}
+                  {o.value === goalDefault && <span className="muted"> (default)</span>}
+                </span>
+                <span className="small muted">{o.hint}</span>
+              </span>
+            </label>
+          ))}
+          {beforeExam === "intense" && (
+            <div className="notice warn small" role="status">
+              Intense needs noticeably more reviews in the days before the exam. Choose it when you have the time for
+              them.
+            </div>
+          )}
         </fieldset>
         <label className="field">
           Type and specifics

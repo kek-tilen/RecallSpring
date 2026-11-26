@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from .. import clock
 from ..errors import ApiError
+from ..learning.scheduler import BEFORE_EXAM, before_exam_choice, exam_target
 from ..models import (
     Concept,
     ConceptSource,
@@ -460,6 +461,28 @@ def link_profile_source(
     return target
 
 
+BEFORE_EXAM_LABELS = {
+    "regular": "Regular reviews only",
+    "extra_review": "An extra review before the exam",
+    "intense": "Intense",
+}
+
+
+def before_exam_view(target: StudyTarget) -> dict[str, Any]:
+    """The "Before this exam" choice in words (ADR-014 §4); never shown as a chance of remembering."""
+    choice = before_exam_choice(exam_target(target.goal, target.exam_retention))
+    return {
+        "choice": choice,
+        "label": BEFORE_EXAM_LABELS[choice],
+        "goal_default": before_exam_choice(exam_target(target.goal, None)),
+        "chosen": target.exam_retention is not None,
+    }
+
+
+def _before_exam_name(target: StudyTarget) -> str:
+    return "default" if target.exam_retention is None else before_exam_choice(float(target.exam_retention))
+
+
 def target_view(db: Session, target: StudyTarget, today: date) -> dict[str, Any]:
     return {
         "id": str(target.id),
@@ -470,6 +493,7 @@ def target_view(db: Session, target: StudyTarget, today: date) -> dict[str, Any]
         "status": target.status,
         "result": target.result,
         "goal": target.goal,
+        "before_exam": before_exam_view(target),
         "scope_description": target.scope_description,
         "scope": scope_view(db, target),
         "notes": target.notes,
@@ -737,6 +761,7 @@ def create_target(db: Session, user: User, payload: TargetIn, request_id: str, *
         scope_description=payload.scope_description,
         notes=payload.notes,
         goal=payload.goal,
+        exam_retention=BEFORE_EXAM.get(payload.before_exam),
     )
     db.add(target)
     db.flush()
@@ -750,7 +775,12 @@ def create_target(db: Session, user: User, payload: TargetIn, request_id: str, *
         action="target.created",
         target_type="study_target",
         target_id=target.id,
-        details={"name": payload.name, "due_date": payload.due_date.isoformat(), "origin": origin},
+        details={
+            "name": payload.name,
+            "due_date": payload.due_date.isoformat(),
+            "origin": origin,
+            **({"before_exam": payload.before_exam} if payload.before_exam != "default" else {}),
+        },
         request_id=request_id,
     )
     _follow_exam(db, user, target.course_id)
@@ -770,6 +800,11 @@ def update_target(
         if value is not None and value != getattr(target, key):
             changes[key] = {"from": str(getattr(target, key)), "to": str(value)}
             setattr(target, key, value)
+    if payload.before_exam is not None:
+        retention = BEFORE_EXAM.get(payload.before_exam)  # "default" = NULL, the goal's default
+        if retention != (None if target.exam_retention is None else float(target.exam_retention)):
+            changes["before_exam"] = {"from": _before_exam_name(target), "to": payload.before_exam}
+            target.exam_retention = retention
     if payload.scope is not None:
         new_rows = scope_rows(db, user.id, target.course_id, payload.scope)
         for old in db.scalars(select(StudyTargetScope).where(StudyTargetScope.target_id == target.id)):

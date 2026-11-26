@@ -18,7 +18,9 @@ from recallspring_api.learning.scheduler import (
     Evidence,
     ExamDate,
     apply_exam_layer,
+    before_exam_choice,
     exam_fraction,
+    exam_target,
     replay,
     schedule,
 )
@@ -120,16 +122,51 @@ def test_the_layer_never_lengthens_an_interval() -> None:
             events.append(ev(day, rng.choice([0, 1, 2, 3, 3, 4, None]), rng.choice(["final", "final", "provisional"])))
             day += rng.randint(0, 5)
         goals = ["exam_only", "long_term"]
-        exams = [exam(day + rng.randint(-3, 20), rng.choice(goals)) for _ in range(rng.randint(0, 2))]
+        targets = [None, 0.90, 0.95, 0.97]  # the goal's default or the learner's choice (ADR-014 §4)
+        exams = [
+            exam(day + rng.randint(-3, 20), rng.choice(goals), rng.choice(targets)) for _ in range(rng.randint(0, 2))
+        ]
         ladder = replay(events, TZ)
-        layered = apply_exam_layer(ladder, exams, TZ)
+        layered = schedule(events, TZ, exams)
         assert ladder is not None and layered is not None
+        assert apply_exam_layer(ladder, exams, TZ).due_at <= ladder.due_at  # also without the earlier state
         assert layered.due_at <= ladder.due_at
         assert (layered.step, layered.consecutive_successes, layered.lapse_count) == (
             ladder.step,
             ladder.consecutive_successes,
             ladder.lapse_count,
         )
+
+
+def test_the_learners_choice_sets_the_exam_target() -> None:
+    assert (exam_target("exam_only", None), exam_target("long_term", None)) == (0.95, 0.90)
+    assert exam_target("long_term", 0.97) == 0.97 and exam_target("exam_only", 0.90) == 0.90
+    choices = [before_exam_choice(t) for t in (0.85, 0.90, 0.93, 0.95, 0.96, 0.97)]
+    assert choices == ["regular", "regular", "extra_review", "extra_review", "extra_review", "intense"]
+
+
+def test_a_long_term_exam_brings_one_review_forward_not_a_run_of_them() -> None:
+    events = [ev(0, 3), ev(1, 3), ev(4, 3)]  # the ladder's next review is day 11, the exam is on day 10
+    extra = schedule(events, TZ, [exam(10, "long_term", 0.95)])
+    assert extra is not None and extra.reason.code == "exam_cap" and extra.reason.exam_target == 0.95
+    assert local_day(extra.due_at) == DAY0 + timedelta(days=9)
+
+    # Answered three days before (the day before the exam was full): exam only is capped again, long term is not.
+    early = [*events, ev(7, 3)]
+    again = schedule(early, TZ, [exam(10)])
+    assert again is not None and again.reason.code == "exam_cap" and local_day(again.due_at) == DAY0 + timedelta(days=9)
+    for target in (0.95, 0.97):
+        once = schedule(early, TZ, [exam(10, "long_term", target)])
+        assert once is not None and once.reason.code == "early_no_promotion"
+        assert local_day(once.due_at) == DAY0 + timedelta(days=11)
+
+    # A practice answer long before the exam is not that review: the one brought forward still comes.
+    events = [ev(0, 3), ev(1, 3), ev(4, 3), ev(11, 3)]  # step 3: the ladder's next review is day 25
+    first = schedule(events, TZ, [exam(24, "long_term", 0.95)])
+    assert first is not None and first.reason.code == "exam_cap"
+    later = schedule([*events, ev(15, 3)], TZ, [exam(24, "long_term", 0.95)])
+    assert later is not None and later.reason.code == "exam_cap"
+    assert local_day(later.due_at) == DAY0 + timedelta(days=23)
 
 
 # ------------------------------------------------------------------------------------------- through the API
@@ -200,6 +237,67 @@ def test_review_dates_follow_the_study_target(owner_api: Api, conn: ConnectorApi
     frozen.set(datetime(2026, 12, 1, 9, 0, tzinfo=UTC))  # the exam passed without that review
     after = _reason(owner_api)
     assert after["code"] == "promoted" and after["due_at"].startswith("2026-11-29T23:00")  # the ladder's own date
+
+
+def test_the_learner_chooses_how_reviews_go_before_the_exam(
+    owner_api: Api, conn: ConnectorApi, frozen: FrozenClock
+) -> None:
+    ids = owner_api.course_with_question()
+    conn.post("/concepts/known", {"concept_ids": [ids["concept_id"]], "reason": "Covered in lectures."})
+    _solid(owner_api, conn, ids["question_id"])  # day 0 (19 Nov)
+    frozen.advance(days=1)
+    _solid(owner_api, conn, ids["question_id"])
+    frozen.advance(days=3)
+    _solid(owner_api, conn, ids["question_id"])  # day 4: the ladder's next review is 30 Nov
+
+    body = {
+        "course_id": ids["course_id"],
+        "kind": "kolokvij",
+        "name": "1. kolokvij",
+        "due_date": "2026-11-29",
+        "scope_description": "Everything so far",
+        "goal": "long_term",
+    }
+    target = owner_api.post("/targets", {**body, "before_exam": "intense"})
+    assert target.status_code == 201, target.text
+    tid = target.json()["id"]
+    assert target.json()["before_exam"] == {
+        "choice": "intense",
+        "label": "Intense",
+        "goal_default": "regular",
+        "chosen": True,
+    }
+    capped = _reason(owner_api)
+    assert capped["code"] == "exam_cap" and capped["exam_target"] == 0.97
+
+    back = owner_api.patch(f"/targets/{tid}", {"before_exam": "default"})
+    assert back.status_code == 200, back.text
+    assert back.json()["before_exam"] == {
+        "choice": "regular",
+        "label": "Regular reviews only",
+        "goal_default": "regular",
+        "chosen": False,
+    }
+    assert _reason(owner_api)["code"] == "promoted"  # long term, regular reviews only: the ladder's own date
+
+    # An assistant changes it on the learner's request; the dates follow at once.
+    r = conn.post(f"/targets/{tid}/update", {"before_exam": "extra_review"})
+    assert r.status_code == 200, r.text
+    assert r.json()["before_exam"]["label"] == "An extra review before the exam"
+    assert _reason(owner_api)["exam_target"] == 0.95
+    assert owner_api.patch(f"/targets/{tid}", {"before_exam": "certain"}).status_code == 422
+
+    with new_session() as db:
+        audits = db.scalars(select(AuditEvent).where(AuditEvent.target_id == uuid.UUID(tid))).all()
+        created = [a.details for a in audits if a.action == "target.created"]
+        changes = [
+            a.details["before_exam"] for a in audits if "before_exam" in a.details and a.action != "target.created"
+        ]
+    assert created[0]["before_exam"] == "intense"
+    assert sorted(changes, key=lambda c: c["to"]) == [
+        {"from": "intense", "to": "default"},
+        {"from": "default", "to": "extra_review"},
+    ]
 
 
 def test_a_weak_answer_before_the_exam_asks_for_another_try(

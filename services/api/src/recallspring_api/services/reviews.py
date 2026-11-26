@@ -11,13 +11,13 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..learning.scheduler import (
-    EXAM_TARGETS,
     OVERLAY_CODES,
     Deferral,
     Evidence,
     ExamDate,
     KnownFromCheck,
     ReviewSchedule,
+    exam_target,
     local_day_start,
     schedule,
 )
@@ -86,7 +86,7 @@ def exam_dates(db: Session, concept_ids: list[uuid.UUID], today: date) -> dict[u
             if target.status != "upcoming" or target.due_date < today:
                 continue
             scope = scope_concepts(db, target)
-            exam = ExamDate(target.name, target.due_date, target.goal, EXAM_TARGETS.get(target.goal, 0.90))
+            exam = ExamDate(target.name, target.due_date, target.goal, exam_target(target.goal, target.exam_retention))
             for concept_id, course in course_of.items():
                 if course == course_id and concept_id in scope:
                     out[concept_id].append(exam)

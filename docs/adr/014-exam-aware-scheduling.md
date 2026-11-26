@@ -1,7 +1,7 @@
 # ADR-014 — Exam-aware reviews: an exam layer now, FSRS-6 in shadow, then the switch
 
-Status: accepted 2026-11-26 (owner in chat: answered the design questions, then reviewed this ADR). Rollout step 1
-done 2026-11-26; see Rollout. Extends ADR-003 (`rs-interval-v1`), ADR-009 (`rs-interval-v2`, Check first), the planner of ADR-005 and
+Status: accepted 2026-11-26 (owner in chat: answered the design questions, then reviewed this ADR). Rollout steps 1
+and 2 done 2026-11-26; see Rollout. Extends ADR-003 (`rs-interval-v1`), ADR-009 (`rs-interval-v2`, Check first), the planner of ADR-005 and
 ADR-007 (`plan-v2`) and the exam weights of ADR-013.
 
 ## Context
@@ -277,7 +277,12 @@ and with the owner's approval for the owner's instance.
    Concepts practised before the upgrade get the layer at their next answer, or at once with
    `recallspring recompute-reviews` (replays every review state; evidence untouched, audited).
 2. **"Before this exam" choice:** migration for `study_targets.exam_retention`; the Exams tab control and the
-   connector field.
+   connector field. **Done 2026-11-26** (migration 0031; `before_exam` = `default` / `regular` / `extra_review` /
+   `intense` on `set_study_target`, `update_study_target`, `POST /targets` and `PATCH /targets/{id}`; target views
+   carry `before_exam {choice, label, goal_default, chosen}`; the course's exam dialog has the three choices with
+   the goal's default marked and a warning for Intense; changes are audited and review dates follow at once).
+   With it the `long_term` rule of §2 became reachable: a long-term exam brings one review forward per concept, and
+   an answer at most 3 days before the exam (`EARLY_TAIL_DAYS`) that followed that cap is not capped again.
 3. **Answer timing:** migration for `attempts.answer_seconds`; reported by the answer forms; estimates per depth.
 4. **FSRS-6 shadow:** the pinned dependency, the `review_shadow` migration, both variants and the
    `shadow-report` command.

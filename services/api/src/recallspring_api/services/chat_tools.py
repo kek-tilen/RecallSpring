@@ -90,7 +90,9 @@ concept_ids, on no go on as planned. Never offer it on your own judgement or twi
 each plan item has a depth: quick (one short question), standard (one question in the exam's style), relearn (not \
 solid yet in the last week: feedback and another try). When a grade you record returns relearn, follow its say: \
 feedback on the gaps from the material, ask again later in the session with a varied question, stop at its \
-solid_needed Solid answers or max_tries tries today. A correct answer later in the same session is not mastery.
+solid_needed Solid answers or max_tries tries today. A correct answer later in the same session is not mastery. \
+A target's before_exam (regular reviews only, an extra review before the exam, or intense) is the learner's choice: \
+change it only when they clearly ask, and say it in words, never as a chance of remembering.
 - Asking a question: create_questions, then open_answer_form, then end your message and wait. When the learner \
 answers in the chat instead, ask once per conversation whether answers given in the chat should count in \
 RecallSpring. If yes, open_answer_form for that question and ask them to paste their answer there (the form saves \
@@ -720,8 +722,9 @@ _TOOLS = [
     ),
     Tool(
         "update_study_target",
-        "Change a study target the learner told you about: move the date, refine the scope, or record a result "
-        "(status passed, failed or cancelled). Only the fields you send change; the change is recorded.",
+        "Change a study target the learner told you about: move the date, refine the scope, record a result "
+        "(status passed, failed or cancelled) or, only on their clear request, how reviews go before the exam "
+        "(before_exam). Only the fields you send change; the change is recorded.",
         TargetUpdateArgs,
         _update_target,
         lambda a, r: "Updated the study target",

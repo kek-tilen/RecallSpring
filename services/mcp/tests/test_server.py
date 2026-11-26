@@ -828,3 +828,27 @@ async def test_plan_rationale_and_web_sources_are_passed_through(api: FakeApi) -
     assert "Only after the learner said yes" in tools["add_web_source"].description
     assert tools["get_plan_rationale"].annotations.read_only_hint is True
     assert "explain_plan.now" in instructions and "ASK whether to add it" in instructions
+
+
+async def test_before_this_exam_is_passed_only_when_given(api: FakeApi) -> None:
+    """ADR-014 §4: the learner's choice per target goes through set_study_target and update_study_target."""
+    api.route("POST", "/targets", 201, {"id": "t1"})
+    api.route("POST", "/targets/t1/update", 200, {"id": "t1"})
+    target = {
+        "course_id": "c1",
+        "kind": "kolokvij",
+        "name": "1. kolokvij",
+        "due_date": "2026-12-12",
+        "scope_description": "Lectures 1-6",
+    }
+    async with Client(mcp) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        await client.call_tool("set_study_target", target)
+        await client.call_tool("update_study_target", {"target_id": "t1", "notes": "Open book."})
+        await client.call_tool("update_study_target", {"target_id": "t1", "before_exam": "intense"})
+        instructions = client.instructions or ""
+    created, notes, choice = (json.loads(r.content) for r in api.requests)
+    assert created["before_exam"] == "default"
+    assert "before_exam" not in notes and choice == {"before_exam": "intense"}
+    assert "only on the learner's clear request" in tools["update_study_target"].description
+    assert "never as a chance of remembering" in instructions

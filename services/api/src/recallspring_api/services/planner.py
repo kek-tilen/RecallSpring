@@ -44,7 +44,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..learning.scheduler import INTERVALS, RELEARN_DAYS, day_label, exam_fraction
+from ..learning.scheduler import EARLY_TAIL_DAYS, INTERVALS, RELEARN_DAYS, day_label, exam_fraction
 from ..models import (
     AvailabilityOverride,
     Concept,
@@ -319,7 +319,7 @@ def today_plan(
     concept_by_id = {c.id: c for c in concepts}
     planned_concepts = {i["concept_id"] for i in main}
     for sc in scopes.values():
-        if sc.active is not None and sc.days_left in (2, 3):
+        if sc.active is not None and sc.days_left is not None and 2 <= sc.days_left <= EARLY_TAIL_DAYS:
             early = _early_tail(db, user, courses, sc, states, concept_by_id, now, tz, course_count, interest_share)
             main.extend(i for i in early if i["concept_id"] not in planned_concepts)
     pressed = {(c["course_id"], c["target"]): c["status"] for c in capacities if c["status"] != "ok"}

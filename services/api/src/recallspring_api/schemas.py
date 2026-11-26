@@ -850,6 +850,16 @@ class TargetScopeItem(BaseModel):
     concept_id: uuid.UUID | None = None
 
 
+# ADR-014 §4: how the reviews go in the days before the exam, per target (stored as exam_retention).
+BeforeExamChoice = Literal["default", "regular", "extra_review", "intense"]
+BEFORE_EXAM_HELP = (
+    "Before this exam, the learner's choice: regular = regular reviews only; extra_review = an extra review "
+    "before the exam when the last one would be long before it; intense = reviews closer together before the "
+    "exam (needs noticeably more reviews); default = the goal's default (extra_review for exam_only, regular for "
+    "long_term). Change it only on the learner's clear request."
+)
+
+
 class TargetIn(BaseModel):
     course_id: uuid.UUID
     kind: Literal["kolokvij", "izpit", "other"]
@@ -859,12 +869,14 @@ class TargetIn(BaseModel):
     scope: list[TargetScopeItem] = Field(default_factory=list, max_length=50)
     notes: str | None = Field(default=None, max_length=4000)
     goal: Literal["exam_only", "long_term"] = "long_term"
+    before_exam: BeforeExamChoice = Field(default="default", description=BEFORE_EXAM_HELP)
 
 
 class TargetUpdateIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     kind: Literal["kolokvij", "izpit", "other"] | None = None
     goal: Literal["exam_only", "long_term"] | None = None
+    before_exam: BeforeExamChoice | None = Field(default=None, description=BEFORE_EXAM_HELP)
     due_date: date | None = None
     status: Literal["upcoming", "passed", "failed", "cancelled"] | None = None
     result: str | None = Field(default=None, max_length=120)

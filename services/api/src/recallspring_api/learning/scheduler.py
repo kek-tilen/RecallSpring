@@ -24,8 +24,11 @@ Rules
   brought forward is early for the ladder, so the layer can add reviews but never lengthens an interval.
   - Exam cap: for the nearest upcoming exam after the last review whose scope holds the concept, when the ladder's
     date is after the day before the exam (E-1) and more than ``exam_fraction(T) * INTERVALS[step]`` days lie between
-    the last review and E, the review moves to E-1. T is the target for the exam morning (0.95 exam only, 0.90 long
-    term); the ladder's interval stands in for FSRS stability on the FSRS-6 forgetting curve.
+    the last review and E, the review moves to E-1. T is the target for the exam morning: the learner's choice per
+    target ("Before this exam", ``BEFORE_EXAM``), else the goal's default (0.95 exam only, 0.90 long term); the
+    ladder's interval stands in for FSRS stability on the FSRS-6 forgetting curve. For a long-term target the cap
+    applies at most once per concept and exam: when the last answer followed a cap for that exam, it is not capped
+    again (it matters once a long-term target has a higher T, rollout step 2).
   - Relearning: a concept whose last certain grade is 2 or lower, answered at most 7 days before an exam, is due
     again the next day (never on the exam day itself, never later than the ladder's date).
   - A deferral after the last answer wins over both: it is the learner's explicit choice.
@@ -45,9 +48,11 @@ INTERVALS: tuple[int, ...] = (1, 3, 7, 14, 30, 60, 120)
 MAX_STEP = len(INTERVALS) - 1
 CHECK_KNOWN_STEP = 3  # the next success moves on to 30 days
 CHECK_KNOWN_DAYS = 21
-# ADR-014: the target for recall on the exam morning by goal (the learner's own choice comes in rollout step 2).
+# ADR-014: the target for recall on the exam morning by goal, and the learner's choice per target (§4).
 EXAM_TARGETS = {"exam_only": 0.95, "long_term": 0.90}
+BEFORE_EXAM = {"regular": 0.90, "extra_review": 0.95, "intense": 0.97}
 RELEARN_DAYS = 7  # weak concepts answered this close to an exam come back the next day
+EARLY_TAIL_DAYS = 3  # a review brought forward to E-1 may be offered from E-3 when E-1 is full (planner)
 FSRS6_W20 = 0.1542  # FSRS-6 default decay; R(t, S) = (1 + F * t / S) ** -w20, R(S, S) = 0.90
 OVERLAY_CODES = ("exam_cap", "relearn")
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -142,6 +147,16 @@ class ExamDate:
     day: date  # the exam's local date
     goal: str  # exam_only | long_term
     target: float  # recall target for the exam morning, T
+
+
+def exam_target(goal: str, retention: float | None) -> float:
+    """T for the exam morning: the learner's choice for the target, else the goal's default."""
+    return float(retention) if retention is not None else EXAM_TARGETS.get(goal, 0.90)
+
+
+def before_exam_choice(target: float) -> str:
+    """The "Before this exam" choice closest to a stored target (phase B may store values between them)."""
+    return min(BEFORE_EXAM, key=lambda k: (abs(BEFORE_EXAM[k] - target), BEFORE_EXAM[k]))
 
 
 def _require_aware(value: datetime) -> datetime:
@@ -347,11 +362,35 @@ def _moved(state: ReviewSchedule, day: date, code: str, message: str, exam: Exam
     )
 
 
-def apply_exam_layer(state: ReviewSchedule | None, exams: Iterable[ExamDate], tz: ZoneInfo) -> ReviewSchedule | None:
+def _capped_for(
+    answered: ReviewSchedule | None, last_day: date, exam: ExamDate, exams: tuple[ExamDate, ...], tz: ZoneInfo
+) -> bool:
+    """Whether the last answer was the review brought forward for this exam: the state it was given in had the cap
+    for this exam, and it came at most ``EARLY_TAIL_DAYS`` before the exam (a practice answer weeks earlier is not
+    that review)."""
+    if (exam.day - last_day).days > EARLY_TAIL_DAYS:
+        return False
+    before = apply_exam_layer(answered, exams, tz)
+    return (
+        before is not None
+        and before.reason.code == "exam_cap"
+        and before.reason.exam == exam.name
+        and before.reason.exam_date == exam.day
+    )
+
+
+def apply_exam_layer(
+    state: ReviewSchedule | None,
+    exams: Iterable[ExamDate],
+    tz: ZoneInfo,
+    answered: ReviewSchedule | None = None,
+) -> ReviewSchedule | None:
     """v3 exam layer (ADR-014) on the final replayed state. ``exams`` are the upcoming exams whose scope holds the
-    concept; only those after the day of the last review count."""
+    concept; only those after the day of the last review count. ``answered`` is the state before the last answer:
+    for a long-term target the cap applies at most once per concept and exam."""
     if state is None or state.reason.code == "deferred":
         return state
+    exams = tuple(exams)
     last_day = state.last_review_at.astimezone(tz).date()
     ahead = sorted((e for e in exams if e.day > last_day), key=lambda e: (e.day, e.name))
     if not ahead:
@@ -377,6 +416,8 @@ def apply_exam_layer(state: ReviewSchedule | None, exams: Iterable[ExamDate], tz
     for exam in ahead:
         cap_day = exam.day - timedelta(days=1)
         elapsed = (exam.day - last_day).days
+        if exam.goal == "long_term" and _capped_for(answered, last_day, exam, exams, tz):
+            continue  # long term: one review brought forward per exam, not a contracting run
         if policy_day > cap_day > last_day and elapsed > exam_fraction(exam.target) * interval:
             return _moved(
                 state,
@@ -394,11 +435,19 @@ def schedule(
     events: Iterable[Evidence | KnownFromCheck | Deferral], tz: ZoneInfo, exams: Iterable[ExamDate] = ()
 ) -> ReviewSchedule | None:
     """The ladder's replay with the v3 exam layer on top."""
-    return apply_exam_layer(replay(events, tz), exams, tz)
+    state, answered = _replay(events, tz)
+    return apply_exam_layer(state, exams, tz, answered)
 
 
 def replay(events: Iterable[Evidence | KnownFromCheck | Deferral], tz: ZoneInfo) -> ReviewSchedule | None:
     """Replay evidence and deferrals in chronological order (ties: evidence before deferral, then id)."""
+    return _replay(events, tz)[0]
+
+
+def _replay(
+    events: Iterable[Evidence | KnownFromCheck | Deferral], tz: ZoneInfo
+) -> tuple[ReviewSchedule | None, ReviewSchedule | None]:
+    """The final state and the state the last evidence was answered in."""
 
     def sort_key(e: Evidence | KnownFromCheck | Deferral) -> tuple[datetime, int, str]:
         if isinstance(e, Evidence):
@@ -408,11 +457,13 @@ def replay(events: Iterable[Evidence | KnownFromCheck | Deferral], tz: ZoneInfo)
         return (_require_aware(e.occurred_at), 1, _require_aware(e.until).isoformat())
 
     state: ReviewSchedule | None = None
+    answered: ReviewSchedule | None = None
     for event in sorted(events, key=sort_key):
         if isinstance(event, Evidence):
+            answered = state
             state = apply_evidence(state, event, tz)
         elif isinstance(event, KnownFromCheck):
             state = apply_known_from_check(state, event, tz)
         else:
             state = apply_deferral(state, event)
-    return state
+    return state, answered

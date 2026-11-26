@@ -211,6 +211,9 @@ export interface ScopeItem {
   concept_id?: string;
 }
 
+/** ADR-014 §4: how the reviews go in the days before an exam. */
+export type BeforeExam = "regular" | "extra_review" | "intense";
+
 export interface Target {
   id: string;
   kind: string;
@@ -220,6 +223,8 @@ export interface Target {
   status: string;
   result: string | null;
   goal: string | null;
+  /** The learner's choice (chosen) or the goal's default, in words; never a chance of remembering. */
+  before_exam?: { choice: BeforeExam; label: string; goal_default: BeforeExam; chosen: boolean };
   scope_description: string;
   scope: ScopeItem[];
   notes: string | null;

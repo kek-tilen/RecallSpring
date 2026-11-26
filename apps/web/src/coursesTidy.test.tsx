@@ -157,6 +157,65 @@ describe("ending the focus after the last exam (owner 2026-11-23)", () => {
   });
 });
 
+describe("Before this exam (ADR-014 §4)", () => {
+  const TARGET = {
+    id: "t1",
+    kind: "kolokvij",
+    name: "1. Kolokvij",
+    due_date: "2026-12-12",
+    days_left: 16,
+    status: "upcoming",
+    result: null,
+    goal: "exam_only",
+    before_exam: { choice: "extra_review", label: "An extra review before the exam", goal_default: "extra_review", chosen: false },
+    scope_description: "Vse",
+    scope: [],
+    notes: null,
+    concepts_in_scope: 3,
+    profile: null,
+  } as Target;
+
+  function setup(target: Target = TARGET) {
+    const bodies: unknown[] = [];
+    serve((url, init) => {
+      if (init?.method === "PATCH") bodies.push(JSON.parse(String(init.body)));
+      if (url.endsWith("/targets") || url.includes("/courses") || url.includes("/sources")) return [];
+      return {};
+    });
+    const onClose = vi.fn();
+    wrap(<TargetDialog target={{ ...target, course_id: "k1" }} courseId="k1" open onClose={onClose} />);
+    return { bodies, onClose };
+  }
+  const radio = (name: RegExp) => screen.findByRole("radio", { name }) as Promise<HTMLInputElement>;
+
+  it("starts at the goal's default and warns about intense", async () => {
+    setup();
+    const extra = await radio(/An extra review before the exam/);
+    expect(extra.checked).toBe(true);
+    expect(extra.closest("label")!.textContent).toContain("An extra review before the exam (default)");
+    expect((await radio(/Intense/)).closest("label")!.textContent).not.toContain("(default)");
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.click(await radio(/Intense/));
+    expect(screen.getByRole("status").textContent).toContain("noticeably more reviews");
+  });
+
+  it("saves the learner's choice, and the goal's default as no choice", async () => {
+    const first = setup();
+    fireEvent.click(await radio(/Intense/));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(first.onClose).toHaveBeenCalled());
+    expect(first.bodies).toEqual([{ before_exam: "intense" }]);
+    cleanup();
+
+    const chosen = { ...TARGET, before_exam: { ...TARGET.before_exam!, choice: "intense", label: "Intense", chosen: true } } as Target;
+    const second = setup(chosen);
+    fireEvent.click(await radio(/An extra review before the exam/));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(second.onClose).toHaveBeenCalled());
+    expect(second.bodies).toEqual([{ before_exam: "default" }]);
+  });
+});
+
 describe("Photos: select all (owner 2026-11-25)", () => {
   const img = (id: string, filename: string) => ({ ...src(id, filename, null), kind: "image", page_count: null });
   const SOURCES = [src("s1", "Lecture 1.pdf", null), img("i1", "4.png"), img("i2", "5.png")];
