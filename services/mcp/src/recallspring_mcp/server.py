@@ -95,7 +95,7 @@ Start of every study session in a course:
    minutes: the blocks in order, about how long each takes, why (dates, due reviews, material not studied yet) and
    short breaks. The learner decides; then say where each block is studied (that course's chat, project or folder).
 3. LEARN FIRST. Never quiz material the learner has not studied. For "Learn next" items (study_status
-   not_studied) teach part by part (a few pages or one subsection at a time), in the order of the material: read
+   not_studied) teach part by part (the size of a part follows PACE below), in the order of the material: read
    the sections (get_source_section), then explain every concept of the part completely and concretely, never only
    an outline or a list of headings: what it is, how it works or why it holds, a worked example from the material
    (a visual when it helps), how it connects to what came before and the usual mistakes, with page citations.
