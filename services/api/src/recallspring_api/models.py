@@ -106,7 +106,7 @@ class User(Base):
     practice_suggestions: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
     )
-    # How assistants explain new material by default (migration 0035, owner notes 2026-11-26): "step", "balanced",
+    # How assistants explain new material by default (migration 0035, 2026-11-26): "step", "balanced",
     # "chunks" (larger chunks) or "auto" (the assistant adapts). A course may choose its own (courses.explanation_pace).
     explanation_pace: Mapped[str] = mapped_column(String(16), nullable=False, server_default="auto", default="auto")
     created_at: Mapped[datetime] = _created()
@@ -355,7 +355,7 @@ class Attempt(Base):
     quiz_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("quizzes.id"), index=True)
     selected_option: Mapped[str | None] = mapped_column(String(10))
     # The learner marked a closed answer as a guess (migration 0023): it never counts as known. On an open answer
-    # it is "Unsure" (owner 2026-11-26): graded normally, only shown, so the assistant can offer more explanation.
+    # it is "Unsure" (2026-11-26): graded normally, only shown, so the assistant can offer more explanation.
     guessing: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
     client_request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -1061,10 +1061,21 @@ class Quiz(Base):
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created()
+    # Retakes (migration 0036, 2026-11-26): a retake reuses the questions of its first version (the
+    # benchmark, ``retake_of``) as version 2, 3, ...; submitted the same local day as an earlier version it is
+    # practice only (``same_day_practice``): graded and shown, but out of the review schedule and the Bloom ramp.
+    retake_of: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("quizzes.id"), index=True)
+    version: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="1", default=1)
+    same_day_practice: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), default=False
+    )
 
     __table_args__ = (
         CheckConstraint("status IN ('open','submitted')", name="status"),
         CheckConstraint("mode IN ('practice','diagnostic')", name="mode"),
+        CheckConstraint(
+            "(retake_of IS NULL AND version = 1) OR (retake_of IS NOT NULL AND version >= 2)", name="retake_version"
+        ),
     )
 
 
