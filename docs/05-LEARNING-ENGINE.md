@@ -63,6 +63,8 @@ Grade NULL with `ungraded` is mandatory when question cannot be judged on availa
 
 ## Scheduling: deterministic v1 algorithm
 
+> Next (ADR-014, approved 2026-11-26, not built yet): an exam layer over this ladder (`rs-interval-v3`), review depths in the planner (`plan-v3`) and FSRS-6 computed in shadow; a switch to FSRS-6 only after an owner checkpoint on the shadow report.
+
 Avoid claiming FSRS accuracy without calibration/training data. Use an inspectable, adjustable interval heuristic with a policy version and automated tests. Proposed initial schedule:
 
 - After a meaningful first completed session: next review **1 day** later.
