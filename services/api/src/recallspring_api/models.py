@@ -186,8 +186,9 @@ class Course(Base):
     color: Mapped[str | None] = mapped_column(String(20))
     # The learner chose to concentrate on this course or interest until this day (inclusive); at most one at a time.
     focus_until: Mapped[date | None] = mapped_column(Date)
-    # Practice limit (migration 0023): the highest Bloom level (2-5) the learner wants; NULL means 5. Confirmed when
-    # the learner kept it although an exam profile of the course asks for higher levels.
+    # Practice limit (migrations 0023, 0034): the highest Bloom level (2-6) the learner wants; NULL means automatic:
+    # 5, or 6 while an upcoming exam's profile has Bloom 6 questions. Confirmed when the learner kept it although an
+    # exam profile of the course asks for higher levels.
     bloom_ceiling: Mapped[int | None] = mapped_column(SmallInteger)
     bloom_ceiling_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
@@ -201,7 +202,7 @@ class Course(Base):
         CheckConstraint(
             "color IS NULL OR color IN ('blue','orange','aqua','yellow','magenta','green','violet','red')", name="color"
         ),
-        CheckConstraint("bloom_ceiling IS NULL OR bloom_ceiling BETWEEN 2 AND 5", name="bloom_ceiling"),
+        CheckConstraint("bloom_ceiling IS NULL OR bloom_ceiling BETWEEN 2 AND 6", name="bloom_ceiling"),
     )
 
 
