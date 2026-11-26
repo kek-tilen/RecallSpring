@@ -132,7 +132,7 @@ export function PracticeLimitControl({ courseId, limit }: { courseId: string; li
           onChange={(e) => save.mutate({ level: e.target.value === AUTO ? null : Number(e.target.value) })}
           aria-describedby="practice-limit-hint"
         >
-          {/* owner notes 2026-11-26: automatic is 5, or 6 Create while an exam paper asks for it */}
+          {/* 2026-11-26: automatic is 5, or 6 Create while an exam paper asks for it */}
           <option value={AUTO}>Automatic ({limit.set_by_learner ? "5 or 6" : `${limit.level} ${limit.label}`})</option>
           {LEVELS.map((l) => (
             <option key={l.level} value={l.level}>

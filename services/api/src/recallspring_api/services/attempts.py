@@ -129,7 +129,7 @@ def create_attempt(
         status=status,
         photo_ids=[str(p) for p in photo_ids],
         answer_seconds=answer_seconds,
-        # Unsure only marks a real answer (owner 2026-11-26); "I don't know" and Skip carry no mark.
+        # Unsure only marks a real answer (2026-11-26); "I don't know" and Skip carry no mark.
         guessing=unsure and kind == "answer",
         submitted_at=now,
     )

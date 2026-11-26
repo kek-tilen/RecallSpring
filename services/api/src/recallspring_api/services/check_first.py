@@ -17,7 +17,7 @@ A check asks each concept at its current level: Understand (2) before it is stud
 its practice ramp (services/bloom.py), never above the practice limit. Check answers never change the ramp.
 
 The practice limit (``courses.bloom_ceiling``, 2-6) caps practice, simulations and checks. Without one it is 5
-Evaluate, or 6 Create while an upcoming exam's profile has Bloom 6 questions (owner notes 2026-11-26). When an exam
+Evaluate, or 6 Create while an upcoming exam's profile has Bloom 6 questions (2026-11-26). When an exam
 profile of the course has questions above the limit, RecallSpring says so until the learner confirms the limit on
 purpose. At 6 it also recommends a more capable model.
 """
@@ -253,7 +253,7 @@ def results(
         t["units"] += units
         t["partial"] |= state == "partial"
         t["pending"] |= state == "pending"
-        # only a closed guess counts nothing; an open answer marked unsure is graded normally (owner 2026-11-26)
+        # only a closed guess counts nothing; an open answer marked unsure is graded normally (2026-11-26)
         t["guesses"] += 1 if attempt is not None and attempt.guessing and question.question_type == "mcq" else 0
     out = {}
     for concept_id, t in tally.items():

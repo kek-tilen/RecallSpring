@@ -1,4 +1,4 @@
-"""Unsure on open answers (owner 2026-11-26): the learner can mark an answer they wrote as unsure. It is saved with
+"""Unsure on open answers (2026-11-26): the learner can mark an answer they wrote as unsure. It is saved with
 the answer, graded normally and only shown, so the assistant can offer more explanation; "I don't know" carries no
 mark, and in a check an unsure open answer counts like any other (only a closed guess counts nothing)."""
 

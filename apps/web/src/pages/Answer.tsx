@@ -233,7 +233,7 @@ function AnswerForm({ q, sessionId, onSaved }: {
   const qc = useQueryClient();
   const [draft, setText, clearDraft] = useDraft(`rs-answer-draft:${q.id}`);
   const [openNotes, setOpenNotes] = useState(false);
-  // Owner 2026-11-26: "I don't know" while the box is empty; once there is an answer, "Unsure" marks it instead.
+  // 2026-11-26: "I don't know" while the box is empty; once there is an answer, "Unsure" marks it instead.
   const [unsure, setUnsure] = useState(false);
   const [saved, setSaved] = useState<Saved | null>(null);
   const [savedPhotos, setSavedPhotos] = useState<string[]>([]);

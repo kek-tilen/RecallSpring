@@ -9,7 +9,7 @@ learning steps and a maximum interval of 120 days. Its results are stored (``rev
   stays as an overlay.
 - **Whole days:** every review is passed at UTC midnight of the learner's local date, so elapsed time is whole
   calendar days and a late-evening answer followed by a morning one is never same-day.
-- **Grades to ratings (owner 2026-11-26):** 0 No evidence and 1 Fragile are Again; 2 Partial is Hard in
+- **Grades to ratings (2026-11-26):** 0 No evidence and 1 Fragile are Again; 2 Partial is Hard in
   ``rs-fsrs6-v1`` and Again in ``rs-fsrs6-v1a``, computed side by side; 3 Solid and 4 Transfer are Good.
 - **Exam cap from R(E):** when FSRS's date (with the overlay) is after the day before the concept's next exam and
   FSRS's R on the exam morning is below that exam's target T, the capped date is the day before the exam.

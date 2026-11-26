@@ -1,4 +1,4 @@
-"""Bloom 6 Create (owner notes 2026-11-26, migration 0034): the practice limit may be 6. Without a limit of their own
+"""Bloom 6 Create (2026-11-26, migration 0034): the practice limit may be 6. Without a limit of their own
 the learner practises up to 5 Evaluate, or 6 Create while an upcoming exam paper asks for it; at 6 RecallSpring
 recommends a more capable model."""
 

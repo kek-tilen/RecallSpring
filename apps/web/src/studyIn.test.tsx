@@ -109,7 +109,7 @@ describe("Study in… (ADR-012 §3)", () => {
   });
 });
 
-describe("Go through today's plan in… on Home (owner 2026-11-26)", () => {
+describe("Go through today's plan in… on Home (2026-11-26)", () => {
   it("opens the assistant with the planning message for all courses, never a course_id", async () => {
     serve({ items: [item("codex", true), item("claude", true), item("chatgpt", true)], in_use: null, chosen: null });
     const open = vi.spyOn(launcher, "open").mockImplementation(() => {});

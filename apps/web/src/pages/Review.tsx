@@ -58,7 +58,7 @@ function Row({ item, course }: { item: ReviewItem; course: string }) {
   );
 }
 
-/** Owner 2026-11-26: the page says what is due, and per course starts the review itself with the learner's assistant. */
+/** 2026-11-26: the page says what is due, and per course starts the review itself with the learner's assistant. */
 function ReviewNow({ items, titles }: { items: ReviewItem[]; titles: Record<string, string> }) {
   const due = new Map<string, number>();
   for (const i of items) if (i.is_due) due.set(i.course_id, (due.get(i.course_id) ?? 0) + 1);

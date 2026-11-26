@@ -90,7 +90,7 @@ describe("Check first", () => {
     expect(JSON.parse(String(init?.body))).toEqual({ level: 4, keep_despite_exam: true });
   });
 
-  it("offers Automatic and 6 Create, and recommends a more capable model at 6 (owner 2026-11-26)", async () => {
+  it("offers Automatic and 6 Create, and recommends a more capable model at 6 (2026-11-26)", async () => {
     const fetch = mockFetch(() => ({ level: 6, label: "Create", set_by_learner: true, exam_profile_above: null, warning: null }));
     wrap(
       <PracticeLimitControl
@@ -148,7 +148,7 @@ describe("I'm guessing", () => {
   });
 });
 
-describe("Unsure on an open answer (owner 2026-11-26)", () => {
+describe("Unsure on an open answer (2026-11-26)", () => {
   it("offers I don't know while the box is empty and Unsure once there is text, and sends the mark", async () => {
     const fetch = mockFetch(() => ({ saved_at: "2026-11-26T10:00:00Z" }));
     const quiz = {

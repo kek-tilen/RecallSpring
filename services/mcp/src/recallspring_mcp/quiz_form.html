@@ -202,7 +202,7 @@ function mathText(target, text) {
         });
         extras.appendChild(guess);
       } else {
-        // Owner 2026-11-26: once an open answer has text, "Unsure" takes the place of "I don't know".
+        // 2026-11-26: once an open answer has text, "Unsure" takes the place of "I don't know".
         const unsure = el("button", "guess", "Unsure");
         unsure.type = "button"; unsure.dataset.unsure = item.question_id;
         unsure.setAttribute("aria-pressed", saved.unsure ? "true" : "false");

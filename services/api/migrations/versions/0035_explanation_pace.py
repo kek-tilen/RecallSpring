@@ -1,4 +1,4 @@
-"""Explanation pace (owner notes 2026-11-26, part D)
+"""Explanation pace (2026-11-26)
 
 Additive. ``users.explanation_pace``: how the assistant explains new material by default, ``step`` (step by step),
 ``balanced``, ``chunks`` (larger chunks) or ``auto`` (the assistant adapts); NOT NULL, default ``auto``, so every

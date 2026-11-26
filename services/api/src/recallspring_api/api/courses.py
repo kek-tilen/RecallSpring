@@ -210,7 +210,7 @@ class ExplanationPaceIn(BaseModel):
 def set_explanation_pace(
     course_id: uuid.UUID, payload: ExplanationPaceIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
 ) -> JSONResponse:
-    """How assistants explain new material in this course (owner notes 2026-11-26); null = the learner's default.
+    """How assistants explain new material in this course (2026-11-26); null = the learner's default.
     Audited."""
     key = {"explanation_pace": str(course_id), **payload.model_dump()}
     if replay := replay_if_seen(db, ctx, key):

@@ -7,7 +7,7 @@ import { ConceptPage } from "./pages/Concept";
 import { ReviewPage } from "./pages/Review";
 import type { ConceptDetail, ReviewItem } from "./types";
 
-// Owner notes 2026-11-26: a due concept leads to a review from memory with the learner's assistant, not only to
+// 2026-11-26: a due concept leads to a review from memory with the learner's assistant, not only to
 // Concept-to-Clarity (an explanation is not a review).
 
 afterEach(() => {
@@ -91,7 +91,7 @@ function show(path: string) {
   );
 }
 
-describe("Review in… (owner 2026-11-26)", () => {
+describe("Review in… (2026-11-26)", () => {
   it("writes a review message from memory for a course or one concept", () => {
     const course = { id: "k1", title: "Security" };
     expect(reviewMessage(course, {})).toBe(

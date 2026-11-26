@@ -153,7 +153,7 @@ export function attemptKind(kind: string, unsure?: boolean, closed?: boolean): s
   return kind === "answer" && unsure ? `${base} · ${closed ? "guess" : "unsure"}` : base;
 }
 
-/** Shown on the Unsure switch of an open answer (owner 2026-11-26). */
+/** Shown on the Unsure switch of an open answer (2026-11-26). */
 export const UNSURE_HINT = "Not sure? Mark it: it is graded like any other answer, and your assistant can explain that part again.";
 
 /** Today's calendar date (YYYY-MM-DD) in the learner's timezone. */

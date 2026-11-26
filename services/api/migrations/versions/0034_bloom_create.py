@@ -1,4 +1,4 @@
-"""Bloom 6 Create as a practice limit (owner notes 2026-11-26, part C)
+"""Bloom 6 Create as a practice limit (2026-11-26)
 
 ``courses.bloom_ceiling`` may now be 2-6 (it was 2-5). NULL keeps meaning "automatic", which is 5 Evaluate, or 6
 Create while an upcoming exam's profile has Bloom 6 questions; an explicit 5 is now stored as 5. No data changes on

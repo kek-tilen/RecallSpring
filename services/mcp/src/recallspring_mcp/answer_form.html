@@ -103,7 +103,7 @@ function mathText(target, text) {
     ui.status.textContent = text;            // textContent only: model or learner text is never parsed as HTML
     ui.status.className = isError ? "error" : "";
   }
-  // Owner 2026-11-26: "I don't know" while the box is empty; once there is an answer, "Unsure" marks it instead.
+  // 2026-11-26: "I don't know" while the box is empty; once there is an answer, "Unsure" marks it instead.
   function showMark() {
     const hasText = !!ui.answer.value.trim();
     ui.dontknow.hidden = hasText;

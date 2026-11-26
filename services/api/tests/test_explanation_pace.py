@@ -1,4 +1,4 @@
-"""Explanation pace (owner notes 2026-11-26, part D; migration 0035): a default in Settings, a course may choose its
+"""Explanation pace (2026-11-26; migration 0035): a default in Settings, a course may choose its
 own, and an assistant saves a pace only when the learner says yes (through the connector). Every change is audited."""
 
 from __future__ import annotations

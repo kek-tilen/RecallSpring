@@ -14,7 +14,7 @@ type Answer = {
   text?: string | null;
   dont_know?: boolean;
   guessing?: boolean;
-  unsure?: boolean; // an open answer the learner marked as unsure (owner 2026-11-26)
+  unsure?: boolean; // an open answer the learner marked as unsure (2026-11-26)
   answer_seconds?: number | null; // ADR-014 §3: time on the question, saved with the draft
 };
 

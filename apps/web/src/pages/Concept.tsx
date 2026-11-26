@@ -30,7 +30,7 @@ export function ConceptPage() {
 
               <div className="split">
                 <div className="stack" style={{ gap: 20 }}>
-                  {/* Owner 2026-11-26: what to do with this concept now comes first; an explanation is not a review. */}
+                  {/* 2026-11-26: what to do with this concept now comes first; an explanation is not a review. */}
                   {(() => {
                     const forCourse = { id: c.course_id, title: course?.title ?? "this course" };
                     const concept = { id: c.id, term: c.term };

@@ -6,7 +6,7 @@ import type { ExplanationPace } from "../types";
 import { ErrorNote } from "./ui";
 
 /**
- * Explanation pace (owner notes 2026-11-26, part D; migration 0035): how assistants explain new material. A default
+ * Explanation pace (2026-11-26; migration 0035): how assistants explain new material. A default
  * in Settings, a course may choose its own. A request in a chat holds for that conversation; the assistant offers to
  * save it. Every pace explains completely; only the size of each part changes.
  */

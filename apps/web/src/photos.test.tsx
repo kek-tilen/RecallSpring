@@ -28,7 +28,7 @@ const json = (status: number, body: unknown) =>
 
 const QUESTION = { id: "q1", course_id: "k1", prompt: "Convert -0.375 to IEEE 754.", bloom_level: 3, rubric: null };
 
-it("the answer form swaps I don't know for Unsure once there is an answer and saves the mark (owner 2026-11-26)", async () => {
+it("the answer form swaps I don't know for Unsure once there is an answer and saves the mark (2026-11-26)", async () => {
   const sent: unknown[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const path = new URL(String(input), "http://localhost").pathname.replace("/api/v1", "");

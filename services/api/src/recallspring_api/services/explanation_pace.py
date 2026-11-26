@@ -1,4 +1,4 @@
-"""Explanation pace (owner notes 2026-11-26, part D; migration 0035).
+"""Explanation pace (2026-11-26; migration 0035).
 
 How an assistant explains new material: step by step, balanced, in larger chunks, or auto (it adapts). The learner
 sets a default in Settings and may choose another one for a course. A request in a chat holds for that conversation

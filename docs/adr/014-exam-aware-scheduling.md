@@ -183,7 +183,7 @@ with three deterministic depths:
 - Later attempts that day stay audit only.
 - The Bloom level is logged with every review. Readiness for higher levels stays with the practice ramp, not with R.
 
-**Grade mapping (owner 2026-11-26):**
+**Grade mapping (2026-11-26):**
 
 | Grade | Rating |
 |---|---|

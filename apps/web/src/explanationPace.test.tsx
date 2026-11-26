@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ExplanationPaceControl, ExplanationPaceDefault } from "./components/ExplanationPace";
 
-// Owner notes 2026-11-26, part D: a default explanation pace in Settings, and a course may choose its own.
+// 2026-11-26: a default explanation pace in Settings, and a course may choose its own.
 
 afterEach(() => {
   cleanup();
@@ -35,7 +35,7 @@ function wrap(node: ReactNode) {
   return render(<QueryClientProvider client={qc}>{node}</QueryClientProvider>);
 }
 
-describe("Explanation pace (owner 2026-11-26)", () => {
+describe("Explanation pace (2026-11-26)", () => {
   it("sets the default for every course in Settings", async () => {
     const fetch = serve(null);
     wrap(<ExplanationPaceDefault />);
