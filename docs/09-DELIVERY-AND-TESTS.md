@@ -108,3 +108,20 @@
 ## Build order and scope control
 
 No polishing of visual themes before the AI gate and persistence are proven. Do not implement all six visualization variants before one end-to-end validated flow works. First 'thin slice' should allow: upload example -> extract section -> select concept -> write note -> ask question -> save raw answer -> evaluate (Claude connector in Mode A, otherwise a labelled mock) -> schedule due review -> reopen and see state.
+
+## Demo instance for UI review (2026-11-26)
+
+`scripts/demo_instance.py` runs a second RecallSpring with labelled demo data, so that people and agents can try
+every screen (UI reviews, walkthroughs, screenshots at phone, tablet and desktop width) without the learner's own
+data or password:
+
+- `setup` drops and recreates only the database `recallspring_demo` (the dev PostgreSQL, the URL of
+  services/api/.env with the database name changed; any other name is refused), migrates it, makes the account
+  `demo` with a generated password in `local-data/demo/account.txt` (never printed) and seeds three demo courses
+  through the API with the clock moved back three weeks: studied material, graded answers, due and overdue reviews,
+  a midterm in 10 days and a passed one, a simulation with a same-day retake, a note and focus blocks.
+- `serve` runs the API, the web app (`--web-dist` for another build, e.g. a branch's) and the worker on
+  127.0.0.1:4328; open it as `http://demo.localhost:4328/`. Browsers keep cookies per host name, so the demo's
+  sign-in never replaces the session of the learner's app on 127.0.0.1:4318 or localhost:4318.
+- Files, secrets, the worker heartbeat and logs stay in `local-data/demo/`; backups and Sign in with ChatGPT are off
+  and AI is simulated. In a git worktree it reads the database URL from the main checkout's services/api/.env.
