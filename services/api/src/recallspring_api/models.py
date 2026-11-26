@@ -352,6 +352,9 @@ class Attempt(Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     # Photos of the learner's work (migration 0019): ids of image sources in the course Library, saved first.
     photo_ids: Mapped[list[Any]] = _json_list()
+    # ADR-014 §3 (migration 0032): seconds the question was open and visible in a RecallSpring answer form, without
+    # pauses over 5 minutes. None for chat answers. Time spent, never learning or mastery.
+    answer_seconds: Mapped[int | None] = mapped_column(SmallInteger)
     evaluation_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_evaluation_error: Mapped[str | None] = mapped_column(String(80))
     submitted_at: Mapped[datetime] = _created()
@@ -363,6 +366,7 @@ class Attempt(Base):
         CheckConstraint("kind IN ('answer','dont_know','skip')", name="kind"),
         CheckConstraint("answer_mode IN ('closed_notes','open_notes')", name="answer_mode"),
         CheckConstraint("captured_via IN ('app_ui','answer_form','assistant_transcription')", name="captured_via"),
+        CheckConstraint("answer_seconds IS NULL OR answer_seconds BETWEEN 1 AND 7200", name="answer_seconds"),
         CheckConstraint(
             "status IN ('saved_awaiting_evaluation','evaluating','evaluated','not_applicable')", name="status"
         ),
