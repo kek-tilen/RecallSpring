@@ -145,8 +145,9 @@ def _solid(owner_api: Api, conn: ConnectorApi, question_id: str, grade: int = 3)
     return r.json()
 
 
-def _reason(owner_api: Api) -> dict:
-    (item,) = owner_api.get("/reviews/due", horizon_days=30).json()["items"]
+def _reason(owner_api: Api, concept_id: str | None = None) -> dict:
+    items = owner_api.get("/reviews/due", horizon_days=30).json()["items"]
+    (item,) = [i for i in items if concept_id is None or i["concept_id"] == concept_id]
     return {**item["due_reason"], "due_at": item["due_at"]}
 
 
@@ -312,12 +313,36 @@ def test_recompute_reviews_replays_states_of_an_older_policy(
         row.due_at = datetime.fromisoformat(row.due_reason["policy_due_at"])
         row.due_reason = {"code": "promoted", "message": "Old.", "policy_version": "rs-interval-v2"}
         row.policy_version = "rs-interval-v2"
+        # a state left over from evidence that no longer counts (e.g. a Check first answer under rs-interval-v1)
+        other = owner_api.post(
+            f"/courses/{ids['course_id']}/concepts",
+            {"term": "Krebs cycle", "definition_draft": "Acetyl-CoA", "source_section_ids": ids["section_ids"][:1]},
+        ).json()
+        db.add(
+            ReviewState(
+                user_id=row.user_id,
+                concept_id=uuid.UUID(other["id"]),
+                step=0,
+                due_at=row.due_at,
+                last_review_at=row.last_review_at,
+                consecutive_successes=0,
+                lapse_count=0,
+                evidence_count=1,
+                policy_version="rs-interval-v1",
+                due_reason={"code": "first_evidence", "message": "Old."},
+                recomputed_at=row.recomputed_at,
+            )
+        )
         db.commit()
-    assert _reason(owner_api)["code"] == "promoted"
+    assert _reason(owner_api, ids["concept_id"])["code"] == "promoted"
 
     assert cli.main(["recompute-reviews"]) == 0
-    assert "Replayed 1 review state(s) with rs-interval-v3; 1 got a new date or reason." in capsys.readouterr().out
-    assert _reason(owner_api)["code"] == "exam_cap"
+    out = capsys.readouterr().out
+    assert "Replayed 2 review state(s) with rs-interval-v3; 1 got a new date or reason." in out
+    assert "1 had no evidence left under the current rules" in out and "answers and grades are kept" in out
+    assert _reason(owner_api, ids["concept_id"])["code"] == "exam_cap"
     with new_session() as db:
         event = db.scalars(select(AuditEvent).where(AuditEvent.action == "reviews.recomputed")).one()
-        assert event.details["policy_version"] == "rs-interval-v3" and event.details["changed"] == 1
+        assert event.details["policy_version"] == "rs-interval-v3"
+        assert (event.details["changed"], event.details["removed"]) == (1, 1)
+        assert db.get(ReviewState, (row.user_id, uuid.UUID(other["id"]))) is None

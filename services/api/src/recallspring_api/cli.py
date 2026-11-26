@@ -223,7 +223,7 @@ def recompute_reviews() -> int:
     from .services.reviews import recompute
 
     now = clock.now()
-    total = changed = 0
+    total = changed = removed = 0
     with new_session() as db:
         for user in db.scalars(select(User).order_by(User.created_at)).all():
             before = {
@@ -233,19 +233,26 @@ def recompute_reviews() -> int:
             if not before:
                 continue
             after = recompute(db, user, sorted(before, key=str), now)
-            moved = sum(1 for cid, s in after.items() if s is None or (s.due_at, s.reason.code) != before[cid])
+            moved = sum(1 for cid, s in after.items() if s is not None and (s.due_at, s.reason.code) != before[cid])
+            gone = sum(1 for s in after.values() if s is None)
             audit(
                 db,
                 actor_id=user.id,
                 action="reviews.recomputed",
                 target_type="user",
                 target_id=user.id,
-                details={"policy_version": POLICY_VERSION, "states": len(before), "changed": moved},
+                details={"policy_version": POLICY_VERSION, "states": len(before), "changed": moved, "removed": gone},
             )
             total += len(before)
             changed += moved
+            removed += gone
         db.commit()
     print(f"Replayed {total} review state(s) with {POLICY_VERSION}; {changed} got a new date or reason.")
+    if removed:
+        print(
+            f"{removed} had no evidence left under the current rules (e.g. only Check first answers, which never "
+            "schedule reviews) and were removed; their answers and grades are kept."
+        )
     return 0
 
 
