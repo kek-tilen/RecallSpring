@@ -82,6 +82,8 @@ def save_attempt(db: Session, ctx: WriteCtx, payload: AttemptIn, *, captured_via
             captured_via=captured_via,
             request_id=ctx.request_id,
             photo_ids=photo_ids,
+            # Only RecallSpring's answer forms measure time; an assistant's transcription of a chat answer has none.
+            answer_seconds=None if captured_via == "assistant_transcription" else payload.answer_seconds,
         )
     except IntegrityError:
         db.rollback()

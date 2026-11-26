@@ -46,6 +46,7 @@ def attempt_view(db: Session, attempt: Attempt) -> dict[str, Any]:
         assessments=[AssessmentOut.model_validate(a) for a in assessments],
         effective_assessment_id=eff.id if eff else None,
         photos=photos.views(db, attempt.photo_ids),
+        answer_seconds=attempt.answer_seconds,
     ).model_dump(mode="json")
 
 
@@ -106,6 +107,7 @@ def create_attempt(
     captured_via: str,
     request_id: str,
     photo_ids: list[uuid.UUID] | None = None,
+    answer_seconds: int | None = None,
 ) -> Attempt:
     """Stage the attempt (and, for "I don't know", its deterministic assessment) in the current transaction."""
     now = clock.now()
@@ -124,6 +126,7 @@ def create_attempt(
         captured_via=captured_via,
         status=status,
         photo_ids=[str(p) for p in photo_ids],
+        answer_seconds=answer_seconds,
         submitted_at=now,
     )
     db.add(attempt)

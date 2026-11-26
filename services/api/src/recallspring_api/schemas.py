@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator
 
 Grade = int
 
@@ -415,6 +416,23 @@ class QuestionListOut(BaseModel):
 # ---------------------------------------------------------------- attempts and assessments
 
 
+def _answer_seconds(value: Any) -> int | None:
+    """Timing never stops an answer from being saved (ADR-014 §3): anything that is not a number of seconds is
+    dropped, and a longer time is capped at two hours."""
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        return None
+    seconds = int(value)
+    return min(seconds, 7200) if seconds >= 1 else None
+
+
+# Seconds the question was open and visible in a RecallSpring answer form, without pauses over 5 minutes.
+AnswerSeconds = Annotated[
+    int | None,
+    BeforeValidator(_answer_seconds),
+    Field(description="answer forms only: seconds the question was open and visible, without pauses over 5 minutes"),
+]
+
+
 class AttemptIn(BaseModel):
     question_id: uuid.UUID
     session_id: uuid.UUID | None = None
@@ -424,6 +442,7 @@ class AttemptIn(BaseModel):
     answer_mode: Literal["closed_notes", "open_notes"] = "closed_notes"
     # Photos of work solved on paper: image sources in the question's course (saved first, e.g. "Answer photos").
     photo_ids: list[uuid.UUID] = Field(default_factory=list, max_length=4)
+    answer_seconds: AnswerSeconds = None
 
 
 class AttemptCreatedOut(BaseModel):
@@ -467,6 +486,7 @@ class AttemptOut(BaseModel):
     assessments: list[AssessmentOut]
     effective_assessment_id: uuid.UUID | None
     photos: list[dict[str, Any]] = Field(default_factory=list)  # [{id, filename, available}]
+    answer_seconds: int | None = None  # time spent in the answer form (ADR-014 §3), never a measure of learning
 
 
 class SelfAssessmentIn(BaseModel):
@@ -732,6 +752,12 @@ class FocusOut(BaseModel):
     message: str
 
 
+class PlanEstimateOut(BaseModel):
+    minutes: int
+    timed_answers: int
+    source: Literal["default", "your_pace"]
+
+
 class PlanOut(BaseModel):
     policy_version: str
     generated_at: datetime
@@ -745,6 +771,8 @@ class PlanOut(BaseModel):
     interests: InterestPlanOut | None = None
     focus: FocusOut | None = None
     left_out: list[PlanLeftOutOut] = Field(default_factory=list)
+    # ADR-014 §3: minutes per review depth, from the learner's timed answers once there are enough.
+    estimates: dict[str, PlanEstimateOut] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------- connector settings (owner session)
@@ -1042,6 +1070,7 @@ class QuizAnswer(BaseModel):
     text: str | None = Field(default=None, max_length=20_000)
     dont_know: bool = False
     guessing: bool = Field(default=False, description="the learner marked a closed answer as a guess")
+    answer_seconds: AnswerSeconds = None
 
 
 class QuizDraftIn(BaseModel):

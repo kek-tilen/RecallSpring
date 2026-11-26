@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:mcp-math": "vite build -c vite.mcp-math.config.ts",
+    "build:mcp-clock": "vite build -c vite.mcp-clock.config.ts",
     "typecheck": "tsc -b",
     "test": "vitest run"
   },

@@ -334,7 +334,7 @@ async def test_submit_quiz_is_idempotent_by_client_request_id(api: FakeApi) -> N
     sent = api.requests[0]
     assert sent.headers["Idempotency-Key"] == "c0ffee00-0000-4000-8000-0000000000aa"
     assert json.loads(sent.content)["answers"] == [
-        {"question_id": "x", "option": "B", "text": None, "dont_know": False}
+        {"question_id": "x", "option": "B", "text": None, "dont_know": False, "guessing": False, "answer_seconds": None}
     ]
     assert result.structured_content["quiz_id"] == "q1"
 
@@ -723,8 +723,12 @@ async def test_forms_draw_formulas_with_the_inlined_math_script() -> None:
         quiz = (await client.read_resource("ui://recallspring/quiz")).contents[0].text
     for html in (answer, quiz):
         assert "/*RS_MATH*/" not in html and "RecallSpringMath" in html and "createElementNS" in html
-        assert "innerHTML" not in html and html.count("<script>") == html.count("</script>") == 3  # nothing broke out
+        # ADR-014 §3: the answer clock is inlined too
+        assert "/*RS_CLOCK*/" not in html and "RecallSpringClock" in html and "visibilitychange" in html
+        assert "innerHTML" not in html and html.count("<script>") == html.count("</script>") == 4  # nothing broke out
     assert "mathText(ui.prompt" in answer and "mathText(promptText, item.prompt)" in quiz
+    assert "answer_seconds: clock ? clock.seconds(question.question_id) : null" in answer
+    assert "answer.answer_seconds = clock ? clock.seconds(item.question_id) : null" in quiz
 
 
 # ---------------------------------------------------------------- owner feedback 2026-11-25
@@ -852,3 +856,26 @@ async def test_before_this_exam_is_passed_only_when_given(api: FakeApi) -> None:
     assert "before_exam" not in notes and choice == {"before_exam": "intense"}
     assert "only on the learner's clear request" in tools["update_study_target"].description
     assert "never as a chance of remembering" in instructions
+
+
+async def test_the_forms_pass_on_the_time_on_each_question(api: FakeApi) -> None:
+    """ADR-014 §3: the answer and simulation forms send answer_seconds; the simulation form also its guess flag."""
+    api.route("POST", "/attempts", 201, {"attempt_id": "a1", "status": "saved", "saved_at": "2026-11-26T10:00:00Z"})
+    api.route("POST", "/quizzes/q1/draft", 200, {"saved_at": "2026-11-26T10:00:00Z", "revision": 1})
+    async with Client(mcp) as client:
+        await client.call_tool(
+            "submit_answer_from_form",
+            {
+                "question_id": "x",
+                "client_request_id": "c0ffee00-0000-4000-8000-0000000000ab",
+                "answer_text": "Mitochondria.",
+                "answer_seconds": 95,
+            },
+        )
+        await client.call_tool(
+            "save_quiz_draft",
+            {"quiz_id": "q1", "answers": [{"question_id": "y", "option": "A", "guessing": True, "answer_seconds": 40}]},
+        )
+    answer, draft = (json.loads(r.content) for r in api.requests)
+    assert answer["answer_seconds"] == 95 and answer["captured_via"] == "answer_form"
+    assert draft["answers"][0]["guessing"] is True and draft["answers"][0]["answer_seconds"] == 40

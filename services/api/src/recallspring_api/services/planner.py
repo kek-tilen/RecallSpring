@@ -56,15 +56,15 @@ from ..models import (
     StudyTarget,
     User,
 )
-from . import check_first, learning, mastery, reviews
+from . import check_first, learning, mastery, pace, reviews
 from .targets import active_target, concept_weights, latest_profile, live_targets, scope_concepts
 
 PLAN_POLICY = "plan-v3"
 MAX_ITEMS = 6
 MAX_INTEREST_ITEMS = 3
 BASE_MINUTES = {"Review due": 4, "Maintain": 3, "Relearn": 10, "Strengthen": 6, "Learn next": 12, "Practice": 6}
-# ADR-014: how deep a review goes, and its estimate before the learner's own pace is known.
-DEPTH_MINUTES = {"quick": 3, "standard": 4, "relearn": 10}
+# ADR-014: how deep a review goes, and its estimate before the learner's own pace is known (services/pace.py).
+DEPTH_MINUTES = pace.DEFAULT_MINUTES
 DEPTH_OF = {"Review due": "standard", "Maintain": "quick", "Relearn": "relearn"}
 MAX_TRIES = 4  # relearning: at most this many tries a day (services/relearn.py)
 # Minutes still needed per concept: learning (12) + first practice (6) when not studied, otherwise by band.
@@ -171,6 +171,8 @@ def today_plan(
     has_interests = overview and any(c.kind == "interest" and c.status == "active" for c in courses.values())
     interest_share = user.interest_percent if has_interests else 0
     states = {s.concept_id: s for s in db.scalars(select(ReviewState).where(ReviewState.user_id == user.id))}
+    estimates = pace.estimates(db, user)
+    minutes_of = {depth: e["minutes"] for depth, e in estimates.items()}
     concepts = (
         list(
             db.scalars(
@@ -308,9 +310,14 @@ def today_plan(
             need = 0.8 + (0.2 if state.lapse_count else 0.0)
             main.append(_scored(urgency * weight, need, "Strengthen", concept, courses, why, band, diff, target_name))
 
+    for item in [*main, *(i for _, i in maintenance)]:
+        if item.get("depth"):
+            _set_depth(item, item["depth"], minutes_of)  # the learner's own pace once it is known
     course_count = max(1, sum(1 for c in courses.values() if c.kind == "course" or not overview))
     capacities = [
-        _capacity(db, user, courses[cid], sc, states, status_map, now, today, course_count, interest_share, focus)
+        _capacity(
+            db, user, courses[cid], sc, states, status_map, now, today, course_count, interest_share, focus, minutes_of
+        )
         for cid, sc in scopes.items()
         if sc.active is not None
     ]
@@ -320,13 +327,15 @@ def today_plan(
     planned_concepts = {i["concept_id"] for i in main}
     for sc in scopes.values():
         if sc.active is not None and sc.days_left is not None and 2 <= sc.days_left <= EARLY_TAIL_DAYS:
-            early = _early_tail(db, user, courses, sc, states, concept_by_id, now, tz, course_count, interest_share)
+            early = _early_tail(
+                db, user, courses, sc, states, concept_by_id, now, tz, course_count, interest_share, minutes_of
+            )
             main.extend(i for i in early if i["concept_id"] not in planned_concepts)
     pressed = {(c["course_id"], c["target"]): c["status"] for c in capacities if c["status"] != "ok"}
     for item in main:
         status = pressed.get((item["course_id"], item["target"]))
         if status and item.get("depth") == "standard" and item["band"] == "reliable":
-            _set_depth(item, "quick")
+            _set_depth(item, "quick", minutes_of)
             item["why_selected"] += f" Kept short: the time before {item['target']} is {STATUS_WORDS[status]}."
 
     ranked = sorted(main, key=lambda i: (-round(i["_score"], 6), i.get("_order", ()), i["term"]))
@@ -398,6 +407,8 @@ def today_plan(
         "focus": _focus_view(focus, behind) if focus is not None else None,
         # Work for the days before an exam that did not fit today (ADR-014): it stays due.
         "left_out": left_out,
+        # Minutes per review depth, from the learner's timed answers once there are enough (ADR-014 §3).
+        "estimates": estimates,
     }
 
 
@@ -419,6 +430,7 @@ def _early_tail(
     tz: ZoneInfo,
     course_count: int,
     interest_share: int,
+    minutes_of: dict[str, int],
 ) -> list[dict[str, Any]]:
     """Two or three days before an exam: when the day before it would not fit, offer some reviews brought forward to
     that day a little earlier. The most stable first (they tolerate the longer gap), then lighter topics; only when
@@ -433,7 +445,7 @@ def _early_tail(
         if state is None or concept is None or state.due_at <= now or state.due_at.astimezone(tz).date() != eve:
             continue
         band, diff = mastery.band(state), mastery.difficulty(concept, state)
-        load += DEPTH_MINUTES["quick" if band == "reliable" else "standard"] + max(0, diff.value - 3)
+        load += minutes_of["quick" if band == "reliable" else "standard"] + max(0, diff.value - 3)
         if state.due_reason.get("code") == "exam_cap" and state.due_reason.get("exam_date") == exam_day:
             candidates.append((state, concept, band, diff))
     share = (100 - user.maintenance_percent - interest_share) / 100 / max(1, course_count)
@@ -470,15 +482,16 @@ def _early_tail(
             sc.active.name,
             depth="quick" if band == "reliable" else "standard",
         )
+        _set_depth(item, item["depth"], minutes_of)
         item["_tail"] = True
         out.append(item)
         moved += item["estimated_minutes"]
     return out
 
 
-def _set_depth(item: dict[str, Any], depth: str) -> None:
+def _set_depth(item: dict[str, Any], depth: str, minutes_of: dict[str, int]) -> None:
     item["depth"] = depth
-    item["estimated_minutes"] = DEPTH_MINUTES[depth] + max(0, item["difficulty"] - 3)
+    item["estimated_minutes"] = minutes_of[depth] + max(0, item["difficulty"] - 3)
 
 
 class _Fill:
@@ -626,6 +639,7 @@ def _capacity(
     course_count: int,
     interest_share: int = 0,
     focus: Course | None = None,
+    minutes_of: dict[str, int] = DEPTH_MINUTES,
 ) -> dict[str, Any]:
     assert sc.active is not None and sc.active_scope is not None and sc.days_left is not None
     bands = {b: 0 for b in mastery.BANDS}
@@ -638,7 +652,7 @@ def _capacity(
         studied[status_map.get(concept_id, "not_studied")] += 1
         work_key = "not_studied" if b == "not_started" and status_map.get(concept_id) == "not_studied" else b
         remaining += REMAINING_WORK[work_key] + (
-            BASE_MINUTES["Review due"] if state is not None and state.due_at <= now else 0
+            minutes_of["standard"] if state is not None and state.due_at <= now else 0
         )
         if (
             state is not None
@@ -647,7 +661,7 @@ def _capacity(
             and state.due_reason.get("exam_date") == sc.active.due_date.isoformat()
         ):
             # the exam tail: reviews brought forward before this exam count before they are due (ADR-014)
-            remaining += BASE_MINUTES["Relearn" if state.due_reason["code"] == "relearn" else "Review due"]
+            remaining += minutes_of["relearn" if state.due_reason["code"] == "relearn" else "standard"]
     days = max(0, sc.days_left)
     # Days of the learner's focus on another course or interest are not counted for this one.
     focus_end = focus.focus_until if focus is not None and focus.id != course.id else None

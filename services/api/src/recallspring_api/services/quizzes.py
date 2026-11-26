@@ -187,6 +187,11 @@ def _answers_map(answers: list[QuizAnswer]) -> dict[str, dict[str, Any]]:
     return {str(a.question_id): a.model_dump(mode="json", exclude={"question_id"}) for a in answers}
 
 
+def _seconds(value: Any) -> int | None:
+    """Time on one question of the form (ADR-014 §3), kept with the draft so a reload does not lose it."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 7200 else None
+
+
 def save_draft(quiz: Quiz, answers: list[QuizAnswer]) -> None:
     if quiz.status != "open":
         raise ApiError(409, "quiz_submitted", "This simulation was already submitted.")
@@ -242,6 +247,7 @@ def submit(
             answer_mode="closed_notes",
             captured_via=captured_via,
             request_id=request_id,
+            answer_seconds=_seconds(answer.get("answer_seconds")),
         )
         attempt.quiz_id = quiz.id
         attempt.guessing = guessing

@@ -76,6 +76,7 @@
   </div>
 </main>
 <script>/*RS_MATH*/</script>
+<script>/*RS_CLOCK*/</script>
 <script>
 // Formulas in question text are drawn by RecallSpring's own renderer (inlined above; DOM only, no HTML parsing).
 function mathText(target, text) {
@@ -92,7 +93,7 @@ function mathText(target, text) {
   const clientRequestId = (crypto.randomUUID && crypto.randomUUID()) ||
     "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) =>
       (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
-  let quiz = null, nextId = 1, saveTimer = null, tick = null, confirmArmed = false, locked = false;
+  let quiz = null, nextId = 1, saveTimer = null, tick = null, confirmArmed = false, locked = false, clock = null;
   const pending = new Map();
 
   const send = (msg) => window.parent.postMessage(msg, "*");
@@ -129,6 +130,7 @@ function mathText(target, text) {
         const ta = ui.form.querySelector(`[data-text="${item.question_id}"]`);
         answer.text = ta ? ta.value : "";
       }
+      answer.answer_seconds = clock ? clock.seconds(item.question_id) : null;
       return answer;
     });
   }
@@ -201,6 +203,15 @@ function mathText(target, text) {
       ui.form.appendChild(card);
     });
     if (data.status === "submitted" && data.results) { showResults(data.results); return; }
+    if (!clock && window.RecallSpringClock) {   // ADR-014 §3: time per question, kept with the draft
+      const start = {};
+      Object.entries(data.draft || {}).forEach(([id, a]) => { start[id] = a && a.answer_seconds; });
+      clock = new RecallSpringClock.AnswerClock(start);
+      RecallSpringClock.watchActivity(clock, document, (t) => {
+        const card = t && t.closest ? t.closest("[data-qid]") : null;
+        return card ? card.dataset.qid : null;
+      });
+    }
     ui.submit.disabled = false;
     startTimer();
   }

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { newKey, request } from "../api";
+import { AnswerClock, questionOfTarget, watchActivity } from "../answerClock";
 import { plural } from "../format";
 import type { QuizView } from "../types";
 import { CopyButton } from "./Copy";
@@ -8,7 +9,20 @@ import { useAssistant } from "../assistant";
 import { MathText } from "./Markdown";
 import { Confirm, ErrorNote } from "./ui";
 
-type Answer = { option?: string | null; text?: string | null; dont_know?: boolean; guessing?: boolean };
+type Answer = {
+  option?: string | null;
+  text?: string | null;
+  dont_know?: boolean;
+  guessing?: boolean;
+  answer_seconds?: number | null; // ADR-014 §3: time on the question, saved with the draft
+};
+
+/** Every answer with the time spent on its question, also questions only read so far (their time is kept). */
+function withTime(answers: Record<string, Answer>, clock: AnswerClock) {
+  const seconds = clock.all();
+  const ids = new Set([...Object.keys(answers), ...Object.keys(seconds)]);
+  return [...ids].map((question_id) => ({ question_id, ...answers[question_id], answer_seconds: seconds[question_id] ?? null }));
+}
 
 export function gradingPrompt(quiz: { title: string; quiz_id: string }): string {
   return `I solved the simulation "${quiz.title}" in RecallSpring (ID ${quiz.quiz_id}). Please grade my open answers and tell me what to repeat.`;
@@ -53,6 +67,9 @@ export function QuizForm({ quiz }: { quiz: QuizView }) {
   const [now, setNow] = useState(() => Date.now());
   const timer = useRef<number | undefined>(undefined);
   const submitKey = useRef(newKey());
+  const [clock] = useState(
+    () => new AnswerClock(Object.fromEntries(Object.entries(quiz.draft ?? {}).map(([id, a]) => [id, (a as Answer).answer_seconds]))),
+  );
   const started = Boolean(view.opened_at);
   const needsStart = Boolean(view.time_limit_minutes) && !started;
 
@@ -67,7 +84,7 @@ export function QuizForm({ quiz }: { quiz: QuizView }) {
     mutationFn: (current: Record<string, Answer>) =>
       request<{ saved_at: string }>(`/quizzes/${quiz.quiz_id}/draft`, {
         method: "POST",
-        json: { answers: Object.entries(current).map(([question_id, a]) => ({ question_id, ...a })) },
+        json: { answers: withTime(current, clock) },
       }),
     onSuccess: (r) => setSaved(r.saved_at),
   });
@@ -78,7 +95,7 @@ export function QuizForm({ quiz }: { quiz: QuizView }) {
         key: submitKey.current,
         json: {
           client_request_id: submitKey.current,
-          answers: Object.entries(answers).map(([question_id, a]) => ({ question_id, ...a })),
+          answers: withTime(answers, clock),
         },
       }),
     onSuccess: (result) => {
@@ -97,6 +114,7 @@ export function QuizForm({ quiz }: { quiz: QuizView }) {
     return () => window.clearInterval(id);
   }, [view.deadline]);
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => watchActivity(clock, document, questionOfTarget), [clock]);
 
   function change(questionId: string, next: Answer) {
     if (!started && !open.isPending) open.mutate();
@@ -142,7 +160,7 @@ export function QuizForm({ quiz }: { quiz: QuizView }) {
       {view.items.map((item) => {
         const a = answers[item.question_id] ?? {};
         return (
-          <div key={item.question_id} className="quiz-q">
+          <div key={item.question_id} className="quiz-q" data-question-id={item.question_id}>
             <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
               <strong id={`q-${item.question_id}`}>
                 {item.position}. <MathText text={item.prompt} />

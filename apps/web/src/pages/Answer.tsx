@@ -1,6 +1,7 @@
 import { ANSWER_FOLDER, AnswerPhotos, SavedPhotos, usePhotos } from "../components/Photos";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AnswerClock, watchActivity } from "../answerClock";
 import { Link, useParams, useSearchParams } from "react-router";
 import { get, newKey, request } from "../api";
 import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
@@ -91,7 +92,7 @@ export function AnswerPage() {
   return (
     <div className="page">
       <PageHead title="Answer a question" sub="Type your answer in your own words. It is saved exactly as you write it, before your assistant grades it." />
-      <Async q={question}>{(q) => <AnswerForm q={q} sessionId={params.get("session")} />}</Async>
+      <Async q={question}>{(q) => <AnswerForm key={q.id} q={q} sessionId={params.get("session")} />}</Async>
     </div>
   );
 }
@@ -99,7 +100,7 @@ export function AnswerPage() {
 /** In Chat: the answer form ChatGPT asked for. ``onSaved`` runs after the answer is saved (then ChatGPT is told). */
 export function ChatAnswerForm({ questionId, onSaved }: { questionId: string; onSaved: (kind: AnswerKind, photoIds: string[]) => void }) {
   const question = useQuery({ queryKey: ["questions", questionId], queryFn: () => get<QuestionView>(`/questions/${questionId}`) });
-  return <Async q={question}>{(q) => <AnswerForm q={q} sessionId={null} onSaved={onSaved} />}</Async>;
+  return <Async q={question}>{(q) => <AnswerForm key={q.id} q={q} sessionId={null} onSaved={onSaved} />}</Async>;
 }
 
 export type AnswerKind = "answer" | "dont_know";
@@ -170,6 +171,53 @@ export function ChatSentAnswer({ questionId }: { questionId: string }) {
   );
 }
 
+/**
+ * ADR-014 §3: how long this question is open and visible, without pauses over 5 minutes (time spent, never
+ * learning). Kept in this browser with the draft, so a reload does not lose it; cleared once the answer is saved.
+ */
+function useAnswerClock(questionId: string): { clock: AnswerClock; saved: () => void } {
+  const storeKey = `rs-answer-time:${questionId}`;
+  const done = useRef(false);
+  const [clock] = useState(() => {
+    let start: number | null = null;
+    try {
+      start = Number(localStorage.getItem(storeKey)) || null;
+    } catch {
+      /* storage unavailable: start at zero */
+    }
+    return new AnswerClock({ [questionId]: start }, Date.now(), questionId);
+  });
+  useEffect(() => {
+    const keep = () => {
+      const seconds = clock.seconds(questionId);
+      if (done.current || seconds === null) return;
+      try {
+        localStorage.setItem(storeKey, String(seconds));
+      } catch {
+        /* storage full or blocked: the time on screen still counts */
+      }
+    };
+    const stop = watchActivity(clock, document);
+    document.addEventListener("visibilitychange", keep);
+    window.addEventListener("pagehide", keep);
+    return () => {
+      keep();
+      stop();
+      document.removeEventListener("visibilitychange", keep);
+      window.removeEventListener("pagehide", keep);
+    };
+  }, [clock, questionId, storeKey]);
+  const saved = () => {
+    done.current = true;
+    try {
+      localStorage.removeItem(storeKey);
+    } catch {
+      /* ignore */
+    }
+  };
+  return { clock, saved };
+}
+
 function AnswerForm({ q, sessionId, onSaved }: {
   q: QuestionView;
   sessionId: string | null;
@@ -183,6 +231,7 @@ function AnswerForm({ q, sessionId, onSaved }: {
   // In Chat the saved answer stays in the conversation, so the learner still sees what they sent.
   const [savedText, setSavedText] = useState<string | null>(null);
   const photos = usePhotos(q.course_id, ANSWER_FOLDER);
+  const timing = useAnswerClock(q.id);
   const hasAnswer = !!draft.text.trim() || photos.ids.length > 0;
   const save = useMutation({
     mutationFn: (kind: AnswerKind) =>
@@ -196,10 +245,12 @@ function AnswerForm({ q, sessionId, onSaved }: {
           answer_text: kind === "answer" ? draft.text : "",
           answer_mode: openNotes ? "open_notes" : "closed_notes",
           photo_ids: kind === "answer" ? photos.ids : [],
+          answer_seconds: timing.clock.seconds(q.id),
         },
       }),
     onSuccess: (s, kind) => {
       const sentPhotos = kind === "answer" ? photos.ids : [];
+      timing.saved();
       clearDraft();
       photos.clear();
       setSavedPhotos(sentPhotos);

@@ -312,10 +312,13 @@ def form_last(ctx: Context | None) -> str:
 
 def form_html(name: str) -> str:
     """A form's HTML with RecallSpring's math script (math.js, built from the web app: npm run build:mcp-math)
-    inlined, so formulas in questions are drawn as math without loading anything (ADR-012)."""
+    inlined, so formulas in questions are drawn as math without loading anything (ADR-012), and the answer clock
+    (clock.js, npm run build:mcp-clock) that measures how long each question was open (ADR-014 §3)."""
     pkg = resources.files("recallspring_mcp")
     html = pkg.joinpath(name).read_text(encoding="utf-8")
-    return html.replace("/*RS_MATH*/", pkg.joinpath("math.js").read_text(encoding="utf-8").replace("</", "<\\/"))
+    for marker, script in (("/*RS_MATH*/", "math.js"), ("/*RS_CLOCK*/", "clock.js")):
+        html = html.replace(marker, pkg.joinpath(script).read_text(encoding="utf-8").replace("</", "<\\/"))
+    return html
 
 
 @apps.tool(resource_uri=FORM_URI, annotations=READ, title="Show answer form")
@@ -360,8 +363,10 @@ async def submit_answer_from_form(
     answer_text: str = "",
     answer_mode: Literal["closed_notes", "open_notes"] = "closed_notes",
     session_id: str | None = None,
+    answer_seconds: int | None = None,
 ) -> CallToolResult:
-    """Called only by the answer form: saves the learner's exact typed answer."""
+    """Called only by the answer form: saves the learner's exact typed answer and how long the question was open
+    (ADR-014 §3)."""
     saved = await get_client().post(
         "/attempts",
         {
@@ -372,6 +377,7 @@ async def submit_answer_from_form(
             "answer_mode": answer_mode,
             "session_id": session_id,
             "captured_via": "answer_form",
+            "answer_seconds": answer_seconds,
         },
         idempotency_key=client_request_id,
     )
@@ -393,6 +399,8 @@ class QuizAnswerIn(BaseModel):
     option: str | None = None
     text: str | None = None
     dont_know: bool = False
+    guessing: bool = False
+    answer_seconds: int | None = None  # measured by the form (ADR-014 §3)
 
 
 @apps.tool(resource_uri=QUIZ_URI, annotations=READ, title="Show kolokvij simulation")

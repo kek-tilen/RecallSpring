@@ -55,6 +55,32 @@ describe("answer page for assistants without forms", () => {
     expect(localStorage.getItem("rs-answer-draft:q1")).toBeNull();
   });
 
+  it("sends how long the question was open (ADR-014 §3) and keeps it in this browser until it is saved", async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json(200, QUESTION))
+      .mockResolvedValueOnce(json(201, { attempt_id: "a1", status: "saved_awaiting_evaluation", saved_at: "2026-11-21T20:00:00Z" }));
+    show("/answer/q1");
+    const box = await screen.findByRole("textbox", { name: /your answer/i });
+    now += 45_000; // reading, then typing
+    fireEvent.change(box, { target: { value: "V citoplazmi." } });
+    now += 5_000;
+    let visibility: DocumentVisibilityState = "hidden"; // switching tabs: the time so far is kept, the time away is not
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(localStorage.getItem("rs-answer-time:q1")).toBe("50");
+    now += 600_000;
+    visibility = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    delete (document as { visibilityState?: unknown }).visibilityState;
+    fireEvent.click(screen.getByRole("button", { name: "Save answer" }));
+    await screen.findByText(/Your answer was saved/);
+    expect(JSON.parse((fetch.mock.calls[1]![1] as RequestInit).body as string).answer_seconds).toBe(50);
+    expect(localStorage.getItem("rs-answer-time:q1")).toBeNull();
+  });
+
   it("says when a summary link is incomplete instead of guessing", () => {
     show("/summary?course=k1&title=Lecture");
     expect(screen.getByText(/This link is incomplete/)).toBeTruthy();

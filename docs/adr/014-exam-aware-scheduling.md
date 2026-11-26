@@ -1,7 +1,7 @@
 # ADR-014 — Exam-aware reviews: an exam layer now, FSRS-6 in shadow, then the switch
 
 Status: accepted 2026-11-26 (owner in chat: answered the design questions, then reviewed this ADR). Rollout steps 1
-and 2 done 2026-11-26; see Rollout. Extends ADR-003 (`rs-interval-v1`), ADR-009 (`rs-interval-v2`, Check first), the planner of ADR-005 and
+to 3 done 2026-11-26; see Rollout. Extends ADR-003 (`rs-interval-v1`), ADR-009 (`rs-interval-v2`, Check first), the planner of ADR-005 and
 ADR-007 (`plan-v2`) and the exam weights of ADR-013.
 
 ## Context
@@ -134,6 +134,11 @@ with three deterministic depths:
   1–7200; migration). Chat answers have none.
   - After 10 timed answers of a depth, its estimate becomes the median of the last 30 plus 2 minutes for feedback.
     Until then the defaults above apply.
+  - A `quick` review is one question at Bloom 1–2, a `standard` one a question at Bloom 3 or higher, so answers
+    count by their question's level. A `relearn` item keeps its default ratio of 2.5 standard reviews. Estimates are
+    rounded up to whole minutes, at most 60.
+  - Only answers count: not "I don't know", not skips and not Check first (it measures what the learner already
+    knows, not their pace in practice). Invalid timing never stops an answer from being saved; it is dropped.
   - Like focus sessions, this records time spent, never learning or mastery.
 - **Phase B** replaces the trimming order with value per minute (§6).
 - **The learner stays in control:** availability, the maintenance and interest shares, a per-day minutes override
@@ -284,6 +289,14 @@ and with the owner's approval for the owner's instance.
    With it the `long_term` rule of §2 became reachable: a long-term exam brings one review forward per concept, and
    an answer at most 3 days before the exam (`EARLY_TAIL_DAYS`) that followed that cap is not capped again.
 3. **Answer timing:** migration for `attempts.answer_seconds`; reported by the answer forms; estimates per depth.
+   **Done 2026-11-26** (migration 0032; `services/pace.py`; the plan carries `estimates {depth: {minutes,
+   timed_answers, source}}` with `source` `default` or `your_pace`, and every item's `estimated_minutes` and the
+   capacity check use them). The clock (`apps/web/src/answerClock.ts`, built as `clock.js` for the MCP forms)
+   counts the gaps between moments of activity (typing, clicking, scrolling, moving the pointer) while the page is
+   visible, when they are at most 5 minutes apart; each gap goes to the question the activity belongs to. The web
+   answer page keeps the time in the browser until the answer is saved; a simulation keeps each question's time with
+   its draft, so a reload loses nothing. An assistant's transcription of a chat answer is never timed. With no timed
+   answers the plan is unchanged; the policy stays `plan-v3`.
 4. **FSRS-6 shadow:** the pinned dependency, the `review_shadow` migration, both variants and the
    `shadow-report` command.
 5. **Phase B,** after the owner's checkpoint on the report: the switch, the global settings and value per minute.
