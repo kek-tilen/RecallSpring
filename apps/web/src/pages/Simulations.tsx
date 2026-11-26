@@ -117,6 +117,8 @@ function Item({ item, submitted }: { item: QuizItemView; submitted: boolean }) {
           ) : (
             <GradeChip grade={item.grade} status={item.assessment_status} />
           )}
+          {item.unsure && <span className="chip">Unsure</span>}
+          {item.guessing && <span className="chip">Guess</span>}
         </div>
       )}
       {item.feedback && (

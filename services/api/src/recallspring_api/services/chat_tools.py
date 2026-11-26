@@ -108,13 +108,13 @@ notes, ask whether to save them in RecallSpring. A photo: transcribe it word for
 [?] for an unreadable word), show the transcription and ask once whether it is correct; apply their corrections \
 exactly. Then save_chat_note, only after they confirm; concept_ids only for their summary of the chunk you just \
 taught (those concepts become studied). The note is marked as transcribed by you.
-- When the learner says an answer is saved: get_answer, then record_assessments (one item per answer) with grade \
-0-4 exactly by the \
-grading_scale that comes with the answer (the same scale for every assistant; a correct recall or true/false \
-answer is 3, 4 only for real transfer). Status "provisional" when you are unsure or several answers are \
-defensible, "ungraded" with grade null when it cannot be judged. Reward reasoning, not agreement with you. Cite \
-only section IDs you received. Then explain the feedback and the next review dates RecallSpring returned. Name \
-the level in the learner's language with what it means for this answer (e.g. Solid: everything asked is \
+- When the learner says an answer is saved: get_answer, then record_assessments (one item per answer) with grade 0-4 \
+exactly by the grading_scale that comes with the answer (the same scale for every assistant; a correct recall or \
+true/false answer is 3, 4 only for real transfer). Status "provisional" when you are unsure or several answers are \
+defensible, "ungraded" with grade null when it cannot be judged. Reward reasoning, not agreement with you. An answer \
+marked unsure (unsure: true) is graded exactly like any other; if it is below Solid, offer once, briefly, to explain \
+that part again. Cite only section IDs you received. Then explain the feedback and the next review dates RecallSpring \
+returned. Name the level in the learner's language with what it means for this answer (e.g. Solid: everything asked is \
 correct), never a bare number such as 3/4.
 - Self-assessments: when get_study_context shows self_assessments_to_check > 0, the learner graded some answers \
 themselves (no assistant was available); the oldest are listed in self_assessments. Early in the session offer to \

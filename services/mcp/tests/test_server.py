@@ -334,7 +334,15 @@ async def test_submit_quiz_is_idempotent_by_client_request_id(api: FakeApi) -> N
     sent = api.requests[0]
     assert sent.headers["Idempotency-Key"] == "c0ffee00-0000-4000-8000-0000000000aa"
     assert json.loads(sent.content)["answers"] == [
-        {"question_id": "x", "option": "B", "text": None, "dont_know": False, "guessing": False, "answer_seconds": None}
+        {
+            "question_id": "x",
+            "option": "B",
+            "text": None,
+            "dont_know": False,
+            "guessing": False,
+            "unsure": False,
+            "answer_seconds": None,
+        }
     ]
     assert result.structured_content["quiz_id"] == "q1"
 
@@ -891,3 +899,28 @@ async def test_the_forms_pass_on_the_time_on_each_question(api: FakeApi) -> None
     answer, draft = (json.loads(r.content) for r in api.requests)
     assert answer["answer_seconds"] == 95 and answer["captured_via"] == "answer_form"
     assert draft["answers"][0]["guessing"] is True and draft["answers"][0]["answer_seconds"] == 40
+
+
+async def test_the_forms_offer_unsure_once_there_is_an_answer(api: FakeApi) -> None:
+    """Owner 2026-11-26: "I don't know" while the box is empty, "Unsure" once there is text; graded normally."""
+    api.route("POST", "/attempts", 201, {"attempt_id": "a1", "status": "saved", "saved_at": "2026-11-26T10:00:00Z"})
+    api.route("POST", "/quizzes/q1/draft", 200, {"saved_at": "2026-11-26T10:00:00Z", "revision": 1})
+    async with Client(mcp) as client:
+        await client.call_tool(
+            "submit_answer_from_form",
+            {"question_id": "x", "client_request_id": "c0ffee00-0000-4000-8000-0000000000ac", "answer_text": "Maybe."}
+            | {"unsure": True},
+        )
+        await client.call_tool(
+            "save_quiz_draft", {"quiz_id": "q1", "answers": [{"question_id": "y", "text": "Perhaps.", "unsure": True}]}
+        )
+        instructions = client.instructions or ""
+    answer, draft = (json.loads(r.content) for r in api.requests)
+    assert answer["unsure"] is True and draft["answers"][0]["unsure"] is True
+    assert "UNSURE" in instructions and "graded exactly like any other" in instructions
+    from recallspring_mcp.server import form_html
+
+    for name in ("answer_form.html", "quiz_form.html"):
+        html = form_html(name)
+        assert ">Unsure<" in html or '"Unsure"' in html
+        assert "unsure" in html and "I don't know" in html

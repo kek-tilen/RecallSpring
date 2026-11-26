@@ -25,7 +25,7 @@ from ..deps import Ctx, WriteCtx, commit_with_response, replay_if_seen
 from ..errors import ApiError
 from ..ingest import renderer, visuals
 from ..ingest.storage import blob_path
-from ..learning.grading import GRADE_NAMES, GRADING_SCALE, TELL_THE_LEARNER
+from ..learning.grading import GRADE_NAMES, GRADING_SCALE, TELL_THE_LEARNER, UNSURE_NOTE
 from ..models import (
     Assessment,
     Attempt,
@@ -506,9 +506,11 @@ def get_attempt(
     sections = source_svc.sections_in_course(
         db, ctx.user.id, question.course_id, source_svc.parse_refs(question.source_refs)
     )
+    unsure = attempt.guessing and question.question_type != "mcq"
     return {
         **attempt_svc.attempt_view(db, attempt),
         "grading_scale": GRADING_SCALE,
+        **({"unsure_note": UNSURE_NOTE} if unsure else {}),
         "question": question_view(db, question, ctx.user.id),
         "sources": [
             {

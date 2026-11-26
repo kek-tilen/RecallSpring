@@ -327,6 +327,7 @@ export interface AttemptHistory {
   bloom_level: number | null;
   answer: string;
   kind: string;
+  unsure?: boolean;
   captured_via: string;
   submitted_at: string;
   status: string;
@@ -385,6 +386,8 @@ export interface AttemptDetail {
   assessments: AssessmentDetail[];
   effective_assessment_id: string | null;
   photos?: { id: string; filename: string | null; available: boolean }[];
+  /** the learner marked it as unsure (an open answer) or a guess (a closed one); graded normally when open */
+  unsure?: boolean;
 }
 
 export interface AttemptRow {
@@ -394,6 +397,7 @@ export interface AttemptRow {
   question_type: "open" | "mcq";
   bloom_level: number;
   kind: string;
+  unsure?: boolean;
   captured_via: string;
   status: string;
   submitted_at: string;
@@ -420,6 +424,8 @@ export interface QuizItemView {
   earned?: number | null;
   answer?: string | null;
   kind?: string | null;
+  guessing?: boolean; // a closed answer marked as a guess
+  unsure?: boolean; // an open answer marked as unsure (graded normally)
   grade?: number | null;
   assessment_status?: string | null;
   feedback?: string | null;
@@ -466,7 +472,7 @@ export interface QuizView {
   quiz_id: string;
   opened_at?: string | null;
   deadline?: string | null;
-  draft?: Record<string, { option?: string | null; text?: string | null; dont_know?: boolean }>;
+  draft?: Record<string, { option?: string | null; text?: string | null; dont_know?: boolean; guessing?: boolean; unsure?: boolean }>;
   draft_saved_at?: string | null;
   course_id: string;
   title: string;

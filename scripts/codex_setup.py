@@ -266,7 +266,8 @@ Use the RecallSpring tools for everything and pass this course_id to every tool 
   photo: transcribe it word for word (no corrections, [?] for unreadable words), show me and apply my corrections
   exactly. Then save_chat_note, only after I confirm (concept_ids only for my summary of the chunk you just taught).
 - Grade 0-4 only from my saved answer, exactly by the grading_scale RecallSpring returns with it, and cite only
-  section IDs you received. Mark a grade provisional when you are unsure. Pass model_name (the model you run as). Tell me the next review dates RecallSpring returns.
+  section IDs you received. An answer I marked as unsure is graded like any other; if it is below Solid, offer
+  once to explain that part again. Mark a grade provisional when you are unsure. Pass model_name (the model you run as). Tell me the next review dates RecallSpring returns.
   Name the level in my language with what it means for my answer (e.g. Solid: everything asked is correct), never a
   bare number such as 3/4.
 - End with record_session_summary. Save everything through RecallSpring, never only in the chat; when a reply

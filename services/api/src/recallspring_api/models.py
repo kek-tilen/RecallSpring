@@ -343,7 +343,8 @@ class Attempt(Base):
     session_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("study_sessions.id"))
     quiz_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("quizzes.id"), index=True)
     selected_option: Mapped[str | None] = mapped_column(String(10))
-    # The learner marked a closed answer as a guess (migration 0023): it never counts as known.
+    # The learner marked a closed answer as a guess (migration 0023): it never counts as known. On an open answer
+    # it is "Unsure" (owner 2026-11-26): graded normally, only shown, so the assistant can offer more explanation.
     guessing: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
     client_request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)

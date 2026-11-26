@@ -28,6 +28,37 @@ const json = (status: number, body: unknown) =>
 
 const QUESTION = { id: "q1", course_id: "k1", prompt: "Convert -0.375 to IEEE 754.", bloom_level: 3, rubric: null };
 
+it("the answer form swaps I don't know for Unsure once there is an answer and saves the mark (owner 2026-11-26)", async () => {
+  const sent: unknown[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const path = new URL(String(input), "http://localhost").pathname.replace("/api/v1", "");
+    if (path === "/questions/q1") return json(200, QUESTION);
+    if (path === "/attempts") {
+      sent.push(JSON.parse(String(init?.body)));
+      return json(201, { attempt_id: "a1", status: "saved_awaiting_evaluation", saved_at: "2026-11-26T11:00:00Z" });
+    }
+    return json(200, []);
+  });
+  const onSaved = vi.fn();
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <ChatAnswerForm questionId="q1" onSaved={onSaved} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole("button", { name: "I don't know" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Unsure" })).toBeNull();
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "1 01111101 1000…, I think" } });
+  expect(screen.queryByRole("button", { name: "I don't know" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Unsure" }));
+  expect(screen.getByRole("button", { name: "Unsure" }).getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "Save and send to ChatGPT" }));
+  await waitFor(() => expect(onSaved).toHaveBeenCalledWith("answer", [], true));
+  expect(sent[0]).toMatchObject({ kind: "answer", unsure: true, answer_text: "1 01111101 1000…, I think" });
+  expect(screen.getByRole("status").textContent).toContain("marked as unsure");
+});
+
 it("a pasted photo is saved in Answer photos and counts as the answer", async () => {
   const sent: { path: string; body: unknown }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -63,7 +94,7 @@ it("a pasted photo is saved in Answer photos and counts as the answer", async ()
   expect(screen.getByAltText(/Photo 1/)).toBeTruthy();
 
   fireEvent.click(save);
-  await waitFor(() => expect(onSaved).toHaveBeenCalledWith("answer", ["p1"]), { timeout: 5000 });
+  await waitFor(() => expect(onSaved).toHaveBeenCalledWith("answer", ["p1"], false), { timeout: 5000 });
   // After saving, the photo stays visible; a click shows it large in this page (no new tab, no download).
   expect(screen.queryByRole("link", { name: /Photo 1/ })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: /Photo 1/ }));

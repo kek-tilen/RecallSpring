@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { newKey, request } from "../api";
 import { AnswerClock, questionOfTarget, watchActivity } from "../answerClock";
-import { plural } from "../format";
+import { UNSURE_HINT, plural } from "../format";
 import type { QuizView } from "../types";
 import { CopyButton } from "./Copy";
 import { useAssistant } from "../assistant";
@@ -14,6 +14,7 @@ type Answer = {
   text?: string | null;
   dont_know?: boolean;
   guessing?: boolean;
+  unsure?: boolean; // an open answer the learner marked as unsure (owner 2026-11-26)
   answer_seconds?: number | null; // ADR-014 §3: time on the question, saved with the draft
 };
 
@@ -196,16 +197,32 @@ export function QuizForm({ quiz }: { quiz: QuizView }) {
               </label>
             )}
             <div className="row" style={{ gap: 14, flexWrap: "wrap" }}>
-              <label className="row small muted">
-                <input
-                  type="checkbox"
-                  checked={Boolean(a.dont_know)}
-                  onChange={(e) =>
-                    change(item.question_id, { dont_know: e.target.checked, ...(e.target.checked ? { option: null, guessing: false } : {}) })
-                  }
-                />
-                I don't know
-              </label>
+              {item.type !== "mcq" && !a.dont_know && (a.text ?? "").trim() ? (
+                // an open answer with text: "Unsure" takes the place of "I don't know"
+                <button
+                  type="button"
+                  className="guess-toggle"
+                  aria-pressed={Boolean(a.unsure)}
+                  title={UNSURE_HINT}
+                  onClick={() => change(item.question_id, { unsure: !a.unsure })}
+                >
+                  Unsure
+                </button>
+              ) : (
+                <label className="row small muted">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(a.dont_know)}
+                    onChange={(e) =>
+                      change(item.question_id, {
+                        dont_know: e.target.checked,
+                        ...(e.target.checked ? { option: null, guessing: false, unsure: false } : {}),
+                      })
+                    }
+                  />
+                  I don't know
+                </label>
+              )}
               {item.type === "mcq" && (
                 <button
                   type="button"

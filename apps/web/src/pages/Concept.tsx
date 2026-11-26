@@ -68,6 +68,7 @@ export function ConceptPage() {
                             {a.question && <div style={{ fontWeight: 600 }}>
                                 <MathText text={a.question} />
                               </div>}
+                            {a.kind === "answer" && a.unsure && <span className="chip">Marked unsure</span>}
                             <div className="answer pre">{a.kind === "answer" ? a.answer : ATTEMPT_KIND[a.kind] ?? a.kind}</div>
                             {a.feedback && (
                               <div className="feedback">

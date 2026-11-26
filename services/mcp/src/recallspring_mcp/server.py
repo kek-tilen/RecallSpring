@@ -99,10 +99,10 @@ Start of every study session in a course:
    the sections (get_source_section), then explain every concept of the part completely and concretely, never only
    an outline or a list of headings: what it is, how it works or why it holds, a worked example from the material
    (a visual when it helps), how it connects to what came before and the usual mistakes, with page citations.
-   Answer the learner's questions, then open_summary_form so they summarise in their own words (saved exactly as their note;
-   this marks the concepts studied). When it is saved, read it (get_notes) and compare it with the material: say
-   plainly what is correct, what is wrong and what is missing, with page citations (feedback, not a grade; never
-   rewrite their note). Then 2-3 short check questions (Bloom 1-2, create_questions +
+   Answer the learner's questions, then open_summary_form so they summarise in their own words (saved exactly as
+   their note; this marks the concepts studied). When it is saved, read it (get_notes) and compare it with the
+   material: say plainly what is correct, what is wrong and what is missing, with page citations (feedback, not a
+   grade; never rewrite their note). Then 2-3 short check questions (Bloom 1-2, create_questions +
    open_answer_form). If the learner says they already know a topic (e.g. from lectures), ask and use
    mark_concepts_known. RecallSpring refuses practice on unstudied concepts.
    HARDER QUESTIONS: when a grade you record returns offer_harder (two Solid answers in a row while learning),
@@ -143,7 +143,9 @@ Start of every study session in a course:
    exactly by the grading_scale returned with the answer, the same for every assistant (0 No evidence, 1 Fragile,
    2 Partial, 3 Solid, 4 Transfer; a correct recall or true/false answer is 3, 4 only for real transfer);
    "provisional" when several answers are defensible or you are unsure, "ungraded" with grade null when it cannot
-   be judged. Reward reasoning, not agreement with you. Cite
+   be judged. Reward reasoning, not agreement with you. UNSURE: an answer the learner marked as unsure (unsure:
+   true, with unsure_note) is graded exactly like any other; if it is below Solid, offer once, briefly, to explain
+   that part again. Cite
    only section IDs you received. Explain the feedback and the next review dates RecallSpring returned. Say the
    level by its name in the learner's language and what it means for this answer (e.g. "Solid: everything the
    question asks is correct"), never a bare number such as "3/4" or "grade saved": it reads like test points.
@@ -375,9 +377,10 @@ async def submit_answer_from_form(
     answer_mode: Literal["closed_notes", "open_notes"] = "closed_notes",
     session_id: str | None = None,
     answer_seconds: int | None = None,
+    unsure: bool = False,
 ) -> CallToolResult:
-    """Called only by the answer form: saves the learner's exact typed answer and how long the question was open
-    (ADR-014 §3)."""
+    """Called only by the answer form: saves the learner's exact typed answer, how long the question was open
+    (ADR-014 §3) and whether they marked it as unsure."""
     saved = await get_client().post(
         "/attempts",
         {
@@ -389,6 +392,7 @@ async def submit_answer_from_form(
             "session_id": session_id,
             "captured_via": "answer_form",
             "answer_seconds": answer_seconds,
+            "unsure": unsure,
         },
         idempotency_key=client_request_id,
     )
@@ -410,7 +414,8 @@ class QuizAnswerIn(BaseModel):
     option: str | None = None
     text: str | None = None
     dont_know: bool = False
-    guessing: bool = False
+    guessing: bool = False  # a closed answer marked as a guess: never counts as known
+    unsure: bool = False  # an open answer marked as unsure: graded normally (owner 2026-11-26)
     answer_seconds: int | None = None  # measured by the form (ADR-014 §3)
 
 

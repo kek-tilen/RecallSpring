@@ -235,7 +235,8 @@ def submit(
         else:
             answered = bool(text.strip()) and not answer.get("dont_know")
             answer_text = text if answered else ""
-            guessing = False  # only closed answers can be marked as a guess
+            # An open answer is never a guess; "Unsure" is kept in the same column and graded normally.
+            guessing = answered and bool(answer.get("unsure"))
         attempt = create_attempt(
             db,
             user=user,
@@ -357,7 +358,8 @@ def results_view(db: Session, quiz: Quiz, *, for_learner: bool = False) -> dict[
             "earned": points,
             "answer": attempt.answer_text if attempt else None,
             "kind": attempt.kind if attempt else None,
-            "guessing": bool(attempt and attempt.guessing),
+            "guessing": bool(attempt and attempt.guessing and question.question_type == "mcq"),
+            "unsure": bool(attempt and attempt.guessing and question.question_type != "mcq"),
             "grade": eff.grade if eff else None,
             "assessment_status": eff.status if eff else None,
             "feedback": eff.feedback if eff else None,

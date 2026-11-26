@@ -343,10 +343,10 @@ function ToolSteps({ steps }: { steps: ToolStep[] }) {
 }
 
 const FORM_MESSAGES = {
-  answer: (id: string, photos = 0) =>
+  answer: (id: string, photos = 0, unsure = false) =>
     `[RecallSpring] I saved my answer to question ${id} in the form${
       photos ? ` with ${photos === 1 ? "a photo" : `${photos} photos`} of my work (attached)` : ""
-    }. Please give me feedback.`,
+    }.${unsure ? " I marked it as unsure." : ""} Please give me feedback.`,
   dont_know: (id: string) => `[RecallSpring] I answered "I don't know" to question ${id} in the form.`,
   summary: (title: string) =>
     `[RecallSpring] I saved my summary of "${title}" in the form. Please check it against the material (what is right, wrong or missing), then continue.`,
@@ -418,9 +418,9 @@ function ChatForm({ form, live, onSend }: {
       {form.kind === "answer" ? (
         <ChatAnswerForm
           questionId={form.question_id}
-          onSaved={(kind, photoIds) =>
+          onSaved={(kind, photoIds, unsure) =>
             kind === "answer"
-              ? send(FORM_MESSAGES.answer(form.question_id, photoIds.length), photoIds)
+              ? send(FORM_MESSAGES.answer(form.question_id, photoIds.length, unsure), photoIds)
               : send(FORM_MESSAGES.dont_know(form.question_id))
           }
         />

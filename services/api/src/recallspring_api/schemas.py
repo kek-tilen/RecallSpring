@@ -443,6 +443,9 @@ class AttemptIn(BaseModel):
     # Photos of work solved on paper: image sources in the question's course (saved first, e.g. "Answer photos").
     photo_ids: list[uuid.UUID] = Field(default_factory=list, max_length=4)
     answer_seconds: AnswerSeconds = None
+    unsure: bool = Field(
+        default=False, description="the learner marked the answer as unsure: graded normally, only shown with it"
+    )
 
 
 class AttemptCreatedOut(BaseModel):
@@ -487,6 +490,7 @@ class AttemptOut(BaseModel):
     effective_assessment_id: uuid.UUID | None
     photos: list[dict[str, Any]] = Field(default_factory=list)  # [{id, filename, available}]
     answer_seconds: int | None = None  # time spent in the answer form (ADR-014 §3), never a measure of learning
+    unsure: bool = False  # marked unsure (an open answer) or a guess (a closed one) by the learner
 
 
 class SelfAssessmentIn(BaseModel):
@@ -1070,6 +1074,7 @@ class QuizAnswer(BaseModel):
     text: str | None = Field(default=None, max_length=20_000)
     dont_know: bool = False
     guessing: bool = Field(default=False, description="the learner marked a closed answer as a guess")
+    unsure: bool = Field(default=False, description="the learner marked an open answer as unsure; graded normally")
     answer_seconds: AnswerSeconds = None
 
 

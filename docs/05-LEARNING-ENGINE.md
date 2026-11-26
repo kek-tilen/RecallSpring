@@ -44,6 +44,7 @@ Harder questions while learning (owner 2026-11-25): the check questions after a 
 - Avoid clues embedded in stems. At start user can choose `Mixed` or `Progressive` and `Closed notes` or `Open notes` (closed default).
 - Questions must vary across sessions; avoid near-duplicate stems, maintain generation history and last practiced concept pairs.
 - User answer saved immediately before AI feedback. 'Reveal hint', 'Skip', and 'I don't know' are all explicit attempt actions.
+- **Unsure (owner 2026-11-26):** an open answer the learner marks as unsure is graded exactly like any other (the grade, the review schedule, Check first and readiness ignore the mark). The assistant sees it (`unsure`, and `unsure_note` from `GET /connector/attempts/{id}`) and, when the grade is below Solid, offers once to explain that part again. Only a closed answer marked "I'm guessing" counts nothing.
 
 ### Grading rubric (not the same as true knowledge)
 

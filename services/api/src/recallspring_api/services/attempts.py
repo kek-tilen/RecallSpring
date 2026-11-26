@@ -47,6 +47,7 @@ def attempt_view(db: Session, attempt: Attempt) -> dict[str, Any]:
         effective_assessment_id=eff.id if eff else None,
         photos=photos.views(db, attempt.photo_ids),
         answer_seconds=attempt.answer_seconds,
+        unsure=attempt.guessing,
     ).model_dump(mode="json")
 
 
@@ -108,6 +109,7 @@ def create_attempt(
     request_id: str,
     photo_ids: list[uuid.UUID] | None = None,
     answer_seconds: int | None = None,
+    unsure: bool = False,
 ) -> Attempt:
     """Stage the attempt (and, for "I don't know", its deterministic assessment) in the current transaction."""
     now = clock.now()
@@ -127,6 +129,8 @@ def create_attempt(
         status=status,
         photo_ids=[str(p) for p in photo_ids],
         answer_seconds=answer_seconds,
+        # Unsure only marks a real answer (owner 2026-11-26); "I don't know" and Skip carry no mark.
+        guessing=unsure and kind == "answer",
         submitted_at=now,
     )
     db.add(attempt)
@@ -144,6 +148,7 @@ def create_attempt(
             "captured_via": captured_via,
             "client_request_id": str(client_request_id),
             "photos": len(photo_ids),
+            "unsure": unsure and kind == "answer",
         },
         request_id=request_id,
     )

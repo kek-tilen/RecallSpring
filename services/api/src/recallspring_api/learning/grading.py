@@ -25,6 +25,14 @@ Rules: check each expected point; a wrong statement lowers the grade even when o
 cannot be judged from the question, expected points and sources. In the feedback name the expected points that \
 were met and those that were missing."""
 
+# Owner 2026-11-26: an open answer the learner marked as unsure is graded like any other; the mark only says
+# that more explanation may help. Sent with such an answer (GET /connector/attempts/{id}).
+UNSURE_NOTE = (
+    "The learner marked this answer as unsure. Grade it exactly like any other answer by the scale: being unsure "
+    "never raises or lowers the grade. If it is below Solid, offer once, briefly, to explain that part again "
+    "(from the material, with citations)."
+)
+
 GRADE_NAMES: dict[int, str] = {0: "No evidence", 1: "Fragile", 2: "Partial", 3: "Solid", 4: "Transfer"}
 
 # Owner 2026-11-25: "3/4, grade saved" read like points on a test. Sent with every recorded grade.

@@ -34,6 +34,10 @@
   button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
   button.primary:hover { background: var(--primary-hover); }
   button:disabled { opacity: .55; cursor: not-allowed; }
+  button.unsure { border-style: dashed; color: var(--muted); }
+  button.unsure[aria-pressed="true"] { border-style: solid; border-color: var(--primary); color: var(--primary);
+    background: var(--surface); font-weight: 600; }
+  [hidden] { display: none !important; }
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   #status { min-height: 1.5em; margin: 12px 0 0; }
   #status.error { color: var(--danger); }
@@ -59,6 +63,8 @@
   <div class="actions">
     <button type="button" class="primary" id="submit" disabled>Submit answer</button>
     <button type="button" id="dontknow" disabled>I don't know</button>
+    <button type="button" id="unsure" class="unsure" aria-pressed="false" hidden disabled
+      title="Not sure? Mark it: it is graded like any other answer, and your assistant can explain that part again.">Unsure</button>
     <button type="button" id="skip" disabled>Skip</button>
   </div>
   <p id="status" role="status" aria-live="polite"></p>
@@ -77,7 +83,8 @@ function mathText(target, text) {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const ui = { prompt: $("prompt"), eyebrow: $("eyebrow"), answer: $("answer"), status: $("status"),
-               buttons: [$("submit"), $("dontknow"), $("skip")] };
+               dontknow: $("dontknow"), unsure: $("unsure"),
+               buttons: [$("submit"), $("dontknow"), $("unsure"), $("skip")] };
   const clientRequestId = (crypto.randomUUID && crypto.randomUUID()) ||
     "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) =>
       (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
@@ -96,6 +103,13 @@ function mathText(target, text) {
     ui.status.textContent = text;            // textContent only: model or learner text is never parsed as HTML
     ui.status.className = isError ? "error" : "";
   }
+  // Owner 2026-11-26: "I don't know" while the box is empty; once there is an answer, "Unsure" marks it instead.
+  function showMark() {
+    const hasText = !!ui.answer.value.trim();
+    ui.dontknow.hidden = hasText;
+    ui.unsure.hidden = !hasText;
+  }
+  function isUnsure() { return !!ui.answer.value.trim() && ui.unsure.getAttribute("aria-pressed") === "true"; }
   function setBusy(busy) {
     const locked = busy || saved || !question;
     ui.buttons.forEach((b) => { b.disabled = locked; });
@@ -140,14 +154,16 @@ function mathText(target, text) {
       const result = await request("tools/call", { name: "submit_answer_from_form", arguments: {
         question_id: question.question_id, client_request_id: clientRequestId, kind,
         answer_text: kind === "answer" ? text : "", answer_mode: mode, session_id: sessionId,
-        answer_seconds: clock ? clock.seconds(question.question_id) : null } });
+        answer_seconds: clock ? clock.seconds(question.question_id) : null,
+        unsure: kind === "answer" && isUnsure() } });
       const data = resultData(result);
       if (result.isError || !data || !data.attempt_id) throw new Error((result.content && result.content[0] && result.content[0].text) || "Not saved.");
       saved = true;
       const when = new Date(data.saved_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       setStatus(kind === "skip" ? "Skipped at " + when + ". The review stays due." : "Answer saved at " + when + ". Your assistant gives feedback next.");
       setBusy(false);
-      const label = kind === "answer" ? "I submitted my answer" : (kind === "dont_know" ? "I chose “I don't know”" : "I skipped this question");
+      const label = kind === "answer" ? "I submitted my answer" + (isUnsure() ? ", marked as unsure," : "")
+        : (kind === "dont_know" ? "I chose “I don't know”" : "I skipped this question");
       request("ui/message", { role: "user", content: { type: "text",
         text: label + " in the RecallSpring form (attempt " + data.attempt_id + ")." +
               (kind === "skip" ? "" : " Please read it with get_attempt and give feedback.") } }).catch(() => {});
@@ -182,6 +198,11 @@ function mathText(target, text) {
 
   $("submit").addEventListener("click", () => submit("answer"));
   $("dontknow").addEventListener("click", () => submit("dont_know"));
+  ui.unsure.addEventListener("click", () => {
+    if (saved) return;
+    ui.unsure.setAttribute("aria-pressed", ui.unsure.getAttribute("aria-pressed") === "true" ? "false" : "true");
+  });
+  ui.answer.addEventListener("input", showMark);
   $("skip").addEventListener("click", () => submit("skip"));
   ui.answer.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") submit("answer"); });
 

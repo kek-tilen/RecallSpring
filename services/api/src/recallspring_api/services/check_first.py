@@ -214,7 +214,8 @@ def results(
         t["units"] += units
         t["partial"] |= state == "partial"
         t["pending"] |= state == "pending"
-        t["guesses"] += 1 if attempt is not None and attempt.guessing else 0
+        # only a closed guess counts nothing; an open answer marked unsure is graded normally (owner 2026-11-26)
+        t["guesses"] += 1 if attempt is not None and attempt.guessing and question.question_type == "mcq" else 0
     out = {}
     for concept_id, t in tally.items():
         result, why = _verdict(t["units"], t["partial"], t["pending"], t["guesses"])

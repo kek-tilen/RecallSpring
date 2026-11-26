@@ -9,7 +9,7 @@ import { CourseDialog, CourseDot, FocusControl, groupPath } from "../components/
 import { TargetDialog } from "../components/TargetDialog";
 import { CheckChip, CheckFirstPanel, PracticeLimitControl } from "../components/CheckFirst";
 import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
-import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, dateLabel, dateTime, gradeLabel, gradedBy, plural, relativeDay } from "../format";
+import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, attemptKind, dateLabel, dateTime, gradeLabel, gradedBy, plural, relativeDay } from "../format";
 import { keys, useCourseOverview, useGroups, useSources } from "../queries";
 import type { AttemptDetail, AttemptRow, ConceptRow, CourseOverview, ProfileTopic, StudyStatus, Target, TargetProfile } from "../types";
 import { NewNoteButton, NoteList } from "./Notes";
@@ -731,7 +731,7 @@ export function AnswersTab({ courseId }: { courseId: string }) {
                         </div>
                       )}
                     </td>
-                    <td className="small">{ATTEMPT_KIND[a.kind] ?? a.kind}</td>
+                    <td className="small">{attemptKind(a.kind, a.unsure, a.question_type === "mcq")}</td>
                     <td>
                       {a.graded_by === "self" ? (
                         <span className="row" style={{ gap: 4, flexWrap: "wrap" }}>

@@ -37,6 +37,7 @@
     background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-control); }
   .dk { display: inline-flex; gap: 6px; align-items: center; margin-top: 8px; color: var(--muted); font-size: 14px; }
   .answer-extras { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  [hidden] { display: none !important; }
   button.guess { min-height: 32px; padding: 0 12px; margin-top: 8px; border-radius: 999px; font-size: 14px;
     font-weight: 500; background: transparent; color: var(--muted); border: 1px dashed var(--border); }
   button.guess:hover { background: var(--surface); color: var(--ink); }
@@ -129,6 +130,8 @@ function mathText(target, text) {
       } else {
         const ta = ui.form.querySelector(`[data-text="${item.question_id}"]`);
         answer.text = ta ? ta.value : "";
+        const unsure = ui.form.querySelector(`[data-unsure="${item.question_id}"]`);
+        answer.unsure = !!(answer.text.trim() && unsure && unsure.getAttribute("aria-pressed") === "true");
       }
       answer.answer_seconds = clock ? clock.seconds(item.question_id) : null;
       return answer;
@@ -198,6 +201,27 @@ function mathText(target, text) {
           guess.dispatchEvent(new Event("change", { bubbles: true }));
         });
         extras.appendChild(guess);
+      } else {
+        // Owner 2026-11-26: once an open answer has text, "Unsure" takes the place of "I don't know".
+        const unsure = el("button", "guess", "Unsure");
+        unsure.type = "button"; unsure.dataset.unsure = item.question_id;
+        unsure.setAttribute("aria-pressed", saved.unsure ? "true" : "false");
+        unsure.title = "Not sure? Mark it: it is graded like any other answer, and your assistant can explain that part again.";
+        unsure.addEventListener("click", () => {
+          if (locked) return;
+          unsure.setAttribute("aria-pressed", unsure.getAttribute("aria-pressed") === "true" ? "false" : "true");
+          unsure.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        extras.appendChild(unsure);
+        const ta = card.querySelector("textarea");
+        const showMark = () => {
+          const hasText = !!ta.value.trim() && !dk.checked;
+          dkLabel.hidden = hasText;
+          unsure.hidden = !hasText;
+        };
+        ta.addEventListener("input", showMark);
+        dk.addEventListener("change", showMark);
+        showMark();
       }
       card.appendChild(extras);
       ui.form.appendChild(card);

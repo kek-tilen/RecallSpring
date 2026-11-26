@@ -220,7 +220,7 @@ Implemented (2026-11-21, ADR-008):
 
 Built 2026-11-21 (plan-without-claude.md, Phase 0). When an assistant cannot show RecallSpring's forms in its chat, it gives the learner a link:
 
-- **`/answer/:questionId`:** the question (never the rubric), a text field, `I used my notes or the material`, `Save answer` and `I don't know`. A note says when the question was answered before (a new answer is another attempt). After saving: the time and "Go back to your assistant and tell it you are done".
+- **`/answer/:questionId`:** the question (never the rubric), a text field, `I used my notes or the material`, `Save answer` and `I don't know`; once there is an answer (text or a photo), `Unsure` (a toggle, aria-pressed) takes the place of `I don't know` (owner 2026-11-26; the same in Chat's form, the simulation form's open questions and the connector's answer and simulation forms). The mark is saved with the answer, shown as "Answered · unsure" under Answers and "Unsure" on simulation results, and graded normally. A note says when the question was answered before (a new answer is another attempt). After saving: the time and "Go back to your assistant and tell it you are done".
 - **`/summary`:** the chunk's title, what was covered and the topics (only topics of that course; an incomplete link says so), a text field (may stay empty) and `Save summary`. Saved exactly as the learner's note; the topics count as studied.
 - Both keep a draft in the browser until it is saved and reuse one request key, so a retry never saves twice.
 - **Settings → Assistant connector:** `New token for Claude Desktop` / `New token for Codex`; the token table shows which assistant each token is for. Feedback on concepts and simulations reads "Feedback from Codex · model".

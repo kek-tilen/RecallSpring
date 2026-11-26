@@ -7,7 +7,7 @@ import { get, newKey, request } from "../api";
 import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
 import { MathText } from "../components/Markdown";
 import { Async, Card, ErrorNote, GradeChip, PageHead } from "../components/ui";
-import { dateTime } from "../format";
+import { UNSURE_HINT, dateTime } from "../format";
 import { keys } from "../queries";
 import type { AttemptDetail, ConceptRow } from "../types";
 
@@ -98,7 +98,13 @@ export function AnswerPage() {
 }
 
 /** In Chat: the answer form ChatGPT asked for. ``onSaved`` runs after the answer is saved (then ChatGPT is told). */
-export function ChatAnswerForm({ questionId, onSaved }: { questionId: string; onSaved: (kind: AnswerKind, photoIds: string[]) => void }) {
+export function ChatAnswerForm({
+  questionId,
+  onSaved,
+}: {
+  questionId: string;
+  onSaved: (kind: AnswerKind, photoIds: string[], unsure: boolean) => void;
+}) {
   const question = useQuery({ queryKey: ["questions", questionId], queryFn: () => get<QuestionView>(`/questions/${questionId}`) });
   return <Async q={question}>{(q) => <AnswerForm key={q.id} q={q} sessionId={null} onSaved={onSaved} />}</Async>;
 }
@@ -151,6 +157,7 @@ export function ChatSentAnswer({ questionId }: { questionId: string }) {
                 )}
                 <SavedPhotos ids={a.photos ?? []} label="Photos saved with your answer" />
                 <div className="row tiny muted" style={{ gap: 8, flexWrap: "wrap" }}>
+                  {a.kind === "answer" && a.unsure && <span className="chip">Unsure</span>}
                   {current && <GradeChip grade={current.grade} status={current.status} />}
                   <SelfTag a={current} />
                   <span>
@@ -221,11 +228,13 @@ function useAnswerClock(questionId: string): { clock: AnswerClock; saved: () => 
 function AnswerForm({ q, sessionId, onSaved }: {
   q: QuestionView;
   sessionId: string | null;
-  onSaved?: (kind: AnswerKind, photoIds: string[]) => void;
+  onSaved?: (kind: AnswerKind, photoIds: string[], unsure: boolean) => void;
 }) {
   const qc = useQueryClient();
   const [draft, setText, clearDraft] = useDraft(`rs-answer-draft:${q.id}`);
   const [openNotes, setOpenNotes] = useState(false);
+  // Owner 2026-11-26: "I don't know" while the box is empty; once there is an answer, "Unsure" marks it instead.
+  const [unsure, setUnsure] = useState(false);
   const [saved, setSaved] = useState<Saved | null>(null);
   const [savedPhotos, setSavedPhotos] = useState<string[]>([]);
   // In Chat the saved answer stays in the conversation, so the learner still sees what they sent.
@@ -233,6 +242,7 @@ function AnswerForm({ q, sessionId, onSaved }: {
   const photos = usePhotos(q.course_id, ANSWER_FOLDER);
   const timing = useAnswerClock(q.id);
   const hasAnswer = !!draft.text.trim() || photos.ids.length > 0;
+  const markedUnsure = hasAnswer && unsure;
   const save = useMutation({
     mutationFn: (kind: AnswerKind) =>
       request<Saved>("/attempts", {
@@ -246,6 +256,7 @@ function AnswerForm({ q, sessionId, onSaved }: {
           answer_mode: openNotes ? "open_notes" : "closed_notes",
           photo_ids: kind === "answer" ? photos.ids : [],
           answer_seconds: timing.clock.seconds(q.id),
+          unsure: kind === "answer" && markedUnsure,
         },
       }),
     onSuccess: (s, kind) => {
@@ -258,7 +269,7 @@ function AnswerForm({ q, sessionId, onSaved }: {
       setSaved(s);
       void qc.invalidateQueries({ queryKey: keys.dashboard });
       void qc.invalidateQueries({ queryKey: ["questions", q.id] });
-      onSaved?.(kind, sentPhotos);
+      onSaved?.(kind, sentPhotos, kind === "answer" && markedUnsure);
     },
   });
 
@@ -281,7 +292,8 @@ function AnswerForm({ q, sessionId, onSaved }: {
           </p>
         )}
         <p className="notice small" role="status" style={{ margin: 0 }}>
-          Your answer was saved at {dateTime(saved.saved_at)} and ChatGPT was told.
+          Your answer was saved at {dateTime(saved.saved_at)}
+          {savedText !== null && markedUnsure ? ", marked as unsure," : ""} and ChatGPT was told.
         </p>
         <SavedPhotos ids={savedPhotos.map((id) => ({ id }))} label="Photos saved with your answer" />
       </div>
@@ -291,7 +303,9 @@ function AnswerForm({ q, sessionId, onSaved }: {
     return (
       <Card title="Saved">
         <div className="stack" style={{ gap: 12 }}>
-          <BackToAssistant what={`Your answer was saved at ${dateTime(saved.saved_at)}.`} />
+          <BackToAssistant
+            what={`Your answer was saved at ${dateTime(saved.saved_at)}${savedText !== null && markedUnsure ? ", marked as unsure" : ""}.`}
+          />
           <SavedPhotos ids={savedPhotos.map((id) => ({ id }))} label="Photos saved with your answer" />
           <p className="small muted" style={{ margin: 0 }}>
             Your assistant gives feedback; you can see it later under the concept in <Link to={`/courses/${q.course_id}`}>the course</Link>.
@@ -336,9 +350,22 @@ function AnswerForm({ q, sessionId, onSaved }: {
           <button type="submit" className="btn primary" disabled={!hasAnswer || photos.saving || save.isPending}>
             {onSaved ? "Save and send to ChatGPT" : "Save answer"}
           </button>
-          <button type="button" className="btn ghost" disabled={save.isPending} onClick={() => save.mutate("dont_know")}>
-            I don't know
-          </button>
+          {hasAnswer ? (
+            <button
+              type="button"
+              className="guess-toggle"
+              aria-pressed={unsure}
+              title={UNSURE_HINT}
+              disabled={save.isPending}
+              onClick={() => setUnsure(!unsure)}
+            >
+              Unsure
+            </button>
+          ) : (
+            <button type="button" className="btn ghost" disabled={save.isPending} onClick={() => save.mutate("dont_know")}>
+              I don't know
+            </button>
+          )}
         </div>
       </form>
     </Card>

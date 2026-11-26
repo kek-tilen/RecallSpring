@@ -118,6 +118,39 @@ describe("I'm guessing", () => {
   });
 });
 
+describe("Unsure on an open answer (owner 2026-11-26)", () => {
+  it("offers I don't know while the box is empty and Unsure once there is text, and sends the mark", async () => {
+    const fetch = mockFetch(() => ({ saved_at: "2026-11-26T10:00:00Z" }));
+    const quiz = {
+      quiz_id: "qz",
+      title: "Midterm practice",
+      status: "open",
+      mode: "practice",
+      time_limit_minutes: null,
+      opened_at: "2026-11-26T09:00:00Z",
+      deadline: null,
+      draft: {},
+      draft_saved_at: null,
+      items: [{ question_id: "q1", position: 1, type: "open", prompt: "Why hash evidence?", options: null, points: 2, bloom_level: 3 }],
+    } as unknown as QuizView;
+    wrap(<QuizForm quiz={quiz} />);
+    expect(screen.getByLabelText("I don't know")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Unsure" })).toBeNull();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "To show it was not changed, I think." } });
+    expect(screen.queryByLabelText("I don't know")).toBeNull();
+    const unsure = screen.getByRole("button", { name: "Unsure" });
+    expect(unsure.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(unsure);
+    expect(unsure.getAttribute("aria-pressed")).toBe("true");
+    await waitFor(() => expect(fetch.mock.calls.some(([u]) => String(u).includes("/draft"))).toBe(true), { timeout: 3000 });
+    const draft = fetch.mock.calls.filter(([u]) => String(u).includes("/draft")).at(-1)!;
+    expect(JSON.parse(String(draft[1]?.body)).answers[0]).toMatchObject({ question_id: "q1", unsure: true });
+    // an empty box brings I don't know back
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: " " } });
+    expect(screen.getByLabelText("I don't know")).toBeTruthy();
+  });
+});
+
 describe("grade help", () => {
   it("shows the meaning first, the number after it, and explains it behind a small ?", async () => {
     const { GradeChip } = await import("./components/ui");

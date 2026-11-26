@@ -147,6 +147,15 @@ export const TARGET_KIND: Record<string, string> = { kolokvij: "Midterm exam", i
 
 export const ATTEMPT_KIND: Record<string, string> = { answer: "Answered", dont_know: "I don't know", skip: "Skipped" };
 
+/** "Answered", with the learner's own mark: "unsure" on an open answer (graded normally), "guess" on a closed one. */
+export function attemptKind(kind: string, unsure?: boolean, closed?: boolean): string {
+  const base = ATTEMPT_KIND[kind] ?? kind;
+  return kind === "answer" && unsure ? `${base} · ${closed ? "guess" : "unsure"}` : base;
+}
+
+/** Shown on the Unsure switch of an open answer (owner 2026-11-26). */
+export const UNSURE_HINT = "Not sure? Mark it: it is graded like any other answer, and your assistant can explain that part again.";
+
 /** Today's calendar date (YYYY-MM-DD) in the learner's timezone. */
 export function todayIso(): string {
   return dayKey(new Date()).split("/").reverse().join("-");

@@ -273,6 +273,7 @@ def concept_detail(db: Session, user: User, concept: Concept) -> dict[str, Any]:
                 "bloom_level": question.bloom_level if question else None,
                 "answer": a.answer_text,
                 "kind": a.kind,
+                "unsure": a.guessing,
                 "captured_via": a.captured_via,
                 "submitted_at": a.submitted_at.isoformat(),
                 "status": a.status,
@@ -325,6 +326,7 @@ def attempts_list(db: Session, user: User, course_id: uuid.UUID | None, limit: i
                 "question_type": question.question_type,
                 "bloom_level": question.bloom_level,
                 "kind": attempt.kind,
+                "unsure": attempt.guessing,  # Unsure (open) or I'm guessing (closed), as the learner marked it
                 "captured_via": attempt.captured_via,
                 "status": attempt.status,
                 "submitted_at": attempt.submitted_at.isoformat(),
