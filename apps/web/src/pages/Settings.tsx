@@ -13,7 +13,7 @@ import { ChatGptPanel } from "../components/ChatGpt";
 import { ExplanationPaceDefault } from "../components/ExplanationPace";
 import { ServiceStatus } from "../components/ServiceStatus";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
-import type { AssistantClient, AssistantKey, AssistantsStatus, BackupFolderCheck, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
+import type { AssistantClient, AssistantKey, AssistantsStatus, BackupFolderCheck, BackupKey, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -364,6 +364,13 @@ function BackupPanel({ b }: { b: BackupStatus }) {
       <p className="tiny muted">
         Restoring never overwrites anything: <code>recallspring backup-restore --database &lt;new name&gt;</code> creates a new database
         from a backup, then you choose to switch (docs/08 → Backups).
+        {b.encryption.on && (
+          <>
+            {" "}
+            An encrypted backup also needs <code>--key &lt;recovery key file&gt;</code>.
+          </>
+        )}{" "}
+        Backups in a folder used before: add <code>--from &lt;that folder&gt;</code>.
       </p>
       </div>
       </details>
@@ -372,8 +379,8 @@ function BackupPanel({ b }: { b: BackupStatus }) {
 }
 
 function whereKept(b: BackupStatus): string {
-  if (b.sync) return `in your ${b.sync} folder`;
-  return b.same_disk_as_storage ? "on the same disk as your uploads" : "on another disk";
+  const where = b.sync ? `in your ${b.sync} folder` : b.same_disk_as_storage ? "on the same disk as your uploads" : "on another disk";
+  return b.encryption.on ? `encrypted · ${where}` : where;
 }
 
 const SYNC_HELP: [string, string][] = [
@@ -460,10 +467,10 @@ function BackupFolder({ b }: { b: BackupStatus }) {
                   </span>
                 </li>
               ))}
-              {checked.ok && checked.sync && (
+              {checked.ok && checked.sync && !b.encryption.on && (
                 <li data-level="warn">
                   <span aria-hidden="true">!</span>
-                  <span>Backups are not encrypted yet: anyone who can open this {checked.sync} folder can read them.</span>
+                  <span>Encryption is off: anyone who can open this {checked.sync} folder can read the backups. Turn it on under Encryption.</span>
                 </li>
               )}
             </ul>
@@ -508,6 +515,226 @@ function BackupFolder({ b }: { b: BackupStatus }) {
           </details>
         </form>
       )}
+    </>
+  );
+}
+
+type KeyStep = "about" | "key" | "check";
+
+function keyFile(k: BackupKey): string {
+  return [
+    `# RecallSpring recovery key ${k.key_id}`,
+    `# Made ${new Date().toISOString().slice(0, 10)}. It opens the backups made with this key; nothing else can.`,
+    "# Keep it away from the computer RecallSpring runs on: a password manager, a USB stick, or printed.",
+    "# Restore: recallspring backup-restore --database <new name> --key <this file>",
+    k.identity,
+    "",
+  ].join("\n");
+}
+
+/** Encryption with a recovery key (2026-11-27): shown once, saved by the learner, proved, then turned on. */
+function BackupEncryption({ b }: { b: BackupStatus }) {
+  const qc = useQueryClient();
+  const on = b.encryption.on;
+  const [step, setStep] = useState<KeyStep | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [proof, setProof] = useState("");
+  const [removePlain, setRemovePlain] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const make = useMutation({
+    mutationFn: () => request<BackupKey>("/settings/backup/key", { method: "POST", json: {} }),
+    onSuccess: () => setStep("key"),
+  });
+  const key = make.data ?? null;
+  const save = useMutation({
+    mutationFn: (k: BackupKey) =>
+      request<BackupStatus>("/settings/backup/encryption", { method: "PUT", json: { recipient: k.recipient, remove_unencrypted: removePlain } }),
+    onSuccess: (v) => {
+      qc.setQueryData(keys.backup, v);
+      void qc.invalidateQueries({ queryKey: keys.history });
+      close();
+    },
+  });
+  /** Forget the key: it lives only in this component until the learner has saved it. */
+  function close() {
+    setStep(null);
+    setSaved(false);
+    setCopied(false);
+    setProof("");
+    setRemovePlain(false);
+    setConfirming(false);
+    make.reset();
+  }
+  function download(k: BackupKey) {
+    const url = URL.createObjectURL(new Blob([keyFile(k)], { type: "text/plain" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `recallspring-recovery-key-${k.key_id}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function copy(k: BackupKey) {
+    try {
+      await navigator.clipboard.writeText(k.identity);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+  const proved = key !== null && proof.trim().toUpperCase() === key.identity.slice(-4).toUpperCase();
+  const plainCount = b.unencrypted_snapshots;
+  return (
+    <>
+      <div className="settings-row">
+        <span>
+          <span className="settings-row-title">Encryption</span>
+          <span className="small muted">
+            {on
+              ? `On${b.encryption.key_created_at ? ` since ${dateLabel(b.encryption.key_created_at)}` : ""} · key ${b.encryption.key_id} · only your recovery key opens a backup`
+              : "Off · anyone who has the backup folder can read the backups"}
+          </span>
+        </span>
+        {b.can_change && step === null && (
+          <button type="button" className="btn small" onClick={() => setStep("about")}>
+            {on ? "New key" : "Turn on"}
+          </button>
+        )}
+      </div>
+      {b.remove_unencrypted_pending && plainCount > 0 && (
+        <p className="tiny muted" style={{ margin: 0 }}>
+          {plural(plainCount, "unencrypted backup")} will be removed after the next encrypted one.
+        </p>
+      )}
+      {step === "about" && (
+        <section className="backup-key stack" aria-labelledby="backup-key-h">
+          <h4 id="backup-key-h" className="backup-key-title">
+            {on ? "A new recovery key" : "Encrypt backups"}
+          </h4>
+          <p className="small" style={{ margin: 0 }}>
+            Backups are then locked with a key only you hold. RecallSpring keeps backing up every day but cannot read them.
+          </p>
+          <ul className="folder-checks">
+            <li data-level="ok">
+              <span aria-hidden="true">✓</span>
+              <span>A copy in a cloud folder is useless without your key</span>
+            </li>
+            <li data-level="ok">
+              <span aria-hidden="true">✓</span>
+              <span>Nothing changes in how you study</span>
+            </li>
+            <li data-level="warn">
+              <span aria-hidden="true">!</span>
+              <span>Lose the key and these backups cannot be restored, by you or by anyone</span>
+            </li>
+            {on && (
+              <li data-level="warn">
+                <span aria-hidden="true">!</span>
+                <span>Backups made so far still need key {b.encryption.key_id}; keep it until they are gone</span>
+              </li>
+            )}
+          </ul>
+          {make.error && <ErrorNote error={make.error} />}
+          <div className="row">
+            <button type="button" className="btn primary small" onClick={() => make.mutate()} disabled={make.isPending}>
+              {make.isPending ? "Making…" : "Make my recovery key"}
+            </button>
+            <button type="button" className="btn small" onClick={close}>
+              Not now
+            </button>
+          </div>
+        </section>
+      )}
+      {step === "key" && key && (
+        <section className="backup-key stack" aria-labelledby="backup-key-h">
+          <h4 id="backup-key-h" className="backup-key-title">
+            Your recovery key
+          </h4>
+          <p className="small" style={{ margin: 0 }}>
+            Shown only now. Keep it somewhere other than this computer: a password manager, or printed.
+          </p>
+          <code className="recovery-key" aria-label="Recovery key">
+            {key.identity}
+          </code>
+          <div className="row">
+            <button type="button" className="btn small" onClick={() => download(key)}>
+              Download
+            </button>
+            <button type="button" className="btn small" onClick={() => void copy(key)}>
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <label className="check-row small">
+            <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} />
+            <span>I keep it somewhere other than this computer</span>
+          </label>
+          <div className="row">
+            <button type="button" className="btn primary small" disabled={!saved} onClick={() => setStep("check")}>
+              Next
+            </button>
+            <button type="button" className="btn small" onClick={close}>
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
+      {step === "check" && key && (
+        <form
+          className="backup-key stack"
+          aria-labelledby="backup-key-h"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!proved) return;
+            if (removePlain) setConfirming(true);
+            else save.mutate(key);
+          }}
+        >
+          <h4 id="backup-key-h" className="backup-key-title">
+            Check your key
+          </h4>
+          <label className="field">
+            <span className="small">Type the last 4 characters of your recovery key</span>
+            <input className="key-proof" value={proof} onChange={(e) => setProof(e.target.value)} maxLength={4} autoComplete="off" spellCheck={false} />
+          </label>
+          {!on && plainCount > 0 && (
+            <fieldset className="plain-choice">
+              <legend className="small">Older backups that are not encrypted ({plainCount})</legend>
+              <label className="check-row small">
+                <input type="radio" name="plain" checked={!removePlain} onChange={() => setRemovePlain(false)} />
+                <span>Keep them (they go with the usual 7 days and 4 weeks)</span>
+              </label>
+              <label className="check-row small">
+                <input type="radio" name="plain" checked={removePlain} onChange={() => setRemovePlain(true)} />
+                <span>Delete them after the first encrypted one</span>
+              </label>
+            </fieldset>
+          )}
+          {save.error && <ErrorNote error={save.error} />}
+          <div className="row">
+            <button type="submit" className="btn primary small" disabled={!proved || save.isPending}>
+              {on ? "Use the new key" : "Turn on encryption"}
+            </button>
+            <button type="button" className="btn small" onClick={() => setStep("key")}>
+              Back
+            </button>
+            <button type="button" className="btn small" onClick={close}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+      <Confirm
+        open={confirming}
+        title="Delete unencrypted backups?"
+        confirmLabel="Turn on and delete them"
+        danger
+        busy={save.isPending}
+        onConfirm={() => key && save.mutate(key)}
+        onClose={() => setConfirming(false)}
+      >
+        After the first encrypted backup, the {plural(plainCount, "older backup")} that {plainCount === 1 ? "is" : "are"} not encrypted will be
+        deleted from the backup folder. This cannot be undone. A sync app may still keep its own copies for a while.
+      </Confirm>
     </>
   );
 }
@@ -841,6 +1068,11 @@ export function SettingsPage() {
                 {backup.data && (
                   <div id="backup-folder">
                     <BackupFolder b={backup.data} />
+                  </div>
+                )}
+                {backup.data && (
+                  <div id="backup-encryption">
+                    <BackupEncryption b={backup.data} />
                   </div>
                 )}
                 <div className="settings-row" id="history">

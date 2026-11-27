@@ -84,6 +84,9 @@ describe("Settings", () => {
       snapshots: [],
       disk_bytes: 0,
       tools: "pg_dump",
+      encryption: { on: false, key_id: null, key_created_at: null },
+      unencrypted_snapshots: 0,
+      remove_unencrypted_pending: false,
     };
     const target = "D:\Dropbox\RecallSpring backups";
     const calls: { method: string; url: string; body: unknown }[] = [];
@@ -123,7 +126,7 @@ describe("Settings", () => {
     fireEvent.click(within(form).getByRole("button", { name: "Check folder" }));
     const results = await within(form).findByRole("list", { name: "Folder check" });
     expect(within(results).getByText(/Looks like a Dropbox folder/)).toBeTruthy();
-    expect(within(results).getByText(/not encrypted yet/)).toBeTruthy();
+    expect(within(results).getByText(/Encryption is off/)).toBeTruthy();
     expect(use.disabled).toBe(false);
     fireEvent.click(use);
     await waitFor(() => expect(screen.queryByRole("form", { name: "Where backups go" })).toBeNull());
@@ -131,5 +134,76 @@ describe("Settings", () => {
     expect(put?.url).toContain("/settings/backup/folder");
     expect(put?.body).toEqual({ path: target });
     expect(screen.getByText(/in your Dropbox folder/)).toBeTruthy();
+  });
+
+  it("turns on encryption only after the recovery key is saved and proved", async () => {
+    const identity = "AGE-SECRET-KEY-1EXAMPLEONLYNOTAREALKEYEXAMPLEONLYNOTAREALKEY7XK2";
+    const status = {
+      enabled: true,
+      location: "D:\Dropbox\RS",
+      location_source: "settings",
+      server_location: "C:\RS\backups",
+      folder_from_web: true,
+      sync: "Dropbox",
+      can_change: true,
+      same_disk_as_storage: false,
+      interval_hours: 24,
+      keep_daily: 7,
+      keep_weekly: 4,
+      last_attempt_at: null,
+      last_success_at: null,
+      last_error: null,
+      last: null,
+      next_due: "now",
+      snapshots: [],
+      disk_bytes: 0,
+      tools: "pg_dump",
+      encryption: { on: false, key_id: null, key_created_at: null },
+      unencrypted_snapshots: 0,
+      remove_unencrypted_pending: false,
+    };
+    const calls: { method: string; url: string; body: unknown }[] = [];
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      calls.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (url.includes("/settings/backup/key")) return json({ identity, recipient: "age1publichalf", key_id: "AB12CD34" });
+      if (url.includes("/settings/backup/encryption"))
+        return json({ ...status, encryption: { on: true, key_id: "AB12CD34", key_created_at: "2026-11-27T09:00:00+00:00" } });
+      if (url.includes("/settings/backup")) return json(status);
+      return new Response(JSON.stringify({ code: "not_found", message: "Not found." }), { status: 404, headers: { "Content-Type": "application/json" } });
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/settings#data"]}>
+          <SettingsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText(/Off · anyone who has the backup folder/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
+    expect(screen.getByText(/Lose the key and these backups cannot be restored/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Make my recovery key" }));
+    expect((await screen.findByLabelText("Recovery key")).textContent).toBe(identity);
+    const next = screen.getByRole("button", { name: "Next" }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /somewhere other than this computer/ }));
+    fireEvent.click(next);
+    const turnOn = screen.getByRole("button", { name: "Turn on encryption" }) as HTMLButtonElement;
+    const proof = screen.getByRole("textbox", { name: /last 4 characters/ });
+    fireEvent.change(proof, { target: { value: "ZZZZ" } });
+    expect(turnOn.disabled).toBe(true);
+    fireEvent.change(proof, { target: { value: "7xk2" } });
+    expect(turnOn.disabled).toBe(false);
+    fireEvent.click(turnOn);
+    expect(await screen.findByText(/key AB12CD34 · only your recovery key opens a backup/)).toBeTruthy();
+    const put = calls.find((c) => c.method === "PUT" && c.url.includes("/settings/backup/encryption"));
+    expect(put?.body).toEqual({ recipient: "age1publichalf", remove_unencrypted: false });
+    // the private half never goes back to the server and is gone from the page
+    expect(JSON.stringify(calls.map((c) => c.body))).not.toContain("AGE-SECRET-KEY");
+    expect(screen.queryByText(identity)).toBeNull();
+    expect(screen.getByText(/encrypted · in your Dropbox folder/)).toBeTruthy();
   });
 });

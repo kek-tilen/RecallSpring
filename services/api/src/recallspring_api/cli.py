@@ -8,6 +8,7 @@ recallspring connector-token --username <name> [--client codex|antigravity]
 recallspring backup [--if-due]                   (database + uploaded files, checked by a test restore)
 recallspring backup-status                       (last backup, kept snapshots, location)
 recallspring backup-restore --database <new> [--snapshot <name>|latest] [--storage <empty folder>]
+                            [--key <recovery key file>] [--from <backup folder>]
                                                  (restores into a NEW database / folder; never overwrites)
 recallspring recompute-reviews                   (replays every review state with the current scheduler policy;
                                                  a derived cache, evidence untouched, no model calls)
@@ -187,7 +188,9 @@ def backup_status() -> int:
     view = backup.status_view()
     print(f"Backups {'on' if view['enabled'] else 'OFF'}, every {view['interval_hours']} h, in {view['location']}")
     if view["same_disk_as_storage"]:
-        print("  Same disk as the uploaded files: set RS_BACKUP_DIR to another disk or a synced folder.")
+        print("  Same disk as the uploaded files: choose another disk or a synced folder in Settings.")
+    enc = view["encryption"]
+    print(f"  encryption: {'on, key ' + enc['key_id'] if enc['on'] else 'off'}")
     print(f"  last good: {view['last_success_at'] or 'never'}; next due: {view['next_due']}")
     if view["last_error"]:
         print(f"  LAST ATTEMPT FAILED ({view['last_error']['code']}): {view['last_error']['message']}")
@@ -196,11 +199,13 @@ def backup_status() -> int:
     return 0
 
 
-def backup_restore(snapshot: str, database: str, storage: Path | None) -> int:
+def backup_restore(
+    snapshot: str, database: str, storage: Path | None, key: Path | None = None, root: Path | None = None
+) -> int:
     from . import backup
 
     try:
-        result = backup.restore(snapshot, database, storage)
+        result = backup.restore(snapshot, database, storage, key_file=key, root=root)
     except backup.BackupError as exc:
         print(f"Restore refused or failed ({exc.code}): {exc.message}", file=sys.stderr)
         return 1
@@ -351,6 +356,8 @@ def main(argv: list[str] | None = None) -> int:
     rs.add_argument("--snapshot", default="latest", help="snapshot name (see backup-status) or 'latest'")
     rs.add_argument("--database", required=True, help="name of a database that does not exist yet")
     rs.add_argument("--storage", type=Path, help="an empty or new folder for the uploaded files")
+    rs.add_argument("--key", type=Path, help="the recovery key file, for an encrypted backup")
+    rs.add_argument("--from", dest="root", type=Path, help="read backups from this folder instead of the current one")
     sub.add_parser("recompute-reviews", help="replay every review state with the current scheduler policy")
     sr = sub.add_parser("shadow-report", help="what FSRS-6 in shadow would have done (ADR-014; local only)")
     sr.add_argument("--username", help="one account (default: every account with shadow data)")
@@ -364,7 +371,7 @@ def main(argv: list[str] | None = None) -> int:
             return backup_now(args.if_due)
         if args.command == "backup-status":
             return backup_status()
-        return backup_restore(args.snapshot, args.database, args.storage)
+        return backup_restore(args.snapshot, args.database, args.storage, args.key, args.root)
     if args.command == "create-owner":
         return create_owner(args.username, args.timezone)
     if args.command == "connector-token":

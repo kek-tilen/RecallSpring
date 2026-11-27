@@ -392,6 +392,9 @@ _EVENT_TEXT = {
     "backup.created": "Backup made",
     "backup.failed": "Backup failed",
     "backup.folder_changed": "Backup folder changed",
+    "backup.encryption_on": "Backup encryption turned on",
+    "backup.key_replaced": "New recovery key for backups",
+    "backup.unencrypted_removed": "Unencrypted backups removed",
     "review.defer": "Review deferred",
     "assessment.grade_override": "Grade overridden",
     "auth.login": "Signed in",
@@ -444,6 +447,11 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         return str(payload.get("message") or payload.get("code"))
     if event_type == "backup.folder_changed":
         return f"{payload.get('from')} → {payload.get('to')}"
+    if event_type in ("backup.encryption_on", "backup.key_replaced"):
+        return f"key {payload.get('key_id')}"
+    if event_type == "backup.unencrypted_removed":
+        n = payload.get("count")
+        return f"{n} backup{'' if n == 1 else 's'}"
     if event_type in ("focus.completed", "focus.stopped"):
         return f"{payload.get('minutes')} of {payload.get('planned_minutes')} min"
     if event_type in ("focus.deleted", "focus.restored"):

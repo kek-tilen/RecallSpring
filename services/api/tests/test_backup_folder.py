@@ -74,6 +74,7 @@ def test_owner_chooses_a_folder_and_it_is_audited(owner_api: Api, chosen: Path) 
 
     saved = owner_api.put("/settings/backup/folder", {"path": str(target)})
     assert saved.status_code == 200, saved.text
+    assert saved.json()["can_change"] is True  # every backup route returns the same view
     assert saved.json()["location"] == str(target.resolve())
     assert saved.json()["location_source"] == "settings"
     assert target.is_dir()

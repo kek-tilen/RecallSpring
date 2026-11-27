@@ -783,11 +783,24 @@ export interface BackupStatus {
     check: "restored" | "listed" | "none";
     removed_snapshots: number;
     seconds: number;
+    encrypted?: boolean;
   } | null;
   next_due: string | null;
   snapshots: string[];
   disk_bytes: number;
   tools: string | null;
+  /** Encryption with a recovery key (2026-11-27): the server holds only the public half. */
+  encryption: { on: boolean; key_id: string | null; key_created_at: string | null };
+  /** Kept backups made before encryption was turned on. */
+  unencrypted_snapshots: number;
+  remove_unencrypted_pending: boolean;
+}
+
+/** A new recovery key, returned once and never stored by the server. */
+export interface BackupKey {
+  identity: string;
+  recipient: string;
+  key_id: string;
 }
 
 export interface BackupFolderCheck {

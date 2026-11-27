@@ -6966,3 +6966,63 @@ input.switch:focus-visible {
     align-items: stretch;
   }
 }
+
+
+/* Encryption with a recovery key (2026-11-27). */
+.backup-key {
+  gap: 10px;
+  padding: 4px 0 12px;
+}
+
+.backup-key-title {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.recovery-key {
+  display: block;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  word-break: break-all;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--tint-ink);
+  user-select: all;
+}
+
+.check-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.check-row input {
+  margin-top: 3px;
+}
+
+.key-proof {
+  max-width: 8ch;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  min-height: 40px;
+}
+
+.plain-choice {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plain-choice legend {
+  padding: 0;
+  margin-bottom: 4px;
+}

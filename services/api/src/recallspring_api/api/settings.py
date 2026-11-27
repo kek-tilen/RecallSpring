@@ -77,6 +77,11 @@ class BackupFolderIn(BaseModel):
     path: str | None = Field(default=None, max_length=1000)
 
 
+class BackupEncryptionIn(BaseModel):
+    recipient: str = Field(min_length=10, max_length=200)
+    remove_unencrypted: bool = False
+
+
 def _backup_owner(db: Session, user: User) -> bool:
     """A backup holds the whole installation, so only its first account may move it (2026-11-27)."""
     first = db.scalar(select(User.id).order_by(User.created_at, User.id).limit(1))
@@ -85,17 +90,22 @@ def _backup_owner(db: Session, user: User) -> bool:
 
 def _require_backup_owner(db: Session, user: User) -> None:
     if not get_settings().backup_settings_from_web:
-        raise ApiError(403, "backup_folder_locked", "The backup folder is set in the server settings here.")
+        raise ApiError(403, "backup_folder_locked", "Backups are set in the server settings here.")
     if not _backup_owner(db, user):
         raise ApiError(403, "not_backup_owner", "Only the first account on this RecallSpring can change backups.")
+
+
+def _backup_view(db: Session, user: User) -> dict[str, Any]:
+    """The status view every backup route returns, with whether this account may change backups."""
+    view = backup.status_view()
+    view["can_change"] = get_settings().backup_settings_from_web and _backup_owner(db, user)
+    return view
 
 
 @router.get("/settings/backup")
 def backup_status(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
     """When the last backup ran, whether it was checked, where backups are kept (no secrets)."""
-    view = backup.status_view()
-    view["can_change"] = get_settings().backup_settings_from_web and _backup_owner(db, ctx.user)
-    return view
+    return _backup_view(db, ctx.user)
 
 
 @router.post("/settings/backup/folder/check")
@@ -118,13 +128,12 @@ def backup_folder_set(
     _require_backup_owner(db, ctx.user)
     db.rollback()
     try:
-        view = backup.set_folder(payload.path, actor_id=ctx.user.id, request_id=ctx.request_id)
+        backup.set_folder(payload.path, actor_id=ctx.user.id, request_id=ctx.request_id)
     except backup.BackupError as exc:
         if exc.code == "busy":
             raise ApiError(409, "backup_busy", exc.message) from exc
         raise ApiError(422 if exc.code == "folder_refused" else 409, exc.code, exc.message) from exc
-    view["can_change"] = True
-    return commit_with_response(db, ctx, payload, 200, view)
+    return commit_with_response(db, ctx, payload, 200, _backup_view(db, ctx.user))
 
 
 @router.post("/settings/backup")
@@ -135,12 +144,42 @@ def backup_now(ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
         return replay
     db.rollback()  # no transaction stays open while pg_dump runs
     try:
-        view = backup.run("manual", actor_id=ctx.user.id, request_id=ctx.request_id)
+        backup.run("manual", actor_id=ctx.user.id, request_id=ctx.request_id)
     except backup.BackupError as exc:
         if exc.code == "busy":
             raise ApiError(409, "backup_busy", exc.message) from exc
         raise ApiError(503, "backup_failed", exc.message, {"reason": exc.code}) from exc
-    return commit_with_response(db, ctx, None, 200, view)
+    return commit_with_response(db, ctx, None, 200, _backup_view(db, ctx.user))
+
+
+@router.post("/settings/backup/key")
+def backup_new_key(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> JSONResponse:
+    """A new recovery key, shown once. Nothing is stored and no response is kept for replays: the private half
+    exists only in this response (Cache-Control: no-store) until the learner saves it."""
+    _require_backup_owner(db, ctx.user)
+    return JSONResponse(backup.new_key(), headers={"Cache-Control": "no-store"})
+
+
+@router.put("/settings/backup/encryption")
+def backup_encryption_set(
+    payload: BackupEncryptionIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Lock the next backups with the public half of a recovery key (turns encryption on, or replaces the key)."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    _require_backup_owner(db, ctx.user)
+    db.rollback()
+    try:
+        backup.set_encryption(
+            payload.recipient,
+            remove_unencrypted=payload.remove_unencrypted,
+            actor_id=ctx.user.id,
+            request_id=ctx.request_id,
+        )
+    except backup.BackupError as exc:
+        status = {"busy": 409, "invalid_key": 422, "folder_locked": 403}.get(exc.code, 409)
+        raise ApiError(status, "backup_busy" if exc.code == "busy" else exc.code, exc.message) from exc
+    return commit_with_response(db, ctx, payload, 200, _backup_view(db, ctx.user))
 
 
 @router.get("/settings/study")

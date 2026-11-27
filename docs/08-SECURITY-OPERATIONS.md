@@ -100,7 +100,7 @@ hashes; no OAuth credential, `.env` file or password is copied. The page-render 
   room, whether it is another disk than the uploads, and a sync app recognised from the path (Dropbox, OneDrive,
   Google Drive, iCloud Drive; a hint only). The choice is kept in `RS_BACKUP_SETTINGS_FILE` (default
   `local-data/backup-settings.json`, not learner data) and replaces `RS_BACKUP_DIR`; *Use the server's folder* goes
-  back. Backups already made stay in the old folder (restore from there by pointing `RS_BACKUP_DIR` at it). Only the
+  back. Backups already made stay in the old folder (restore from there with `backup-restore --from <old folder>`). Only the
   first account may change it, because a backup holds the whole installation; `RS_BACKUP_SETTINGS_FROM_WEB=false`
   keeps the folder to the server settings (a hosted operator). Refused while a backup runs (same advisory lock);
   audited as `backup.folder_changed` with the old and new folder.
@@ -121,13 +121,30 @@ hashes; no OAuth credential, `.env` file or password is copied. The page-render 
   images must ship the client tools of the server's major version; the Docker socket is never mounted.
 - **Same disk:** the default folder protects against mistakes, a bad migration and a damaged database, not against a
   broken disk or a lost computer. Settings warns while the backup folder is on the same disk as the uploads. Choose
-  another disk or a synced folder in Settings (or `RS_BACKUP_DIR`), or copy the folder elsewhere now and then. Backups are not
-  encrypted: keep them in places only you can read.
+  another disk or a synced folder in Settings (or `RS_BACKUP_DIR`), or copy the folder elsewhere now and then. Without
+  encryption, keep backups in places only you can read.
+- **Encrypted with a recovery key (2026-11-27):** Settings → Data & backups → *Encryption* → *Turn on* makes an age
+  X25519 key pair (pyrage 1.4.0, bindings to rage; `POST /settings/backup/key`, `Cache-Control: no-store`, nothing
+  stored, no idempotency record). The private half (`AGE-SECRET-KEY-1…`) is shown once to be downloaded or copied; the
+  learner ticks that it is kept off this computer and types its last 4 characters; only then is the public half
+  (`age1…`) saved in `RS_BACKUP_SETTINGS_FILE` (`PUT /settings/backup/encryption`). The server can therefore lock
+  backups but never open them, and a lost key means those backups cannot be restored by anyone. From then on a
+  snapshot holds `db.dump.age` and `secret.json.age` (row counts per table and which sealed file is which upload)
+  next to a plain `manifest.json` with totals, the key id and the dump's SHA-256; uploads are sealed once as
+  `sealed/<HMAC>.age` (names keyed per installation and key, so they say nothing about the file). The dump is made
+  and test-restored in a temporary folder under `RS_RUN_DIR` (`backup-work/`), never in the backup folder, and
+  removed afterwards. *New key* replaces the key for new backups; older ones still need the key they were made
+  with (the manifest names it). Older unencrypted backups are kept (they age out with the usual retention) or,
+  when the learner chooses so and confirms, deleted after the first encrypted one (`backup.unencrypted_removed`).
+  Audited as `backup.encryption_on` / `backup.key_replaced` with the key id only; no key ever reaches the
+  database, the audit log, a log file or a backup. Encryption cannot be turned off from Settings.
 
 #### Restore procedure (never overwrites)
 
 1. `recallspring backup-status` lists the backups (newest first).
-2. `recallspring backup-restore --database recallspring_restored --storage <empty folder>` (optionally
+2. `recallspring backup-restore --database recallspring_restored --storage <empty folder>` (add
+   `--key <recovery key file>` for an encrypted backup and `--from <folder>` for backups in a folder used before;
+   a wrong key is refused before anything is created; optionally
    `--snapshot <name>`; default `latest`). It refuses the database RecallSpring uses, any database that exists, the
    storage folder in use and any folder that is not empty. It restores, compares the row counts with the manifest,
    copies the files with their checksums checked and prints what to change.

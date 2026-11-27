@@ -7,6 +7,11 @@ Layout under ``backup_dir`` (other files there, e.g. hand-made ``*.dump`` files,
     files/<user>/<ab>/<sha256>                 uploaded originals, shared by all snapshots (content-addressed)
     status.json                                last attempt and last good backup, shown in Settings
 
+With encryption on (a recovery key, 2026-11-27) a snapshot holds ``db.dump.age`` and ``secret.json.age`` (row counts
+and which sealed file is which upload) instead of ``db.dump``, and uploads are ``sealed/<hmac>.age``: age (X25519)
+to the public half of the learner's recovery key. The server never has the private half, so it can make backups
+but not read them. The plain dump exists only in a temporary folder under ``run_dir`` while it is checked.
+
 The row counts and the list of files are read in the same REPEATABLE READ transaction whose snapshot pg_dump uses
 (``--snapshot``), so the check can compare exactly: the dump is restored into a throwaway database
 ``<db>_restore_check`` and every table must have the same number of rows. Files are copied once and checked
@@ -20,10 +25,12 @@ folder); switching RecallSpring to it is a deliberate step by the owner (docs/08
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -35,6 +42,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import pyrage
+from pyrage import x25519
 from sqlalchemy import create_engine, make_url, text
 from sqlalchemy.engine import URL, Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -48,6 +57,10 @@ LOCK_ID = 727_170_001  # pg advisory lock: one backup at a time per database
 SNAPSHOT_RE = re.compile(r"^\d{8}-\d{6}$")
 NAME_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
 KEY_RE = re.compile(r"^[0-9a-f-]{36}/[0-9a-f]{2}/[0-9a-f]{64}$")
+SEALED_RE = re.compile(r"^[0-9a-f]{64}\.age$")
+IDENTITY_RE = re.compile(r"AGE-SECRET-KEY-1[0-9A-Z]{40,80}")
+DUMP_SEALED = "db.dump.age"
+SECRET_MANIFEST = "secret.json.age"
 CHECK_SUFFIX = "_restore_check"
 STAMP = "%Y%m%d-%H%M%S"
 RETRY_AFTER_FAILURE = timedelta(hours=1)
@@ -149,9 +162,13 @@ def status_view() -> dict[str, Any]:
     s = get_settings()
     st = read_status()
     kept = snapshots()
-    files_dir = backup_root() / "files"
-    disk = sum(f.stat().st_size for f in files_dir.rglob("*") if f.is_file()) if files_dir.is_dir() else 0
-    disk += sum((p / "db.dump").stat().st_size for p in kept if (p / "db.dump").is_file())
+    disk = 0
+    for sub in ("files", "sealed"):
+        d = backup_root() / sub
+        disk += sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) if d.is_dir() else 0
+    disk += sum((p / n).stat().st_size for p in kept for n in ("db.dump", DUMP_SEALED) if (p / n).is_file())
+    enc = encryption()
+    plain = sum(1 for p in kept if not _manifest(p).get("encrypted"))
     last_success = _parse(st.get("last_success_at"))
     next_due = None
     if s.backup_enabled:
@@ -174,6 +191,11 @@ def status_view() -> dict[str, Any]:
         "next_due": next_due,
         "snapshots": [p.name for p in reversed(kept)],
         "disk_bytes": disk,
+        "encryption": {"on": True, "key_id": enc["key_id"], "key_created_at": enc["key_created_at"]}
+        if enc
+        else {"on": False, "key_id": None, "key_created_at": None},
+        "unencrypted_snapshots": plain,
+        "remove_unencrypted_pending": bool(enc and read_config().get("remove_unencrypted")),
         "tools": tools_label(),
     }
 
@@ -402,6 +424,7 @@ def _run_locked(engine: Engine, reason: str, actor_id: uuid.UUID | None, request
     root = backup_root()
     started = clock.now()
     partial: Path | None = None
+    work: Path | None = None
     try:
         tools = find_tools()
         if tools is None:
@@ -411,33 +434,46 @@ def _run_locked(engine: Engine, reason: str, actor_id: uuid.UUID | None, request
                 "tools in the same major version as the database server.",
             )
         url = _db_url()
+        enc = encryption()
         name = _free_name(started)
         partial = root / "snapshots" / f".partial-{name}"
         partial.mkdir(parents=True)
-        dump = partial / "db.dump"
+        # Encrypted: the plain dump never enters the backup folder (it may be synced); it waits in run_dir.
+        if enc:
+            work = Path(tempfile.mkdtemp(prefix="backup-", dir=_work_dir()))
+        dump = (work or partial) / "db.dump"
         manifest = _dump(engine, tools, url, dump)
         keys = manifest.pop("_keys")
+        counts = manifest["counts"]
         manifest.update(name=name, created_at=started.isoformat(), reason=reason, app_version=__version__)
-        manifest["files"] = _copy_files(keys, root / "files")
         manifest["dump_bytes"] = dump.stat().st_size
-        manifest["check"] = _check(tools, url, dump, manifest["counts"]) if s.backup_verify else {"method": "none"}
+        manifest["check"] = _check(tools, url, dump, counts) if s.backup_verify else {"method": "none"}
+        if enc:
+            manifest["files"], sealed = _seal_files(keys, root / "sealed", enc)
+            _seal_snapshot(manifest, dump, partial, enc, sealed)
+        else:
+            manifest["files"] = _copy_files(keys, root / "files")
         _write_json(partial / "manifest.json", manifest)
         os.replace(partial, root / "snapshots" / name)
         partial = None
+        removed_plain = 0
+        if enc and read_config().get("remove_unencrypted"):
+            removed_plain = _remove_unencrypted(actor_id, request_id)
         removed = prune()
         files = manifest["files"]
         last = {
             "snapshot": name,
             "reason": reason,
-            "tables": len(manifest["counts"]),
-            "rows": sum(manifest["counts"].values()),
+            "encrypted": bool(enc),
+            "tables": len(counts),
+            "rows": sum(counts.values()),
             "files": files["count"],
             "files_copied": files["copied"],
             "files_missing": files["missing"],
             "files_bytes": files["bytes"],
             "dump_bytes": manifest["dump_bytes"],
             "check": manifest["check"]["method"],
-            "removed_snapshots": removed,
+            "removed_snapshots": removed + removed_plain,
             "seconds": round((clock.now() - started).total_seconds(), 1),
         }
         status = read_status()
@@ -457,6 +493,8 @@ def _run_locked(engine: Engine, reason: str, actor_id: uuid.UUID | None, request
     finally:
         if partial is not None:
             shutil.rmtree(partial, ignore_errors=True)
+        if work is not None:
+            shutil.rmtree(work, ignore_errors=True)
 
 
 def _dump(engine: Engine, tools: PgTools, url: URL, target: Path) -> dict[str, Any]:
@@ -515,6 +553,20 @@ def _copy_files(keys: list[str], files_dir: Path) -> dict[str, Any]:
     return {"count": len(listed), "copied": copied, "missing": missing, "bytes": total, "keys": listed}
 
 
+def _open_verified(src: Path, dest: Path, sha256: str, identity: x25519.Identity) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(f".{dest.name}.tmp")
+    try:
+        pyrage.decrypt_file(str(src), str(tmp), [identity])
+    except pyrage.DecryptError as exc:
+        tmp.unlink(missing_ok=True)
+        raise BackupError("decrypt_failed", f"An uploaded file could not be decrypted ({sha256[:12]}…).") from exc
+    if _sha256(tmp) != sha256:
+        tmp.unlink(missing_ok=True)
+        raise BackupError("file_corrupt", f"A restored file does not match its checksum ({sha256[:12]}…).")
+    os.replace(tmp, dest)
+
+
 def _admin_engine(url: URL) -> Engine:
     return create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
 
@@ -567,6 +619,190 @@ def _check(tools: PgTools, url: URL, dump: Path, counts: dict[str, int]) -> dict
             "check_failed", f"The restored copy differs in {len(different)} table(s): {', '.join(different[:5])}."
         )
     return {"method": "restored", "tables": len(restored), "rows": sum(restored.values())}
+
+
+# ---------------------------------------------------------------- encryption with a recovery key (2026-11-27)
+
+
+def key_id(recipient: str) -> str:
+    """A short name for a recovery key, shown in Settings and needed-key messages (not a secret)."""
+    return hashlib.sha256(recipient.encode("ascii")).hexdigest()[:8].upper()
+
+
+def encryption() -> dict[str, Any] | None:
+    """The public half of the recovery key backups are locked with, or None while encryption is off."""
+    config = read_config()
+    recipient = config.get("recipient")
+    if not isinstance(recipient, str) or not recipient.startswith("age1"):
+        return None
+    name_key = config.get("name_key")
+    if not isinstance(name_key, str) or len(name_key) != 64:
+        name_key = secrets.token_hex(32)
+        config["name_key"] = name_key
+        _write_json(get_settings().backup_settings_file, config)
+    return {
+        "recipient": recipient,
+        "key_id": key_id(recipient),
+        "key_created_at": config.get("key_created_at"),
+        "name_key": name_key,
+    }
+
+
+def new_key() -> dict[str, str]:
+    """A new recovery key. Only the caller sees the private half; nothing is stored until set_encryption."""
+    identity = x25519.Identity.generate()
+    recipient = str(identity.to_public())
+    return {"identity": str(identity), "recipient": recipient, "key_id": key_id(recipient)}
+
+
+def set_encryption(
+    recipient: str,
+    *,
+    remove_unencrypted: bool = False,
+    actor_id: uuid.UUID | None = None,
+    request_id: str | None = None,
+) -> dict[str, Any]:
+    """Lock the next backups with this public key. Older backups keep the key they were made with. Audited as
+    ``backup.encryption_on`` or ``backup.key_replaced`` (key id only, never a key)."""
+    s = get_settings()
+    if not s.backup_settings_from_web:
+        raise BackupError("folder_locked", "Backups are set in the server settings here.")
+    recipient = recipient.strip()
+    try:
+        x25519.Recipient.from_str(recipient)
+    except pyrage.RecipientError as exc:
+        raise BackupError("invalid_key", "That is not the public half of a recovery key.") from exc
+    with _locked():
+        config = read_config()
+        replacing = isinstance(config.get("recipient"), str)
+        config.update(recipient=recipient, key_created_at=clock.now().isoformat())
+        if not isinstance(config.get("name_key"), str):
+            config["name_key"] = secrets.token_hex(32)
+        if remove_unencrypted:
+            config["remove_unencrypted"] = True
+        _write_json(s.backup_settings_file, config)
+    _audit(
+        actor_id,
+        "backup.key_replaced" if replacing else "backup.encryption_on",
+        {"key_id": key_id(recipient), "remove_unencrypted": remove_unencrypted},
+        request_id,
+    )
+    return status_view()
+
+
+def _work_dir() -> Path:
+    d = get_settings().run_dir / "backup-work"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _manifest(folder: Path) -> dict[str, Any]:
+    try:
+        data = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _sealed_name(enc: dict[str, Any], key: str) -> str:
+    """Random-looking and stable per key, so a file is sealed once and its name says nothing about the upload."""
+    mac = hmac.new(bytes.fromhex(enc["name_key"]), f"{enc['key_id']}:{key}".encode(), hashlib.sha256)
+    return f"{mac.hexdigest()}.age"
+
+
+def _seal_files(keys: list[str], sealed_dir: Path, enc: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
+    """Encrypt each original once (checked against its SHA-256 first). Returns the plain manifest part (sealed
+    names only) and the name -> storage key map that goes into the encrypted secret manifest."""
+    storage = get_settings().storage_dir
+    recipient = x25519.Recipient.from_str(enc["recipient"])
+    copied = missing = total = 0
+    mapping: dict[str, str] = {}
+    for key in keys:
+        if not KEY_RE.match(key):
+            continue
+        name = _sealed_name(enc, key)
+        src, dest = storage / key, sealed_dir / name
+        if not dest.is_file():
+            if not src.is_file():
+                missing += 1
+                continue
+            if _sha256(src) != key.rsplit("/", 1)[1]:
+                raise BackupError("file_corrupt", f"An uploaded file does not match its checksum ({key[-64:][:12]}…).")
+            sealed_dir.mkdir(parents=True, exist_ok=True)
+            tmp = sealed_dir / f".{name}.tmp"
+            pyrage.encrypt_file(str(src), str(tmp), [recipient])
+            os.replace(tmp, dest)
+            copied += 1
+        mapping[name] = key
+        total += dest.stat().st_size
+    part = {"count": len(mapping), "copied": copied, "missing": missing, "bytes": total, "keys": []}
+    return part | {"sealed": sorted(mapping)}, mapping
+
+
+def _seal_snapshot(
+    manifest: dict[str, Any], dump: Path, partial: Path, enc: dict[str, Any], sealed: dict[str, str]
+) -> None:
+    """Encrypt the checked dump into the snapshot and move what would reveal content (row counts per table, which
+    file is which upload) into the encrypted secret manifest."""
+    recipient = x25519.Recipient.from_str(enc["recipient"])
+    tmp = partial / f".{DUMP_SEALED}.tmp"
+    pyrage.encrypt_file(str(dump), str(tmp), [recipient])
+    os.replace(tmp, partial / DUMP_SEALED)
+    counts = manifest.pop("counts")
+    secret = {"counts": counts, "files": sealed}
+    (partial / SECRET_MANIFEST).write_bytes(pyrage.encrypt(json.dumps(secret).encode("utf-8"), [recipient]))
+    manifest["totals"] = {"tables": len(counts), "rows": sum(counts.values())}
+    manifest["encrypted"] = {"method": "age-x25519", "key_id": enc["key_id"], "recipient": enc["recipient"]}
+    manifest["dump"] = {
+        "file": DUMP_SEALED,
+        "bytes": (partial / DUMP_SEALED).stat().st_size,
+        "sha256": _sha256(partial / DUMP_SEALED),
+    }
+
+
+def _remove_unencrypted(actor_id: uuid.UUID | None, request_id: str | None) -> int:
+    """After the first encrypted backup, when the learner asked for it: remove older snapshots that are not
+    encrypted (their files go with the next prune). A snapshot whose manifest cannot be read is kept."""
+    removed = 0
+    for p in snapshots():
+        m = _manifest(p)
+        if m and not m.get("encrypted"):
+            shutil.rmtree(p)
+            removed += 1
+    config = read_config()
+    config.pop("remove_unencrypted", None)
+    _write_json(get_settings().backup_settings_file, config)
+    _audit(actor_id, "backup.unencrypted_removed", {"count": removed}, request_id)
+    return removed
+
+
+def _identity(key_file: Path | None, manifest: dict[str, Any]) -> x25519.Identity:
+    enc = manifest["encrypted"]
+    needed = f"key {enc.get('key_id')}"
+    if key_file is None:
+        raise BackupError("key_needed", f"This backup is encrypted: pass --key with your recovery key file ({needed}).")
+    try:
+        text_ = key_file.read_text(encoding="utf-8", errors="replace")[:65536]
+    except OSError as exc:
+        raise BackupError("key_unreadable", f"Could not read the recovery key file {key_file}.") from exc
+    match = IDENTITY_RE.search(text_.upper())
+    if not match:
+        raise BackupError("key_unreadable", "No recovery key (AGE-SECRET-KEY-1…) found in that file.")
+    try:
+        identity = x25519.Identity.from_str(match.group(0))
+    except pyrage.IdentityError as exc:
+        raise BackupError("key_unreadable", "The recovery key in that file is damaged.") from exc
+    if str(identity.to_public()) != enc.get("recipient"):
+        raise BackupError("wrong_key", f"That recovery key does not open this backup; it needs {needed}.")
+    return identity
 
 
 # ---------------------------------------------------------------- choosing the folder (Settings, 2026-11-27)
@@ -774,9 +1010,12 @@ def prune() -> int:
         if SNAPSHOT_RE.match(stamp) and datetime.strptime(stamp, STAMP) < stale:
             shutil.rmtree(p, ignore_errors=True)
     needed: set[str] = set()
+    sealed_needed: set[str] = set()
     for p in snapshots():
         try:
-            needed.update(json.loads((p / "manifest.json").read_text(encoding="utf-8"))["files"]["keys"])
+            files = json.loads((p / "manifest.json").read_text(encoding="utf-8"))["files"]
+            needed.update(files["keys"])
+            sealed_needed.update(files.get("sealed", []))
         except (OSError, ValueError, KeyError, TypeError):
             log.warning("backup %s has no readable manifest; keeping every file", p.name)
             return removed
@@ -784,6 +1023,11 @@ def prune() -> int:
     if files_dir.is_dir():
         for f in files_dir.rglob("*"):
             if f.is_file() and KEY_RE.match(key := f.relative_to(files_dir).as_posix()) and key not in needed:
+                f.unlink()
+    sealed_dir = root / "sealed"
+    if sealed_dir.is_dir():
+        for f in sealed_dir.iterdir():
+            if f.is_file() and SEALED_RE.match(f.name) and f.name not in sealed_needed:
                 f.unlink()
     return removed
 
@@ -823,21 +1067,30 @@ def run_if_due() -> bool:
 # ---------------------------------------------------------------- restore
 
 
-def resolve(snapshot: str) -> Path:
-    found = snapshots()
+def resolve(snapshot: str, root: Path | None = None) -> Path:
+    root = root or backup_root()
+    found = sorted(p for p in (root / "snapshots").glob("*") if p.is_dir() and SNAPSHOT_RE.match(p.name))
     if snapshot == "latest":
         if not found:
-            raise BackupError("no_snapshot", f"There is no backup in {backup_root()} yet.")
+            raise BackupError("no_snapshot", f"There is no backup in {root} yet.")
         return found[-1]
     for p in found:
         if p.name == snapshot:
             return p
-    raise BackupError("no_snapshot", f"No backup called {snapshot} in {backup_root()}.")
+    raise BackupError("no_snapshot", f"No backup called {snapshot} in {root}.")
 
 
-def restore(snapshot: str, database: str, storage: Path | None = None) -> dict[str, Any]:
+def restore(
+    snapshot: str,
+    database: str,
+    storage: Path | None = None,
+    *,
+    key_file: Path | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
     """Restore a snapshot into a NEW database (and optionally an empty storage folder). Never overwrites: refuses
-    the database RecallSpring uses, any existing database and a non-empty folder."""
+    the database RecallSpring uses, any existing database and a non-empty folder. ``root`` reads backups from
+    another folder (e.g. one used before the folder was changed); an encrypted backup needs ``key_file``."""
     if not NAME_RE.match(database) or len(database) > 63:
         raise BackupError("invalid_name", "Use a new database name of lowercase letters, digits and underscores.")
     url = _db_url()
@@ -851,8 +1104,42 @@ def restore(snapshot: str, database: str, storage: Path | None = None) -> dict[s
     tools = find_tools()
     if tools is None:
         raise BackupError("no_pg_dump", "pg_restore was not found (not on PATH and RS_BACKUP_PG_BIN is not set).")
-    folder = resolve(snapshot)
+    root = root or backup_root()
+    folder = resolve(snapshot, root)
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    identity = _identity(key_file, manifest) if manifest.get("encrypted") else None
+    work = Path(tempfile.mkdtemp(prefix="restore-", dir=_work_dir())) if identity else None
+    try:
+        return _restore(folder, manifest, identity, work, root, url, tools, database, storage)
+    finally:
+        if work is not None:
+            shutil.rmtree(work, ignore_errors=True)
+
+
+def _restore(
+    folder: Path,
+    manifest: dict[str, Any],
+    identity: x25519.Identity | None,
+    work: Path | None,
+    root: Path,
+    url: URL,
+    tools: PgTools,
+    database: str,
+    storage: Path | None,
+) -> dict[str, Any]:
+    if identity is not None and work is not None:
+        dump = work / "db.dump"
+        try:
+            pyrage.decrypt_file(str(folder / DUMP_SEALED), str(dump), [identity])
+            secret = json.loads(pyrage.decrypt((folder / SECRET_MANIFEST).read_bytes(), [identity]))
+        except (pyrage.DecryptError, OSError, ValueError) as exc:
+            raise BackupError("decrypt_failed", "The backup could not be decrypted; it may be damaged.") from exc
+        counts: dict[str, int] = secret["counts"]
+        sources = [(root / "sealed" / name, key) for name, key in secret["files"].items()]
+    else:
+        dump = folder / "db.dump"
+        counts = manifest["counts"]
+        sources = [(root / "files" / key, key) for key in manifest["files"]["keys"]]
     admin = _admin_engine(url)
     try:
         with admin.connect() as conn:
@@ -864,7 +1151,7 @@ def restore(snapshot: str, database: str, storage: Path | None = None) -> dict[s
                 "pg_restore",
                 [*tools.pg_restore, *tools.args(url, database), "--no-owner", "--exit-on-error"],
                 env=tools.env(url),
-                stdin=folder / "db.dump",
+                stdin=dump,
             )
         except BackupError:
             with admin.connect() as conn:  # created a moment ago by this call; nothing else uses it
@@ -873,15 +1160,18 @@ def restore(snapshot: str, database: str, storage: Path | None = None) -> dict[s
     finally:
         admin.dispose()
     restored = _restored_counts(url, database)
-    different = sorted(t for t, n in manifest["counts"].items() if restored.get(t) != n)
+    different = sorted(t for t, n in counts.items() if restored.get(t) != n)
     files = 0
     if storage is not None:
         storage.mkdir(parents=True, exist_ok=True)
-        for key in manifest["files"]["keys"]:
-            src = backup_root() / "files" / key
-            if KEY_RE.match(key) and src.is_file():
+        for src, key in sources:
+            if not (KEY_RE.match(key) and src.is_file()):
+                continue
+            if identity is None:
                 _copy_verified(src, storage / key, key.rsplit("/", 1)[1])
-                files += 1
+            else:
+                _open_verified(src, storage / key, key.rsplit("/", 1)[1], identity)
+            files += 1
     return {
         "snapshot": folder.name,
         "database": database,
@@ -890,6 +1180,7 @@ def restore(snapshot: str, database: str, storage: Path | None = None) -> dict[s
         "tables_differing": different,
         "files": files,
         "files_expected": manifest["files"]["count"],
+        "encrypted": identity is not None,
         "storage": str(storage) if storage else None,
         "alembic_version": manifest.get("alembic_version"),
     }
