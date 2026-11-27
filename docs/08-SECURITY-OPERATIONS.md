@@ -93,7 +93,19 @@ hashes; no OAuth credential, `.env` file or password is copied. The page-render 
   match, then that database is dropped (never the real one; the name always ends in `_restore_check`). Without
   permission to create databases (a hosted server) the dump is only read back, and Settings says so. Every file is
   checked against its SHA-256 while it is copied.
-- **Where:** `RS_BACKUP_DIR`, default `local-data/backups` (gitignored), next to the uploaded files:
+- **Chosen in Settings (2026-11-27):** Settings → Data & backups → *Where backups go* takes a folder on the computer
+  RecallSpring runs on (typed or pasted: a browser cannot browse the server's folders). *Check folder* creates nothing
+  and refuses what cannot hold backups: a relative path, a whole drive or top-level folder, system folders, a file,
+  the uploads or secrets folder or a folder holding them, a folder RecallSpring cannot write to. It reports the free
+  room, whether it is another disk than the uploads, and a sync app recognised from the path (Dropbox, OneDrive,
+  Google Drive, iCloud Drive; a hint only). The choice is kept in `RS_BACKUP_SETTINGS_FILE` (default
+  `local-data/backup-settings.json`, not learner data) and replaces `RS_BACKUP_DIR`; *Use the server's folder* goes
+  back. Backups already made stay in the old folder (restore from there by pointing `RS_BACKUP_DIR` at it). Only the
+  first account may change it, because a backup holds the whole installation; `RS_BACKUP_SETTINGS_FROM_WEB=false`
+  keeps the folder to the server settings (a hosted operator). Refused while a backup runs (same advisory lock);
+  audited as `backup.folder_changed` with the old and new folder.
+- **Where:** the folder chosen in Settings, else `RS_BACKUP_DIR`, default `local-data/backups` (gitignored), next to
+  the uploaded files:
   `snapshots/<YYYYMMDD-HHMMSS UTC>/{db.dump, manifest.json}`, `files/<user>/<ab>/<sha256>` (shared by all snapshots,
   copied once) and `status.json`. Other files in that folder (e.g. hand-made `recallspring-pre-*.dump`) are never
   touched.
@@ -108,8 +120,8 @@ hashes; no OAuth credential, `.env` file or password is copied. The page-render 
   `docker exec` into `RS_BACKUP_DOCKER_CONTAINER` (`recallspring-dev-db-1`, local socket, no password). Production
   images must ship the client tools of the server's major version; the Docker socket is never mounted.
 - **Same disk:** the default folder protects against mistakes, a bad migration and a damaged database, not against a
-  broken disk or a lost computer. Settings warns while the backup folder is on the same disk as the uploads. Point
-  `RS_BACKUP_DIR` at another disk or a synced folder, or copy the folder elsewhere now and then. Backups are not
+  broken disk or a lost computer. Settings warns while the backup folder is on the same disk as the uploads. Choose
+  another disk or a synced folder in Settings (or `RS_BACKUP_DIR`), or copy the folder elsewhere now and then. Backups are not
   encrypted: keep them in places only you can read.
 
 #### Restore procedure (never overwrites)

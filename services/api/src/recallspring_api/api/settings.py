@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -15,7 +16,7 @@ from ..ai import siwc
 from ..config import get_settings
 from ..connector_auth import daily_limit, new_token, used_today
 from ..db import get_db
-from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
+from ..deps import Ctx, WriteCtx, commit_with_response, csrf_ctx, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
 from ..models import AiConversation, ConnectorToken, User
 from ..schemas import (
@@ -72,10 +73,58 @@ def _study_view(db: Session, u: User) -> dict[str, Any]:
     }
 
 
+class BackupFolderIn(BaseModel):
+    path: str | None = Field(default=None, max_length=1000)
+
+
+def _backup_owner(db: Session, user: User) -> bool:
+    """A backup holds the whole installation, so only its first account may move it (2026-11-27)."""
+    first = db.scalar(select(User.id).order_by(User.created_at, User.id).limit(1))
+    return first == user.id
+
+
+def _require_backup_owner(db: Session, user: User) -> None:
+    if not get_settings().backup_settings_from_web:
+        raise ApiError(403, "backup_folder_locked", "The backup folder is set in the server settings here.")
+    if not _backup_owner(db, user):
+        raise ApiError(403, "not_backup_owner", "Only the first account on this RecallSpring can change backups.")
+
+
 @router.get("/settings/backup")
-def backup_status(ctx: Ctx = Depends(current_ctx)) -> dict[str, Any]:
+def backup_status(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
     """When the last backup ran, whether it was checked, where backups are kept (no secrets)."""
-    return backup.status_view()
+    view = backup.status_view()
+    view["can_change"] = get_settings().backup_settings_from_web and _backup_owner(db, ctx.user)
+    return view
+
+
+@router.post("/settings/backup/folder/check")
+def backup_folder_check(
+    payload: BackupFolderIn, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Try a folder before choosing it (nothing is saved or created)."""
+    _require_backup_owner(db, ctx.user)
+    return backup.check_folder(payload.path)
+
+
+@router.put("/settings/backup/folder")
+def backup_folder_set(
+    payload: BackupFolderIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Choose where backups go (path null: back to the server's folder). Refused while a backup runs. Audited as
+    ``backup.folder_changed`` by backup.set_folder."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    _require_backup_owner(db, ctx.user)
+    db.rollback()
+    try:
+        view = backup.set_folder(payload.path, actor_id=ctx.user.id, request_id=ctx.request_id)
+    except backup.BackupError as exc:
+        if exc.code == "busy":
+            raise ApiError(409, "backup_busy", exc.message) from exc
+        raise ApiError(422 if exc.code == "folder_refused" else 409, exc.code, exc.message) from exc
+    view["can_change"] = True
+    return commit_with_response(db, ctx, payload, 200, view)
 
 
 @router.post("/settings/backup")

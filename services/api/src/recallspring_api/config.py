@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     # synced folder to survive a broken disk.
     backup_enabled: bool = True
     backup_dir: Path | None = None
+    # A folder chosen in Settings → Data & backups replaces backup_dir; it is kept in this small file (never learner
+    # data). backup_settings_from_web = false keeps the folder to the server settings (e.g. a hosted operator).
+    backup_settings_file: Path = _REPO_ROOT / "local-data" / "backup-settings.json"
+    backup_settings_from_web: bool = True
     backup_interval_hours: int = Field(default=24, ge=1, le=24 * 7)
     backup_keep_daily: int = Field(default=7, ge=1, le=90)
     backup_keep_weekly: int = Field(default=4, ge=0, le=52)

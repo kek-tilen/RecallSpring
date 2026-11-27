@@ -754,6 +754,15 @@ export interface WeekReview {
 export interface BackupStatus {
   enabled: boolean;
   location: string;
+  /** Where the folder comes from: chosen in Settings, the server settings (RS_BACKUP_DIR), or the default. */
+  location_source: "settings" | "server" | "default";
+  server_location: string;
+  /** False when the server keeps the folder to its settings. */
+  folder_from_web: boolean;
+  /** A sync app recognised from the folder's path, e.g. "Dropbox". A hint only. */
+  sync: string | null;
+  /** Only the first account may change backups (they hold the whole installation). */
+  can_change: boolean;
   same_disk_as_storage: boolean;
   interval_hours: number;
   keep_daily: number;
@@ -779,6 +788,13 @@ export interface BackupStatus {
   snapshots: string[];
   disk_bytes: number;
   tools: string | null;
+}
+
+export interface BackupFolderCheck {
+  path: string | null;
+  ok: boolean;
+  checks: { id: string; level: "ok" | "warn" | "bad"; text: string }[];
+  sync?: string | null;
 }
 
 export interface Dashboard {

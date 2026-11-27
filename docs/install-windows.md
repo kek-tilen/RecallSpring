@@ -71,8 +71,8 @@ once. The time zone is in **Settings → Profile**.
 - After a restart of the computer: start Docker Desktop, then `scripts\start-local.ps1`. The API and the worker run
   in the background without a window; Settings → Running in the background shows whether both run.
 - The worker backs up the database and your files once a day into `local-data\backups` (Settings → Backups). That is
-  on the same disk: set `RS_BACKUP_DIR` in `services\api\.env` to another disk or a synced folder for real
-  protection. Restore steps: docs/08 → Backups.
+  on the same disk: choose another disk or a synced folder in Settings → Data & backups → Where backups go (or set
+  `RS_BACKUP_DIR` in `services\api\.env`) for real protection. Restore steps: docs/08 → Backups.
 
 ### Running in the background
 

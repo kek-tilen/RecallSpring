@@ -26,7 +26,10 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -60,9 +63,37 @@ class BackupError(Exception):
 # ---------------------------------------------------------------- paths and status
 
 
-def backup_root() -> Path:
+def server_root() -> Path:
+    """The folder the server settings give (RS_BACKUP_DIR), else ``backups`` next to the uploads."""
     s = get_settings()
     return s.backup_dir if s.backup_dir is not None else s.storage_dir.parent / "backups"
+
+
+def read_config() -> dict[str, Any]:
+    """What was chosen in Settings (backup_settings_file). Unreadable means nothing was chosen."""
+    try:
+        data = json.loads(get_settings().backup_settings_file.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _chosen_dir() -> Path | None:
+    if not get_settings().backup_settings_from_web:
+        return None
+    value = read_config().get("dir")
+    return Path(value) if isinstance(value, str) and value and Path(value).is_absolute() else None
+
+
+def backup_root() -> Path:
+    """A folder chosen in Settings, else the server's (2026-11-27)."""
+    return _chosen_dir() or server_root()
+
+
+def location_source() -> str:
+    if _chosen_dir() is not None:
+        return "settings"
+    return "server" if get_settings().backup_dir is not None else "default"
 
 
 def _status_path() -> Path:
@@ -128,6 +159,10 @@ def status_view() -> dict[str, Any]:
     return {
         "enabled": s.backup_enabled,
         "location": str(backup_root()),
+        "location_source": location_source(),
+        "server_location": str(server_root()),
+        "folder_from_web": s.backup_settings_from_web,
+        "sync": sync_provider(backup_root()),
         "same_disk_as_storage": _same_disk(backup_root(), s.storage_dir),
         "interval_hours": s.backup_interval_hours,
         "keep_daily": s.backup_keep_daily,
@@ -307,21 +342,31 @@ def run(
 ) -> dict[str, Any]:
     """Make one backup now and return the new status view. Failures are recorded (status.json, audit) and raised
     as BackupError; "busy" (another backup is running) is neither recorded nor audited."""
+    try:
+        with _locked() as engine:
+            return _run_locked(engine, reason, actor_id, request_id)
+    except BackupError as exc:
+        if exc.code == "database_unreachable":
+            _record_failure(clock.now(), exc, reason, actor_id, request_id)
+        raise
+
+
+@contextmanager
+def _locked() -> Iterator[Engine]:
+    """One backup (or folder change) at a time: a PostgreSQL advisory lock held for the duration."""
     engine = create_engine(_db_url(), pool_pre_ping=True)
     try:
         try:
             lock_conn = engine.connect()
         except SQLAlchemyError as exc:
-            error = BackupError("database_unreachable", "Could not connect to the database.")
-            _record_failure(clock.now(), error, reason, actor_id, request_id)
-            raise error from exc
+            raise BackupError("database_unreachable", "Could not connect to the database.") from exc
         with lock_conn:
             got = lock_conn.execute(text("SELECT pg_try_advisory_lock(:id)"), {"id": LOCK_ID}).scalar_one()
             lock_conn.commit()
             if not got:
                 raise BackupError("busy", "Another backup is running right now; try again in a minute.")
             try:
-                return _run_locked(engine, reason, actor_id, request_id)
+                yield engine
             finally:
                 lock_conn.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": LOCK_ID})
                 lock_conn.commit()
@@ -522,6 +567,171 @@ def _check(tools: PgTools, url: URL, dump: Path, counts: dict[str, int]) -> dict
             "check_failed", f"The restored copy differs in {len(different)} table(s): {', '.join(different[:5])}."
         )
     return {"method": "restored", "tables": len(restored), "rows": sum(restored.values())}
+
+
+# ---------------------------------------------------------------- choosing the folder (Settings, 2026-11-27)
+
+GIB = 1024**3
+# Folder names sync apps use; a hint only (only the sync app knows whether it really uploads).
+_SYNC = (
+    ("Dropbox", lambda part: part.startswith("dropbox")),
+    ("OneDrive", lambda part: part.startswith("onedrive")),
+    ("Google Drive", lambda part: part in ("google drive", "my drive") or part.startswith("googledrive")),
+    ("iCloud Drive", lambda part: part in ("icloud drive", "iclouddrive", "com~apple~clouddocs")),
+)
+_POSIX_SYSTEM = ("/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/proc", "/run", "/sbin", "/sys", "/usr")
+_POSIX_TOP = {"/", "/home", "/mnt", "/media", "/opt", "/root", "/srv", "/tmp", "/var", "/Users", "/Volumes"}
+
+
+def sync_provider(path: Path) -> str | None:
+    parts = [x.lower() for x in path.parts]
+    for name, match in _SYNC:
+        if any(match(x) for x in parts):
+            return name
+    return None
+
+
+def _inside(child: Path, parent: Path) -> bool:
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _system_refusal(p: Path) -> str | None:
+    if os.name == "nt":
+        if p == Path(p.anchor):
+            return "Choose a folder, not a whole drive."
+        windir = Path(os.environ.get("SystemRoot") or os.environ.get("WINDIR") or "C:\\Windows")
+        system = [windir]
+        names = ("ProgramFiles", "ProgramFiles(x86)", "ProgramData")
+        system += [Path(os.environ[v]) for v in names if os.environ.get(v)]
+        if any(_inside(p, x.resolve()) for x in system):
+            return "That is a system folder; choose a folder of your own."
+        return None
+    posix = p.as_posix()
+    if posix in _POSIX_TOP:
+        return "Choose a folder of its own, not a top-level folder."
+    if any(posix == x or posix.startswith(x + "/") for x in _POSIX_SYSTEM):
+        return "That is a system folder; choose a folder of your own."
+    return None
+
+
+def _place_refusal(p: Path) -> str | None:
+    s = get_settings()
+    if refusal := _system_refusal(p):
+        return refusal
+    for other, what in ((s.storage_dir, "your uploaded files"), (s.secrets_dir, "the sign-in secrets")):
+        o = other.resolve()
+        if _inside(p, o) or _inside(o, p):
+            return f"That folder holds or is inside {what}; backups need a folder of their own."
+    return None
+
+
+def _writable(folder: Path) -> bool:
+    try:
+        with tempfile.NamedTemporaryFile(dir=folder, prefix=".recallspring-write-check-"):
+            return True
+    except OSError:
+        return False
+
+
+def check_folder(raw: str | None) -> dict[str, Any]:
+    """Try a folder before it is saved: can RecallSpring write there, how much room is free, another disk than the
+    uploads, and whether a sync app copies it elsewhere. Creates nothing (the write check leaves no file)."""
+    checks: list[dict[str, str]] = []
+
+    def add(check: str, level: str, message: str) -> None:
+        checks.append({"id": check, "level": level, "text": message})
+
+    def result(p: Path | None = None, **extra: Any) -> dict[str, Any]:
+        return {
+            "path": str(p) if p else None,
+            "ok": all(c["level"] != "bad" for c in checks),
+            "checks": checks,
+            **extra,
+        }
+
+    value = (raw or "").strip().strip('"').strip()
+    if not value:
+        add("path", "bad", "Type the full path of a folder.")
+        return result()
+    if len(value) > 1000 or "\x00" in value:
+        add("path", "bad", "That path is too long.")
+        return result()
+    given = Path(value).expanduser()
+    if not given.is_absolute():
+        add("path", "bad", "Use the full path, starting with a drive letter (D:\\…) or with /.")
+        return result()
+    p = given.resolve()
+    if refusal := _place_refusal(p):
+        add("place", "bad", refusal)
+        return result(p)
+    if p.exists() and not p.is_dir():
+        add("place", "bad", "That is a file, not a folder.")
+        return result(p)
+    base = _existing_ancestor(p)
+    if not base.is_dir() or not _writable(base):
+        add("write", "bad", "RecallSpring cannot write there. Check the folder exists and may be written to.")
+        return result(p)
+    free = shutil.disk_usage(base).free
+    needed = max(GIB, 2 * _folder_bytes(backup_root()))
+    room = f"{free / GIB:,.0f} GB free" if free >= GIB else f"{free / 1024**2:,.0f} MB free"
+    where = "RecallSpring can write here" if p.exists() else "RecallSpring can make this folder"
+    tight = free < needed
+    add("write", "warn" if tight else "ok", f"{where} · {room}" + (", which is tight" if tight else ""))
+    same = _same_disk(p, get_settings().storage_dir)
+    if same:
+        add("disk", "warn", "Same disk as your uploads: a broken disk would take both")
+    else:
+        add("disk", "ok", "Another disk than your uploads, so a broken disk does not take both")
+    provider = sync_provider(p)
+    if provider:
+        add("sync", "ok", f"Looks like a {provider} folder: copies leave this computer when {provider} syncs")
+    if p == backup_root().resolve():
+        add("current", "ok", "This is the folder backups go to now")
+    return result(p, exists=p.exists(), free_bytes=free, same_disk=same, sync=provider)
+
+
+def _folder_bytes(root: Path) -> int:
+    total = 0
+    for sub in ("files", "snapshots"):
+        d = root / sub
+        if d.is_dir():
+            total += sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+    return total
+
+
+def set_folder(raw: str | None, *, actor_id: uuid.UUID | None = None, request_id: str | None = None) -> dict[str, Any]:
+    """Save the folder chosen in Settings (None: back to the server's). Waits for no backup: refused while one runs.
+    Backups already made stay where they are. Audited as ``backup.folder_changed``."""
+    s = get_settings()
+    if not s.backup_settings_from_web:
+        raise BackupError("folder_locked", "The backup folder is set in the server settings here (RS_BACKUP_DIR).")
+    old = backup_root()
+    with _locked():
+        config = read_config()
+        if raw is None:
+            config.pop("dir", None)
+            new = server_root()
+        else:
+            check = check_folder(raw)
+            if not check["ok"]:
+                bad = next(c["text"] for c in check["checks"] if c["level"] == "bad")
+                raise BackupError("folder_refused", bad)
+            new = Path(check["path"])
+            new.mkdir(parents=True, exist_ok=True)
+            config["dir"] = str(new)
+        config["dir_changed_at"] = clock.now().isoformat()
+        _write_json(s.backup_settings_file, config)
+    _audit(
+        actor_id,
+        "backup.folder_changed",
+        {"from": str(old), "to": str(new), "source": location_source(), "sync": sync_provider(new)},
+        request_id,
+    )
+    return status_view()
 
 
 # ---------------------------------------------------------------- retention

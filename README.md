@@ -141,7 +141,7 @@ The API and the worker run in the background without a window:
 | `scripts\logs.ps1` | follow the API log (`-Worker` for the worker) |
 
 The full guide, including updates and troubleshooting, is in [docs/install-windows.md](docs/install-windows.md).
-Backups go to `local-data/backups` once a day; point `RS_BACKUP_DIR` at another disk for real protection.
+Backups go to `local-data/backups` once a day; choose another disk or a synced folder in Settings → Data & backups for real protection.
 
 ## Contributing
 

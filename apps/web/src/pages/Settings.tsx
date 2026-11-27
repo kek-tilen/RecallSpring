@@ -13,7 +13,7 @@ import { ChatGptPanel } from "../components/ChatGpt";
 import { ExplanationPaceDefault } from "../components/ExplanationPace";
 import { ServiceStatus } from "../components/ServiceStatus";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
-import type { AssistantClient, AssistantKey, AssistantsStatus, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
+import type { AssistantClient, AssistantKey, AssistantsStatus, BackupFolderCheck, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -291,7 +291,7 @@ function BackupPanel({ b }: { b: BackupStatus }) {
           <span className="small muted">
             {b.last_success_at ? `Last one ${relativeDay(b.last_success_at).toLowerCase()}, ${timeOnly(b.last_success_at)}` : "No backup yet"}
             {" · "}
-            {b.same_disk_as_storage ? "kept on this computer" : "kept in your backup folder"}
+            {whereKept(b)}
           </span>
         </span>
         <button type="button" className="btn small" onClick={() => run.mutate()} disabled={run.isPending || !b.tools}>
@@ -357,7 +357,8 @@ function BackupPanel({ b }: { b: BackupStatus }) {
       {b.same_disk_as_storage && (
         <div className="notice warn small">
           Backups are on the same disk as RecallSpring. They protect against mistakes and a damaged database, not against a broken
-          disk or a lost computer. Set RS_BACKUP_DIR to another disk or a synced folder, or copy this folder elsewhere now and then.
+          disk or a lost computer. Choose another disk or a synced folder under Where backups go, or copy this folder elsewhere now and
+          then.
         </div>
       )}
       <p className="tiny muted">
@@ -367,6 +368,147 @@ function BackupPanel({ b }: { b: BackupStatus }) {
       </div>
       </details>
     </div>
+  );
+}
+
+function whereKept(b: BackupStatus): string {
+  if (b.sync) return `in your ${b.sync} folder`;
+  return b.same_disk_as_storage ? "on the same disk as your uploads" : "on another disk";
+}
+
+const SYNC_HELP: [string, string][] = [
+  ["Google Drive", "Google Drive for desktop (Windows, macOS). Pick a folder inside My Drive."],
+  ["OneDrive", "Built into Windows; app for macOS. A work or school account may limit what you can store."],
+  ["Dropbox", "App for Windows, macOS and Linux."],
+  ["iCloud Drive", "Built into macOS; iCloud for Windows. The only way for iCloud: a server cannot write to it directly."],
+];
+
+/** Where backups go, chosen here and checked before it is saved (2026-11-27). Backups already made stay put. */
+function BackupFolder({ b }: { b: BackupStatus }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [path, setPath] = useState("");
+  const check = useMutation({
+    mutationFn: (p: string) => request<BackupFolderCheck>("/settings/backup/folder/check", { method: "POST", json: { path: p } }),
+  });
+  const save = useMutation({
+    mutationFn: (p: string | null) => request<BackupStatus>("/settings/backup/folder", { method: "PUT", json: { path: p } }),
+    onSuccess: (v) => {
+      qc.setQueryData(keys.backup, v);
+      void qc.invalidateQueries({ queryKey: keys.dashboard });
+      close();
+    },
+  });
+  function close() {
+    setOpen(false);
+    check.reset();
+  }
+  // A result belongs to the path as it was checked; editing the path asks for a new check.
+  const checked = check.data && check.variables === path.trim() ? check.data : null;
+  const where = [b.same_disk_as_storage ? "same disk as your uploads" : "another disk", b.sync && `synced by ${b.sync}`].filter(Boolean).join(" · ");
+  return (
+    <>
+      <div className="settings-row">
+        <span>
+          <span className="settings-row-title">Where backups go</span>
+          <span className="small muted">
+            <span className="backup-path">{b.location}</span> · {where}
+            {!b.folder_from_web && " · set in the server settings"}
+          </span>
+        </span>
+        {b.can_change && !open && (
+          <button
+            type="button"
+            className="btn small"
+            onClick={() => {
+              setPath(b.location);
+              setOpen(true);
+            }}
+          >
+            Change
+          </button>
+        )}
+      </div>
+      {open && (
+        <form
+          className="backup-folder stack"
+          aria-label="Where backups go"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (path.trim()) check.mutate(path.trim());
+          }}
+        >
+          <label className="field">
+            <span className="small">Folder on the computer RecallSpring runs on</span>
+            <span className="backup-folder-input">
+              <input value={path} onChange={(e) => setPath(e.target.value)} spellCheck={false} autoComplete="off" maxLength={1000} />
+              <button type="submit" className="btn small" disabled={!path.trim() || check.isPending}>
+                {check.isPending ? "Checking…" : "Check folder"}
+              </button>
+            </span>
+            <span className="hint">Paste the full path, for example from Explorer or Finder. RecallSpring writes only inside it.</span>
+          </label>
+          {checked && (
+            <ul className="folder-checks" aria-label="Folder check" aria-live="polite">
+              {checked.checks.map((c) => (
+                <li key={c.id} data-level={c.level}>
+                  <span aria-hidden="true">{c.level === "ok" ? "✓" : "!"}</span>
+                  <span>
+                    {c.level === "bad" && <span className="sr-only">Problem: </span>}
+                    {c.level === "warn" && <span className="sr-only">Note: </span>}
+                    {c.text}
+                  </span>
+                </li>
+              ))}
+              {checked.ok && checked.sync && (
+                <li data-level="warn">
+                  <span aria-hidden="true">!</span>
+                  <span>Backups are not encrypted yet: anyone who can open this {checked.sync} folder can read them.</span>
+                </li>
+              )}
+            </ul>
+          )}
+          {checked?.ok && checked.path !== b.location && (
+            <p className="tiny muted" style={{ margin: 0 }}>
+              Backups already made stay in {b.location}. The next one starts in the new folder.
+            </p>
+          )}
+          {check.error && <ErrorNote error={check.error} />}
+          {save.error && <ErrorNote error={save.error} />}
+          <div className="row">
+            <button
+              type="button"
+              className="btn primary small"
+              disabled={!checked?.ok || !checked.path || save.isPending}
+              onClick={() => checked?.path && save.mutate(checked.path)}
+            >
+              Use this folder
+            </button>
+            <button type="button" className="btn small" onClick={close}>
+              Cancel
+            </button>
+            {b.location_source === "settings" && (
+              <button type="button" className="btn ghost small" onClick={() => save.mutate(null)} disabled={save.isPending}>
+                Use the server&apos;s folder
+              </button>
+            )}
+          </div>
+          <details className="settings-details">
+            <summary>Using a synced folder</summary>
+            <ul className="list small">
+              {SYNC_HELP.map(([name, text]) => (
+                <li key={name}>
+                  <strong>{name}</strong>: {text}
+                </li>
+              ))}
+            </ul>
+            <p className="tiny muted" style={{ margin: 0 }}>
+              On a Linux server only Dropbox has an official app; the others need a tool such as rclone.
+            </p>
+          </details>
+        </form>
+      )}
+    </>
   );
 }
 
@@ -696,6 +838,11 @@ export function SettingsPage() {
                   <h3 className="sr-only">Backups</h3>
                   <Async q={backup}>{(b) => <BackupPanel b={b} />}</Async>
                 </div>
+                {backup.data && (
+                  <div id="backup-folder">
+                    <BackupFolder b={backup.data} />
+                  </div>
+                )}
                 <div className="settings-row" id="history">
                   <span>
                     <h3 className="settings-row-title">History</h3>

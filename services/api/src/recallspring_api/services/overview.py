@@ -391,6 +391,7 @@ _EVENT_TEXT = {
     "course.goal_changed": "Interest goal changed",
     "backup.created": "Backup made",
     "backup.failed": "Backup failed",
+    "backup.folder_changed": "Backup folder changed",
     "review.defer": "Review deferred",
     "assessment.grade_override": "Grade overridden",
     "auth.login": "Signed in",
@@ -441,6 +442,8 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         return f"{payload.get('rows')} rows, {payload.get('files')} files, {check}"
     if event_type == "backup.failed":
         return str(payload.get("message") or payload.get("code"))
+    if event_type == "backup.folder_changed":
+        return f"{payload.get('from')} → {payload.get('to')}"
     if event_type in ("focus.completed", "focus.stopped"):
         return f"{payload.get('minutes')} of {payload.get('planned_minutes')} min"
     if event_type in ("focus.deleted", "focus.restored"):
