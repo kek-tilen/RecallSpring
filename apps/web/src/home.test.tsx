@@ -70,7 +70,7 @@ function dashboard(over: Partial<Dashboard["plan"]> = {}, courses = 1): Dashboar
   };
 }
 
-function renderHome(d: Dashboard) {
+function renderHome(d: Dashboard, assistant: string | null = "chatgpt") {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes("/dashboard")) return json(d);
@@ -79,7 +79,8 @@ function renderHome(d: Dashboard) {
       return json({ items: d.plan.items.filter((i) => i.category === "Review due" || i.category === "Relearn").map((i) => ({ ...i, is_due: true })), note: "" });
     if (url.includes("/focus/summary"))
       return json({ today: { date: "2026-11-23", minutes: 0, sessions: 0 }, days: [], week_minutes: 50, by_course: [], recent: [], removed: [], restore_days: 30 });
-    if (url.includes("/auth/session")) return json({ user: { id: "u", username: "u", timezone: "UTC", assistant: "chatgpt", greeting_name: "Tina" }, expires_at: "x" });
+    if (url.includes("/auth/session")) return json({ user: { id: "u", username: "u", timezone: "UTC", assistant, greeting_name: "Tina" }, expires_at: "x" });
+    if (url.includes("/settings/assistants")) return json({ items: [], in_use: null, chosen: assistant, mix: [] });
     if (/\/(courses|sources|course-groups)(\?|$)/.test(url)) return json([]);
     if (url.includes("/overview/week")) return json({ summary: ["2 answers this week."] });
     return json({});
@@ -177,5 +178,16 @@ describe("Today (UI direction, 2026-11-27)", () => {
     const exam = week.querySelector('.home-exams a[href="/exams/t1"]');
     expect(exam?.textContent).toBe("1st midterm · Fri 27 NovComputer Architecture");
     expect(week.querySelector(".home-exams")?.textContent).toContain("On track");
+  });
+
+  it("asks which assistant only when none is chosen, not when several are on purpose", async () => {
+    renderHome(dashboard(), "mix");
+    await screen.findByRole("heading", { level: 1 });
+    await screen.findByRole("region", { name: "Today's plan" });
+    expect(screen.queryByText(/Which assistant do you study with/)).toBeNull();
+    cleanup();
+    vi.restoreAllMocks();
+    renderHome(dashboard(), null);
+    expect(await screen.findByText(/Which assistant do you study with/)).toBeTruthy();
   });
 });

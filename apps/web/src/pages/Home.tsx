@@ -484,7 +484,9 @@ export function HomePage() {
   const q = useDashboard();
   const a = useAssistant();
   const focus = useFocusSummary();
-  const name = useSession().data?.user.greeting_name;
+  const session = useSession().data?.user;
+  const name = session?.greeting_name;
+  const chosen = !!session?.assistant; // several assistants on purpose (a mix) is a choice too
   return (
     <div className="page">
       <Async q={q} lines={6}>
@@ -508,7 +510,7 @@ export function HomePage() {
                       )}
                     </p>
                   )}
-                  {a.key === null && started && (
+                  {a.key === null && !chosen && started && (
                     <p className="home-quiet small">
                       Which assistant do you study with? <Link to="/welcome">Choose it</Link>
                     </p>
