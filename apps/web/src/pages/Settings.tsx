@@ -4,9 +4,9 @@ import { AssistantNextSteps, TimeZoneSelect, useSaveProfile } from "./Welcome";
 import { greeting } from "./Home";
 import { ASSISTANTS } from "../assistant";
 import { request } from "../api";
-import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
-import { Link, useNavigate } from "react-router";
-import { bytes, dateLabel, dateTime, plural } from "../format";
+import { Async, Card, Confirm, ErrorNote } from "../components/ui";
+import { Link, useLocation, useNavigate } from "react-router";
+import { bytes, dateLabel, dateTime, plural, relativeDay, timeOnly } from "../format";
 import { keys, useAssistants, useBackup, useConnector, useSession, useStudySettings } from "../queries";
 import { PreferencesEditor } from "./Import";
 import { ChatGptPanel } from "../components/ChatGpt";
@@ -284,13 +284,20 @@ function BackupPanel({ b }: { b: BackupStatus }) {
   });
   const last = b.last;
   return (
-    <div className="stack" style={{ gap: 14 }}>
-      <p className="small">
-        A copy of your study records and uploaded files.{" "}
-        {b.enabled
-          ? `RecallSpring makes one every ${b.interval_hours} hours while it runs and keeps the newest of each of the last ${b.keep_daily} days and ${b.keep_weekly} weeks.`
-          : "Automatic backups are turned off in the server settings; you can still back up here."}
-      </p>
+    <div className="stack" style={{ gap: 10 }}>
+      <div className="settings-row">
+        <span>
+          <span className="settings-row-title">Backups</span>
+          <span className="small muted">
+            {b.last_success_at ? `Last one ${relativeDay(b.last_success_at).toLowerCase()}, ${timeOnly(b.last_success_at)}` : "No backup yet"}
+            {" · "}
+            {b.same_disk_as_storage ? "kept on this computer" : "kept in your backup folder"}
+          </span>
+        </span>
+        <button type="button" className="btn small" onClick={() => run.mutate()} disabled={run.isPending || !b.tools}>
+          {run.isPending ? "Backing up…" : "Back up now"}
+        </button>
+      </div>
       {b.last_error && (
         <div className="notice bad" role="alert">
           <strong>The last backup failed{b.last_error.at ? ` (${dateTime(b.last_error.at)})` : ""}.</strong> {b.last_error.message}
@@ -301,6 +308,21 @@ function BackupPanel({ b }: { b: BackupStatus }) {
           pg_dump was not found, so no backup can be made. Install the PostgreSQL client tools or set RS_BACKUP_PG_BIN (docs/08 → Backups).
         </div>
       )}
+      {run.error && <ErrorNote error={run.error} />}
+      {run.isSuccess && !run.isPending && (
+        <div className="notice small" role="status">
+          Backed up and checked.
+        </div>
+      )}
+      <details className="settings-details">
+        <summary>Backup details</summary>
+      <div className="stack" style={{ gap: 14 }}>
+      <p className="small">
+        A copy of your study records and uploaded files.{" "}
+        {b.enabled
+          ? `RecallSpring makes one every ${b.interval_hours} hours while it runs and keeps the newest of each of the last ${b.keep_daily} days and ${b.keep_weekly} weeks.`
+          : "Automatic backups are turned off in the server settings; you can still back up here."}
+      </p>
       <dl className="kv">
         <dt>Last backup</dt>
         <dd>{b.last_success_at ? dateTime(b.last_success_at) : "Never"}</dd>
@@ -338,21 +360,12 @@ function BackupPanel({ b }: { b: BackupStatus }) {
           disk or a lost computer. Set RS_BACKUP_DIR to another disk or a synced folder, or copy this folder elsewhere now and then.
         </div>
       )}
-      {run.error && <ErrorNote error={run.error} />}
-      {run.isSuccess && !run.isPending && (
-        <div className="notice small" role="status">
-          Backed up and checked.
-        </div>
-      )}
-      <div>
-        <button type="button" className="btn" onClick={() => run.mutate()} disabled={run.isPending || !b.tools}>
-          {run.isPending ? "Backing up…" : "Back up now"}
-        </button>
-      </div>
       <p className="tiny muted">
         Restoring never overwrites anything: <code>recallspring backup-restore --database &lt;new name&gt;</code> creates a new database
         from a backup, then you choose to switch (docs/08 → Backups).
       </p>
+      </div>
+      </details>
     </div>
   );
 }
@@ -585,33 +598,27 @@ export const SECTIONS = [
 
 type SectionId = (typeof SECTIONS)[number]["id"];
 
-/** The section being read: the last one whose heading has passed the upper part of the window. */
-function useCurrentSection(): SectionId {
-  const [current, setCurrent] = useState<SectionId>("study");
-  useEffect(() => {
-    if (typeof IntersectionObserver === "undefined") return;
-    const seen = new Map<string, boolean>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) seen.set(e.target.id, e.isIntersecting);
-        const visible = SECTIONS.find((x) => seen.get(x.id));
-        if (visible) setCurrent(visible.id);
-      },
-      { rootMargin: "-15% 0px -55% 0px" },
-    );
-    for (const x of SECTIONS) {
-      const el = document.getElementById(x.id);
-      if (el) observer.observe(el);
-    }
-    return () => observer.disconnect();
-  }, []);
-  return current;
+/** Old links name a card (/settings#chatgpt); they open the section that holds it (2026-11-27). */
+const CARD_SECTION: Record<string, SectionId> = {
+  pace: "study",
+  chatgpt: "assistants",
+  connector: "assistants",
+  backups: "data",
+  history: "data",
+  profile: "account",
+  "sign-in": "account",
+  service: "account",
+};
+
+function sectionOf(hash: string): SectionId {
+  const id = hash.replace(/^#/, "");
+  return SECTIONS.find((x) => x.id === id)?.id ?? CARD_SECTION[id] ?? "study";
 }
 
 function Section({ id, children }: { id: SectionId; children: ReactNode }) {
   const s = SECTIONS.find((x) => x.id === id)!;
   return (
-    <section id={id} className="settings-section" aria-labelledby={`${id}-title`}>
+    <section id={id} className="settings-section" aria-labelledby={`${id}-title`} tabIndex={-1}>
       <div className="settings-section-head">
         <h2 id={`${id}-title`}>{s.title}</h2>
         <p className="small muted">{s.sub}</p>
@@ -626,88 +633,112 @@ export function SettingsPage() {
   const connector = useConnector();
   const assistants = useAssistants();
   const backup = useBackup();
-  const current = useCurrentSection();
+  const { hash } = useLocation();
+  const current = sectionOf(hash);
   useEffect(() => {
-    // Links like /settings#chatgpt (Welcome page) open at that section or card.
-    const id = window.location.hash.slice(1);
-    if (id) document.getElementById(id)?.scrollIntoView?.({ block: "start" });
-  }, []);
+    // A link to a card (/settings#chatgpt) opens its section and scrolls to the card.
+    const id = hash.slice(1);
+    if (id && !SECTIONS.some((x) => x.id === id)) document.getElementById(id)?.scrollIntoView?.({ block: "start" });
+  }, [hash]);
   return (
-    <div className="page">
-      <PageHead title="Settings" sub="Every change is recorded in History." />
+    <div className="page settings-page">
       <div className="settings-layout">
         <nav className="settings-toc" aria-label="Settings sections">
+          <h1 className="settings-h1">Settings</h1>
           <ol>
             {SECTIONS.map((x) => (
               <li key={x.id}>
-                <a href={`#${x.id}`} aria-current={current === x.id ? "true" : undefined}>
+                <Link to={{ hash: x.id }} replace aria-current={current === x.id ? "page" : undefined}>
                   {x.title}
-                </a>
+                </Link>
               </li>
             ))}
           </ol>
+          <p className="tiny muted settings-guide">
+            Guide: the <Link to="/guide">?</Link> button. Every change is recorded in History.
+          </p>
         </nav>
         <div className="settings-body">
-          <Section id="study">
-            <div className="grid cols-2" style={{ alignItems: "start" }}>
-              <Card title="Study time" level={3}>
-                <Async q={study}>{(s) => <StudyForm initial={s} />}</Async>
+          {current === "study" && (
+            <Section id="study">
+              <div className="grid cols-2" style={{ alignItems: "start" }}>
+                <Card title="Study time" level={3}>
+                  <Async q={study}>{(s) => <StudyForm initial={s} />}</Async>
+                </Card>
+                <Card title="Study preferences" level={3}>
+                  <PreferencesEditor />
+                </Card>
+                <Card title="Explanation pace" id="pace" level={3}>
+                  <ExplanationPaceDefault />
+                </Card>
+              </div>
+            </Section>
+          )}
+          {current === "assistants" && (
+            <Section id="assistants">
+              <Card title="Your assistants" level={3}>
+                <Async q={assistants}>{(s) => <AssistantsPanel s={s} />}</Async>
               </Card>
-              <Card title="Study preferences" level={3}>
-                <PreferencesEditor />
+              <div className="grid cols-2" style={{ alignItems: "start" }}>
+                <Card title="ChatGPT (preview)" id="chatgpt" level={3}>
+                  <ChatGptPanel />
+                </Card>
+                <Card title="Assistant connector" id="connector" level={3}>
+                  <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
+                </Card>
+              </div>
+            </Section>
+          )}
+          {current === "data" && (
+            <Section id="data">
+              <div className="settings-rows">
+                <div id="backups">
+                  <h3 className="sr-only">Backups</h3>
+                  <Async q={backup}>{(b) => <BackupPanel b={b} />}</Async>
+                </div>
+                <div className="settings-row" id="history">
+                  <span>
+                    <h3 className="settings-row-title">History</h3>
+                    <span className="small muted">Everything that changed your learning records and settings, who made it and when</span>
+                  </span>
+                  <Link to="/history" className="btn small">
+                    Open history
+                  </Link>
+                </div>
+                <div className="settings-row">
+                  <span>
+                    <h3 className="settings-row-title">Recently deleted</h3>
+                    <span className="small muted">
+                      Courses, exams, notes, focus blocks and chats stay restorable for 30 days, each in its own list
+                    </span>
+                  </span>
+                  <span />
+                </div>
+              </div>
+            </Section>
+          )}
+          {current === "appearance" && (
+            <Section id="appearance">
+              <Card title="Theme" level={3}>
+                <ThemePicker />
               </Card>
-              <Card title="Explanation pace" id="pace" level={3}>
-                <ExplanationPaceDefault />
-              </Card>
-            </div>
-          </Section>
-          <Section id="assistants">
-            <Card title="Your assistants" level={3}>
-              <Async q={assistants}>{(s) => <AssistantsPanel s={s} />}</Async>
-            </Card>
-            <div className="grid cols-2" style={{ alignItems: "start" }}>
-              <Card title="ChatGPT (preview)" id="chatgpt" level={3}>
-                <ChatGptPanel />
-              </Card>
-              <Card title="Assistant connector" id="connector" level={3}>
-                <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
-              </Card>
-            </div>
-          </Section>
-          <Section id="data">
-            <div className="grid cols-2" style={{ alignItems: "start" }}>
-              <Card title="Backups" id="backups" level={3}>
-                <Async q={backup}>{(b) => <BackupPanel b={b} />}</Async>
-              </Card>
-              <Card title="History" level={3}>
-                <p className="small">
-                  Every change you or an assistant makes is recorded, with who made it and when. Deleted items stay
-                  restorable for 30 days.
-                </p>
-                <p className="small" style={{ marginTop: 8 }}>
-                  <Link to="/history">Open History</Link>
-                </p>
-              </Card>
-            </div>
-          </Section>
-          <Section id="appearance">
-            <Card title="Theme" level={3}>
-              <ThemePicker />
-            </Card>
-          </Section>
-          <Section id="account">
-            <div className="grid cols-2" style={{ alignItems: "start" }}>
-              <Card title="Profile" id="profile" level={3}>
-                <ProfileForm />
-              </Card>
-              <Card title="Sign-in" id="sign-in" level={3}>
-                <SignOut />
-              </Card>
-              <Card title="Running in the background" id="service" level={3}>
-                <ServiceStatus />
-              </Card>
-            </div>
-          </Section>
+            </Section>
+          )}
+          {current === "account" && (
+            <Section id="account">
+              <div className="grid cols-2" style={{ alignItems: "start" }}>
+                <Card title="Profile" id="profile" level={3}>
+                  <ProfileForm />
+                </Card>
+                <Card title="Sign-in" id="sign-in" level={3}>
+                  <SignOut />
+                </Card>
+                <Card title="Running in the background" id="service" level={3}>
+                  <ServiceStatus />
+                </Card>
+              </div>
+            </Section>
+          )}
         </div>
       </div>
     </div>

@@ -6735,3 +6735,106 @@ input.switch:focus-visible {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* Settings as drawn (UI direction, 2026-11-27): the five sections on the left, one shown at a time; Data & backups
+   as rows (Backups with Back up now, History, Recently deleted). */
+.settings-h1 {
+  font-size: 1.4rem;
+  margin: 0 0 8px;
+}
+
+.settings-page .settings-toc ol {
+  border-left: 0;
+}
+
+.settings-page .settings-toc a {
+  margin-left: 0;
+  border-left: 0;
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: var(--ink);
+}
+
+.settings-page .settings-toc a[aria-current="page"] {
+  background: var(--tint);
+  color: var(--tint-ink);
+  font-weight: 500;
+}
+
+.settings-guide {
+  padding: 10px 8px 0;
+  margin: 0;
+}
+
+.settings-page .settings-section-head h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.settings-section:focus {
+  outline: none;
+}
+
+.settings-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-rows > * {
+  border-top: 1px solid var(--border);
+  padding: 10px 0;
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-row > span:first-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.settings-row > .btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.settings-row-title {
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 400;
+  margin: 0;
+}
+
+.settings-details > summary {
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.settings-details[open] > summary {
+  margin-bottom: 10px;
+}
+
+@media (max-width: 860px) {
+  .settings-page .settings-toc {
+    position: static;
+  }
+
+  .settings-page .settings-toc ol {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+    border-bottom: 0;
+  }
+
+  .settings-page .settings-toc a {
+    white-space: nowrap;
+  }
+}

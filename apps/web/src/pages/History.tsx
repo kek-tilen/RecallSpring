@@ -73,6 +73,7 @@ export function HistoryPage() {
       <PageHead
         title="History"
         sub="When each answer was saved, graded and scheduled, and every change to your settings. Newest first."
+        crumbs={[{ to: "/settings#data", label: "Settings · Data & backups" }]}
       />
       <div className="row" role="group" aria-label="Filter history">
         {FILTERS.map((f) => (
