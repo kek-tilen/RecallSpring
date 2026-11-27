@@ -1,212 +1,238 @@
 import { useMutation } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { Link } from "react-router";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router";
 import { API, request } from "../api";
 import { CourseDot, cc, groupPath, useInvalidateOrganisation } from "../components/organise";
 import { DuplicatesPanel, RecentlyDeleted } from "../components/ExamCleanup";
+import { StudyIn } from "../components/StudyIn";
 import { TargetDialog } from "../components/TargetDialog";
-import { Async, Empty, ErrorNote, PageHead } from "../components/ui";
-import { TARGET_KIND, addDays, dateLabel, daysBetween, plural, todayIso } from "../format";
-import { useCourses, useGroups, useTargets } from "../queries";
-import type { Target, TimelineTarget } from "../types";
+import { Async, Chevron, Empty, ErrorNote, PageHead, SectionMenu } from "../components/ui";
+import { addDays, dateLabel, daysBetween, plural, shortDay, todayIso } from "../format";
+import { useCourses, useGroups, useReadiness, useTargets } from "../queries";
+import type { ExamReadiness, Target, TimelineTarget } from "../types";
+import { MiniReadiness } from "./Readiness";
 
-const DAY = 14; // pixels per day: about four months fit on a laptop screen
+// Exams as drawn (UI direction, 2026-11-27): a timeline from two weeks back to about five weeks ahead (each exam in
+// its course's colour, passed ones hollow, today dashed), the list, and the selected exam's readiness with Study in…
+// beside each weak topic. The timeline only shows dates; a date is changed on the exam itself (Edit).
+
 const SHORT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-const MONTH = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+const shortDate = (iso: string) => SHORT.format(new Date(`${iso}T00:00:00Z`));
+const isBehind = (t: Target) => t.status === "passed" || t.status === "cancelled";
+const STATUS_WORD: Record<string, string> = { passed: "passed", failed: "not passed yet", cancelled: "cancelled" };
+const CAPACITY = {
+  ok: { tone: "chip tint-chip", label: "On track" },
+  tight: { tone: "chip warn", label: "Tight" },
+  at_risk: { tone: "chip bad", label: "At risk" },
+} as const;
 
-function shortDate(iso: string): string {
-  return SHORT.format(new Date(`${iso}T00:00:00Z`));
+function daysWord(n: number): string {
+  if (n < 0) return "passed";
+  if (n === 0) return "today";
+  return plural(n, "day");
 }
 
-interface Moved {
-  target: TimelineTarget;
-  from: string;
-  to: string;
+/** The SVG is drawn at the width it gets, so its 11 px labels stay 11 px on a phone and on a wide screen. */
+function useWidth(fallback: number): [React.RefObject<HTMLDivElement | null>, number] {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(fallback);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setWidth(Math.max(280, Math.round(el.getBoundingClientRect().width) || fallback));
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fallback]);
+  return [ref, width];
 }
 
-const LANE = 38; // vertical step between markers that would overlap in one row
-const MARKER_WIDTH = 130; // approximate pill width, used only to decide overlaps
+export function Timeline({ targets }: { targets: TimelineTarget[] }) {
+  const [box, W] = useWidth(600);
+  const today = todayIso();
+  const start = addDays(today, -14);
+  const lastUpcoming = targets
+    .filter((t) => t.due_date >= today && !isBehind(t))
+    .map((t) => t.due_date)
+    .sort()
+    .at(-1);
+  let end = addDays(today, 35);
+  if (lastUpcoming && addDays(lastUpcoming, 5) > end) end = [addDays(lastUpcoming, 5), addDays(today, 84)].sort()[0]!;
+  const span = daysBetween(start, end);
+  const pad = 20;
+  const x = (iso: string) => pad + (daysBetween(start, iso) / span) * (W - 2 * pad);
+  const shown = targets.filter((t) => t.due_date >= start && t.due_date <= end).sort((a, b) => a.due_date.localeCompare(b.due_date));
 
-/** Lane per target so markers close in time sit on separate lines instead of covering each other. */
-function lanes(list: TimelineTarget[], start: string): Map<string, number> {
-  const ends: number[] = [];
-  const out = new Map<string, number>();
-  for (const t of [...list].sort((a, b) => a.due_date.localeCompare(b.due_date))) {
-    const left = daysBetween(start, t.due_date) * DAY;
-    let lane = ends.findIndex((end) => end <= left);
-    if (lane === -1) lane = ends.length;
-    ends[lane] = left + MARKER_WIDTH;
-    out.set(t.id, lane);
-  }
-  return out;
-}
-
-function Marker({ t, start, lane, onMove, onEdit }: {
-  t: TimelineTarget;
-  start: string;
-  lane: number;
-  onMove: (t: TimelineTarget, to: string) => void;
-  onEdit: (t: TimelineTarget) => void;
-}) {
-  const [offset, setOffset] = useState(0); // days, while dragging or moving with the keyboard
-  const [dragging, setDragging] = useState(false);
-  const drag = useRef<{ x: number; moved: boolean } | null>(null);
-  const suppressClick = useRef(false); // a drag ends with a click event; it must not open the editor
-  const shown = addDays(t.due_date, offset);
-  const left = daysBetween(start, shown) * DAY + DAY / 2 - 12;
-  const done = t.status !== "upcoming";
-
-  function down(e: PointerEvent<HTMLButtonElement>) {
-    if (e.button !== 0) return;
-    drag.current = { x: e.clientX, moved: false };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-  function move(e: PointerEvent<HTMLButtonElement>) {
-    if (!drag.current) return;
-    const dx = e.clientX - drag.current.x;
-    if (Math.abs(dx) > 4) {
-      drag.current.moved = true;
-      setDragging(true);
-    }
-    if (drag.current.moved) setOffset(Math.round(dx / DAY));
-  }
-  function up(e: PointerEvent<HTMLButtonElement>) {
-    const state = drag.current;
-    drag.current = null;
-    e.currentTarget.releasePointerCapture(e.pointerId);
-    setDragging(false);
-    if (state?.moved) {
-      suppressClick.current = true;
-      const days = Math.round((e.clientX - state.x) / DAY);
-      setOffset(0);
-      if (days !== 0) onMove(t, addDays(t.due_date, days));
-    }
-  }
-  function click() {
-    if (suppressClick.current) {
-      suppressClick.current = false;
-      return;
-    }
-    if (offset === 0) onEdit(t);
-  }
-  function key(e: KeyboardEvent<HTMLButtonElement>) {
-    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-      e.preventDefault();
-      const step = (e.shiftKey ? 7 : 1) * (e.key === "ArrowLeft" ? -1 : 1);
-      setOffset((o) => o + step);
-    } else if (e.key === "Enter" && offset !== 0) {
-      e.preventDefault();
-      const to = addDays(t.due_date, offset);
-      setOffset(0);
-      onMove(t, to);
-    } else if (e.key === "Escape" && offset !== 0) {
-      e.preventDefault();
-      setOffset(0);
-    }
-  }
+  // Labels sit above their dot; one that would cover the previous one moves up a line.
+  const right = [-Infinity, -Infinity];
+  const placed = shown.map((t) => {
+    const text = isBehind(t) ? `${t.name} · ${STATUS_WORD[t.status]}` : `${t.name} · ${t.course_title}`;
+    const width = text.length * 5.6;
+    const cx = x(t.due_date);
+    const lx = Math.min(Math.max(cx, width / 2 + 2), W - width / 2 - 2);
+    let lane = right.findIndex((r) => lx - width / 2 > r + 8);
+    if (lane === -1) lane = right[0]! <= right[1]! ? 0 : 1;
+    right[lane] = lx + width / 2;
+    return { t, text, cx, lx, lane };
+  });
+  const top = placed.some((p) => p.lane === 1) ? 16 : 0;
+  const axis = 50 + top;
+  const ticks: string[] = [];
+  const step = W < 480 ? 14 : 7;
+  for (let i = 0; i <= span; i += step) ticks.push(addDays(start, i));
+  const label =
+    `Timeline from ${dateLabel(start)} to ${dateLabel(end)}: ` +
+    [
+      ...shown.map((t) => `${t.name}, ${t.course_title}, ${isBehind(t) ? `${STATUS_WORD[t.status]} on` : "on"} ${dateLabel(t.due_date)}`),
+      `today ${dateLabel(today)}`,
+    ].join("; ");
 
   return (
-    <button
-      type="button"
-      className={`tl-marker ${cc(t.course_color)} ${dragging ? "dragging" : ""} ${done ? "done" : ""}`}
-      style={{ left, top: 10 + lane * LANE }}
-      onPointerDown={down}
-      onPointerMove={move}
-      onPointerUp={up}
-      onPointerCancel={() => {
-        drag.current = null;
-        setDragging(false);
-        setOffset(0);
-      }}
-      onClick={click}
-      onKeyDown={key}
-      aria-label={`${t.name}, ${t.course_title}, ${dateLabel(shown)}${offset ? " (not saved yet)" : ""}. Drag or use the arrow keys to move it, Enter to save; click to edit.`}
-      title={`${t.course_title}: ${t.name} · ${dateLabel(shown)}${t.result ? ` · ${t.result}` : ""}`}
-    >
-      <CourseDot color={t.course_color} />
-      {t.name}
-      <span className="tl-date">{shortDate(shown)}</span>
-      {done && <span aria-hidden="true">{t.status === "passed" ? "✓" : t.status === "failed" ? "↺" : "×"}</span>}
-    </button>
+    <div ref={box} className="exam-timeline">
+      <svg width={W} height={axis + 26} viewBox={`0 0 ${W} ${axis + 26}`} role="img" aria-label={label}>
+        <line x1={pad} y1={axis} x2={W - pad} y2={axis} className="tl-axis-line" />
+        {ticks.map((d) => (
+          <g key={d}>
+            <line x1={x(d)} y1={axis - 4} x2={x(d)} y2={axis + 4} className="tl-tick" />
+            {Math.abs(x(d) - x(today)) > 30 && (
+              <text x={x(d)} y={axis + 20} className="tl-tick-label" textAnchor="middle">
+                {shortDate(d)}
+              </text>
+            )}
+          </g>
+        ))}
+        <line x1={x(today)} y1={axis - 30 - top} x2={x(today)} y2={axis + 8} className="tl-today-line" />
+        <text x={x(today)} y={axis + 20} className="tl-today-label" textAnchor="middle">
+          Today
+        </text>
+        {placed.map(({ t, text, cx, lx, lane }) => (
+          <g key={t.id} className={cc(t.course_color)}>
+            {isBehind(t) ? (
+              <circle cx={cx} cy={axis} r={6} className="tl-dot hollow" />
+            ) : (
+              <circle cx={cx} cy={axis} r={7} className="tl-dot" />
+            )}
+            <text x={lx} y={axis - 16 - lane * 16} textAnchor="middle" className={isBehind(t) ? "tl-name past" : "tl-name"}>
+              {text}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
   );
 }
 
-function Timeline({ targets, onMove, onEdit }: {
-  targets: TimelineTarget[];
-  onMove: (t: TimelineTarget, to: string) => void;
-  onEdit: (t: TimelineTarget) => void;
-}) {
-  const today = todayIso();
-  const scroller = useRef<HTMLDivElement>(null);
-  const { start, days, rows, months, weeks } = useMemo(() => {
-    const dates = targets.map((t) => t.due_date).sort();
-    const first = dates[0] && dates[0] < today ? dates[0] : today;
-    const last = dates.at(-1) && dates.at(-1)! > today ? dates.at(-1)! : today;
-    let begin = addDays(first, -10);
-    const weekday = new Date(`${begin}T00:00:00Z`).getUTCDay(); // 0 = Sunday
-    begin = addDays(begin, -((weekday + 6) % 7)); // back to Monday
-    const span = Math.max(daysBetween(begin, last) + 28, 120);
-    const byCourse = new Map<string, TimelineTarget[]>();
-    for (const t of targets) byCourse.set(t.course_id, [...(byCourse.get(t.course_id) ?? []), t]);
-    const monthMarks: { left: number; label: string }[] = [];
-    const weekMarks: number[] = [];
-    for (let i = 0; i <= span; i++) {
-      const day = addDays(begin, i);
-      if (day.endsWith("-01") || i === 0) monthMarks.push({ left: i * DAY, label: MONTH.format(new Date(`${day}T00:00:00Z`)) });
-      if (i % 7 === 0) weekMarks.push(i * DAY);
-    }
-    return { start: begin, days: span, rows: [...byCourse.values()], months: monthMarks, weeks: weekMarks };
-  }, [targets, today]);
-  const width = days * DAY;
-  const todayLeft = daysBetween(start, today) * DAY + DAY / 2;
-
-  useEffect(() => {
-    if (scroller.current) scroller.current.scrollLeft = Math.max(0, todayLeft - 3 * DAY);
-  }, [todayLeft]);
-
+function ExamRow({ t, on, pick }: { t: TimelineTarget; on: boolean; pick: () => void }) {
+  const r = useReadiness(t.id);
+  const cap = !isBehind(t) && r.data?.capacity ? CAPACITY[r.data.capacity.status] : null;
   return (
-    <div className="timeline-wrap" ref={scroller}>
-      <div className="timeline" style={{ width: width + 180 }}>
-        <div className="tl-label head">Course</div>
-        <div className="tl-axis" style={{ width }}>
-          {months.map((m) => (
-            <span key={m.left} className="tl-month" style={{ left: m.left }}>
-              {m.label}
-            </span>
-          ))}
-          <span className="tl-today" style={{ left: todayLeft }} title="Today" />
+    <li>
+      <button type="button" className={on ? "exam-row on" : "exam-row"} aria-pressed={on} onClick={pick}>
+        <span className="exam-row-name">
+          <span className="exam-row-title">
+            <CourseDot color={t.course_color} />
+            {t.name}
+          </span>
+          <span className="small muted">
+            {t.course_title} · {shortDay(t.due_date)} · {isBehind(t) ? STATUS_WORD[t.status] + (t.result ? ` (${t.result})` : "") : daysWord(t.days_left)}
+          </span>
+        </span>
+        <span className="row" style={{ gap: 6 }}>
+          {(t.duplicates?.length ?? 0) > 0 && <span className="chip warn">Possible duplicate</span>}
+          {t.status === "failed" && <span className="chip warn">Retake</span>}
+          {cap && <span className={cap.tone}>{cap.label}</span>}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/** What to work on first: the weakest graded concepts, then those not studied yet (in the order of the material). */
+function weakestFirst(r: ExamReadiness): { id: string; term: string; why: string; where: string | undefined }[] {
+  const weak = r.weakest.map((w) => ({ id: w.id, term: w.term, why: (w.gaps[0] ?? w.reason).replace(/\.$/, ""), where: w.citations[0] }));
+  const seen = new Set(weak.map((w) => w.id));
+  const unread = r.groups
+    .flatMap((g) => g.concepts)
+    .filter((c) => c.state === "not_studied" && !seen.has(c.id))
+    .map((c) => ({ id: c.id, term: c.term, why: "Not studied yet", where: c.citations[0] }));
+  return [...weak, ...unread].slice(0, 5);
+}
+
+function countsLine(s: ExamReadiness["summary"]): string {
+  return [
+    s.not_studied && `${s.not_studied} not studied`,
+    s.weak && `${s.weak} weak`,
+    s.not_practised && `${s.not_practised} studied`,
+    s.developing && `${s.developing} getting there`,
+    s.solid && `${s.solid} solid`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function ExamDetail({ t, onEdit }: { t: TimelineTarget; onEdit: () => void }) {
+  const q = useReadiness(t.id);
+  const course = { id: t.course_id, title: t.course_title };
+  return (
+    <section className="exam-detail" aria-labelledby="exam-detail-title">
+      <div className="exam-detail-head">
+        <div style={{ minWidth: 0 }}>
+          <div className="small muted">
+            {t.course_title} · {isBehind(t) ? `${STATUS_WORD[t.status]} · ${dateLabel(t.due_date)}` : t.days_left >= 0 ? `${daysWord(t.days_left)} left` : "date passed"}
+          </div>
+          <h2 id="exam-detail-title" className="exam-detail-title">
+            {t.name}
+          </h2>
         </div>
-        {rows.map((list) => {
-          const first = list[0]!;
-          const laneOf = lanes(list, start);
-          const height = 52 + Math.max(0, ...laneOf.values()) * LANE;
-          return [
-            <div key={`${first.course_id}-label`} className="tl-label" title={first.course_title} style={{ height }}>
-              <CourseDot color={first.course_color} />
-              <Link to={`/courses/${first.course_id}?tab=targets`} style={{ color: "inherit", textDecoration: "none" }}>
-                {first.course_title}
-              </Link>
-            </div>,
-            <div key={`${first.course_id}-track`} className="tl-track" style={{ width, height }}>
-              {weeks.map((w) => (
-                <span key={w} className="tl-week" style={{ left: w }} />
-              ))}
-              <span className="tl-today" style={{ left: todayLeft }} />
-              {list.map((t) => (
-                <Marker
-                  key={`${t.id}-${t.due_date}`}
-                  t={t}
-                  start={start}
-                  lane={laneOf.get(t.id) ?? 0}
-                  onMove={onMove}
-                  onEdit={onEdit}
-                />
-              ))}
-            </div>,
-          ];
-        })}
+        <span className="row" style={{ gap: 4 }}>
+          <button type="button" className="btn small ghost" onClick={onEdit}>
+            Edit
+          </button>
+          <Link to={`/exams/${t.id}`} className="btn small ghost">
+            Full readiness
+          </Link>
+        </span>
       </div>
-    </div>
+      <Async q={q} lines={4}>
+        {(r) => {
+          const first = weakestFirst(r);
+          return (
+            <>
+              <MiniReadiness counts={r.summary} label={`Readiness for ${t.name}`} />
+              <p className="small muted exam-counts">{countsLine(r.summary) || "No concepts in scope yet"}</p>
+              {r.capacity && !isBehind(t) && <p className="small">{r.capacity.message}</p>}
+              {!isBehind(t) && first.length > 0 && (
+                <>
+                  <h3 className="exam-weak-h">Weakest first</h3>
+                  <ul className="source-rows" aria-label="Weakest first">
+                    {first.map((w) => (
+                      <li key={w.id} className="source-row">
+                        <span className="source-row-name">
+                          <Link to={`/concepts/${w.id}`}>{w.term}</Link>
+                          <span className="small muted">{[w.why, w.where].filter(Boolean).join(" · ")}</span>
+                        </span>
+                        <StudyIn
+                          course={course}
+                          ask={{
+                            label: "Study",
+                            message: `Help me with "${w.term}" in ${t.course_title} for ${t.name} (${dateLabel(t.due_date)}). ${w.why}${w.where ? ` (${w.where})` : ""}.`,
+                          }}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <p className="tiny muted exam-why">
+                <Link to={`/exams/${t.id}#why`}>Why this plan</Link> · not a prediction of your grade
+              </p>
+            </>
+          );
+        }}
+      </Async>
+    </section>
   );
 }
 
@@ -215,11 +241,11 @@ export function ExamsPage() {
   const groups = useGroups();
   const courses = useCourses();
   const refresh = useInvalidateOrganisation();
+  const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState<TimelineTarget | null>(null);
   const [adding, setAdding] = useState(false);
-  const [showPast, setShowPast] = useState(false);
+  const [behindOpen, setBehindOpen] = useState(false);
   const [calendarGroup, setCalendarGroup] = useState("");
-  const [toast, setToast] = useState<Moved | null>(null);
   const [deleted, setDeleted] = useState<Target | null>(null);
   const restore = useMutation({
     mutationFn: (id: string) => request(`/targets/${id}/restore`, { method: "POST" }),
@@ -228,20 +254,6 @@ export function ExamsPage() {
       refresh();
     },
   });
-
-  const move = useMutation({
-    mutationFn: ({ target, to }: { target: TimelineTarget; to: string; from: string }) =>
-      request(`/targets/${target.id}`, { method: "PATCH", json: { due_date: to } }),
-    onSuccess: (_data, vars) => {
-      refresh();
-      setToast({ target: vars.target, from: vars.from, to: vars.to });
-    },
-  });
-  useEffect(() => {
-    if (!toast) return;
-    const id = window.setTimeout(() => setToast(null), 7000);
-    return () => window.clearTimeout(id);
-  }, [toast]);
   useEffect(() => {
     if (!deleted) return;
     const id = window.setTimeout(() => setDeleted(null), 9000);
@@ -252,127 +264,93 @@ export function ExamsPage() {
   const semesters = (groups.data ?? []).filter((g) => g.status === "active");
 
   return (
-    <div className="page">
-      <PageHead
-        title="Exams"
-        sub="Every midterm and exam on one timeline. Drag one to move its date (or focus it and use the arrow keys), click it to edit."
-      >
-        <button type="button" className="btn primary" onClick={() => setAdding(true)} disabled={!courses.data?.length}>
-          Add exam
+    <div className="page exams-page">
+      <PageHead title="Exams">
+        <button type="button" className="btn" onClick={() => setAdding(true)} disabled={!courses.data?.length}>
+          + Add exam
         </button>
+        <SectionMenu label="Calendar">
+          {semesters.length > 0 && (
+            <label className="field small">
+              Calendar for
+              <select value={calendarGroup} onChange={(e) => setCalendarGroup(e.target.value)}>
+                <option value="">All courses</option>
+                {semesters.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {groupPath(groups.data, g.id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <a className="btn small ghost" href={`${API}/calendar.ics${calendarGroup ? `?group_id=${calendarGroup}` : ""}`} download>
+            Download calendar (.ics)
+          </a>
+        </SectionMenu>
       </PageHead>
       <Async q={q} lines={5}>
         {(all) => {
-          const visible = all.filter(
-            (t) => !archivedCourses.has(t.course_id) && (showPast || t.status === "upcoming" || t.status === "failed"),
-          );
+          const mine = all.filter((t) => !archivedCourses.has(t.course_id));
+          const coming = mine.filter((t) => !isBehind(t)).sort((a, b) => a.due_date.localeCompare(b.due_date));
+          const behind = mine.filter(isBehind).sort((a, b) => b.due_date.localeCompare(a.due_date));
+          const picked = mine.find((t) => t.id === params.get("exam")) ?? coming[0] ?? behind[0];
+          const pick = (t: TimelineTarget) => setParams({ exam: t.id }, { replace: true });
+          if (mine.length === 0) {
+            return (
+              <Empty title="No exams yet">
+                Add one here, or plan your semester in a planning chat with your assistant (see the Guide) to set up all your midterms and exams at once.
+              </Empty>
+            );
+          }
+          const passed = behind.filter((t) => t.status === "passed").length;
           return (
             <>
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <label className="row small">
-                  <input type="checkbox" checked={showPast} onChange={(e) => setShowPast(e.target.checked)} />
-                  Show passed and cancelled
-                </label>
-                <div className="row">
-                  {semesters.length > 0 && (
-                    <label>
-                      <span className="sr-only">Calendar for</span>
-                      <select className="inline-input" value={calendarGroup} onChange={(e) => setCalendarGroup(e.target.value)}>
-                        <option value="">All courses</option>
-                        {semesters.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {groupPath(groups.data, g.id)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                  <a className="btn" href={`${API}/calendar.ics${calendarGroup ? `?group_id=${calendarGroup}` : ""}`} download>
-                    Download calendar (.ics)
-                  </a>
-                </div>
-              </div>
-              <DuplicatesPanel targets={all.filter((t) => !archivedCourses.has(t.course_id))} />
-              {visible.length === 0 ? (
-                <Empty title="No exams yet">
-                  Add one here, or plan your semester in a planning chat with your assistant (see the Guide) to set up all your midterms and exams at once.
-                </Empty>
-              ) : (
-                <Timeline targets={visible} onMove={(t, to) => move.mutate({ target: t, to, from: t.due_date })} onEdit={setEditing} />
-              )}
-              {move.error && <ErrorNote error={move.error} />}
-              {visible.length > 0 && (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Exam</th>
-                        <th>Course</th>
-                        <th>Status</th>
-                        <th>
-                          <span className="sr-only">Edit</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visible.map((t) => (
-                        <tr key={t.id}>
-                          <td className="nowrap">
-                            {dateLabel(t.due_date)}
-                            <div className="tiny muted">{t.days_left >= 0 ? `in ${plural(t.days_left, "day")}` : "passed"}</div>
-                          </td>
-                          <td>
-                            <Link to={`/exams/${t.id}`} style={{ fontWeight: 600 }}>
-                              {t.name}
-                            </Link>{" "}
-                            <span className="muted small">{TARGET_KIND[t.kind] ?? t.kind}</span>
-                            {t.duplicates.length > 0 && <span className="chip warn" style={{ marginLeft: 8 }}>Possible duplicate</span>}
-                            <div className="small muted pre">{t.scope_description}</div>
-                          </td>
-                          <td>
-                            <span className="row" style={{ gap: 6 }}>
-                              <CourseDot color={t.course_color} />
-                              {t.course_title}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={t.status === "passed" ? "chip good" : t.status === "failed" ? "chip bad" : "chip"}>
-                              {t.status}
-                              {t.result ? ` · ${t.result}` : ""}
-                            </span>
-                          </td>
-                          <td>
-                            <span className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
-                              <Link to={`/exams/${t.id}`} className="btn small">
-                                Readiness
-                              </Link>
-                              <button type="button" className="btn small" onClick={() => setEditing(t)}>
-                                Edit
-                              </button>
-                            </span>
-                          </td>
-                        </tr>
+              <DuplicatesPanel targets={mine} />
+              <Timeline targets={mine} />
+              <div className="exams-layout">
+                <div>
+                  <div className="exams-label">Coming up</div>
+                  {coming.length === 0 ? (
+                    <p className="small muted">Nothing coming up. Add the next midterm or exam with + Add exam.</p>
+                  ) : (
+                    <ul className="exam-rows" aria-label="Coming up">
+                      {coming.map((t) => (
+                        <ExamRow key={t.id} t={t} on={t.id === picked?.id} pick={() => pick(t)} />
                       ))}
-                    </tbody>
-                  </table>
+                    </ul>
+                  )}
+                  {behind.length > 0 && (
+                    <>
+                      <button type="button" className="exams-label exams-behind" aria-expanded={behindOpen} onClick={() => setBehindOpen(!behindOpen)}>
+                        <Chevron open={behindOpen} />
+                        Behind you
+                        <span className="group-count">{passed > 0 ? `${passed} passed` : plural(behind.length, "exam")}</span>
+                      </button>
+                      {behindOpen && (
+                        <ul className="exam-rows" aria-label="Behind you">
+                          {behind.map((t) => (
+                            <ExamRow key={t.id} t={t} on={t.id === picked?.id} pick={() => pick(t)} />
+                          ))}
+                        </ul>
+                      )}
+                    </>
+                  )}
                 </div>
-              )}
+                {picked && <ExamDetail key={picked.id} t={picked} onEdit={() => setEditing(picked)} />}
+              </div>
               <RecentlyDeleted />
             </>
           );
         }}
       </Async>
+      {restore.error && <ErrorNote error={restore.error} />}
       {editing && (
         <TargetDialog
           key={editing.id + editing.revision}
           target={editing}
           open
           onClose={() => setEditing(null)}
-          onDeleted={(t) => {
-            setToast(null);
-            setDeleted(t);
-          }}
+          onDeleted={(t) => setDeleted(t)}
         />
       )}
       {deleted && (
@@ -384,21 +362,6 @@ export function ExamsPage() {
         </div>
       )}
       {adding && <TargetDialog open onClose={() => setAdding(false)} />}
-      {toast && (
-        <div className="toast" role="status">
-          Moved {toast.target.name} to {dateLabel(toast.to)}.
-          <button
-            type="button"
-            className="btn small"
-            onClick={() => {
-              move.mutate({ target: toast.target, to: toast.from, from: toast.to });
-              setToast(null);
-            }}
-          >
-            Undo
-          </button>
-        </div>
-      )}
     </div>
   );
 }

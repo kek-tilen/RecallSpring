@@ -349,3 +349,15 @@ export function Modal({ open, title, children, onClose, wide }: {
     </dialog>
   );
 }
+
+/** A small menu for the rarer actions of a section, so its heading stays one quiet line. */
+export function SectionMenu({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <details className="section-menu">
+      <summary aria-label={label} title={label}>
+        ⋯
+      </summary>
+      <div className="section-menu-list">{children}</div>
+    </details>
+  );
+}

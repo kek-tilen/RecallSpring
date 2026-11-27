@@ -6360,3 +6360,175 @@ details.c2c-version > summary {
     white-space: nowrap;
   }
 }
+
+/* Exams as drawn (UI direction, 2026-11-27): a read-only timeline (course colours, passed hollow, today dashed),
+   the list beside the selected exam's readiness. */
+.exam-timeline {
+  margin: 6px 0 14px;
+}
+
+.exam-timeline svg {
+  display: block;
+  overflow: visible;
+}
+
+.tl-axis-line {
+  stroke: var(--border);
+  stroke-width: 2;
+}
+
+.tl-tick {
+  stroke: var(--border-strong);
+  stroke-opacity: 0.5;
+}
+
+.tl-tick-label {
+  font-size: 10px;
+  fill: var(--muted);
+}
+
+.tl-today-line {
+  stroke: var(--tint-ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+
+.tl-today-label {
+  font-size: 10px;
+  fill: var(--tint-ink);
+}
+
+.tl-dot {
+  fill: var(--cc, var(--muted));
+}
+
+.tl-dot.hollow {
+  fill: var(--bg);
+  stroke: var(--cc, var(--muted));
+  stroke-width: 2.5;
+}
+
+.tl-name {
+  font-size: 11px;
+  fill: var(--ink);
+}
+
+.tl-name.past {
+  fill: var(--muted);
+}
+
+.exams-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.exams-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 4px 0 6px;
+}
+
+button.exams-label {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  margin-top: 16px;
+}
+
+.exam-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exam-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-top-color: var(--border);
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.exam-row.on {
+  background: var(--bg);
+  border-color: var(--tint-ink);
+  border-radius: 10px;
+}
+
+.exam-row:hover:not(.on) {
+  background: var(--surface);
+}
+
+.exam-row-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.exam-row-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.exam-row-name .small {
+  padding-left: 18px;
+}
+
+.exam-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.exam-detail-title {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.35rem;
+  margin: 2px 0 8px;
+}
+
+.exam-counts {
+  margin: 4px 0 10px;
+}
+
+.exam-weak-h {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin: 12px 0 4px;
+}
+
+.exam-why {
+  margin-top: 10px;
+}
+
+@media (max-width: 860px) {
+  .exams-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

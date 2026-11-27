@@ -270,7 +270,7 @@ export function ReadinessPage() {
                 </div>
                 <MaterialCard r={r} />
               </div>
-              <div style={{ marginTop: 20 }}>
+              <div style={{ marginTop: 20 }} id="why">
                 <WhyThisPlan targetId={t.id} />
               </div>
               <p className="tiny muted">{r.note}</p>

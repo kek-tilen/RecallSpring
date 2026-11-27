@@ -98,6 +98,20 @@ drop zone as in the library; notes as rows "Summary · 23 Nov" with Recently del
 **Results** (the Results views for this course: Simulations and Answers) and **Exams**. Older links
 (`?tab=notes`, `simulations`, `answers`) open the tab that holds them now.
 
+### Exams (2026-11-27)
+
+`Exams` (`/exams`): the serif heading with `+ Add exam` and a `⋯` menu for the calendar download (.ics, all courses or
+one semester). A timeline from two weeks back to about five weeks ahead (further when an exam is later, at most 12
+weeks): each exam a dot in its course's colour with "name · course" above it, passed and cancelled ones hollow with
+"name · passed", today a dashed line. The timeline only shows dates (its accessible name lists them); a date is
+changed on the exam itself with `Edit`. Below, **Coming up** (upcoming and failed exams, the selected one outlined,
+"Cell Biology · Sun 6 Dec · 10 days" and the time check `On track`, `Tight` or `At risk`) and **Behind you** (passed
+and cancelled, folded, "1 passed"). Beside it the selected exam (`?exam=`): course and days left, the serif name,
+`Edit` and `Full readiness`, the readiness bar with "2 not studied · 2 weak · 1 studied · 2 getting there · 1 solid",
+the time check and **Weakest first**: the weakest graded concepts (with the gap from their last feedback) then the
+ones not studied yet, each with where it is in the material and `Study in…`; then "Why this plan · not a prediction
+of your grade". Possible duplicates and Recently deleted exams stay on the page.
+
 ### Exams that are behind the learner (owner 2026-11-23)
 
 - Marking an exam **Passed** or **Cancelled** when its course is in focus and has no other exam coming up asks: "<course> is in focus until <date>. … End the focus now?" with `Keep until <date>` and `End focus`. Failed does not ask (a retake usually follows). Ending it is the same audited change as `End focus` on the course.

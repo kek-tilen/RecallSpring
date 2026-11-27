@@ -5,7 +5,7 @@ import { request } from "../api";
 import { CourseDot, GroupDialog, KIND_LABEL, NewInterestDialog, cc, isFocused, useInvalidateOrganisation } from "../components/organise";
 import { NewCourseDialog, RecentlyDeletedCourses } from "../components/CourseForms";
 import { StudyIn } from "../components/StudyIn";
-import { Async, Chevron, Confirm, Empty, ErrorNote, PageHead, StudyMeter } from "../components/ui";
+import { Async, Chevron, Confirm, Empty, ErrorNote, PageHead, SectionMenu, StudyMeter } from "../components/ui";
 import { dateLabel, plural } from "../format";
 import { useArchived, useCourseSummary, useGroups } from "../queries";
 import { ArchivedCourses } from "./Archived";
@@ -110,18 +110,6 @@ function CourseRows({ courses, label }: { courses: CourseSummary[]; label: strin
         <CourseRow key={c.id} c={c} />
       ))}
     </ul>
-  );
-}
-
-/** A small menu for the rarer actions of a section, so its heading stays one quiet line. */
-function SectionMenu({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <details className="section-menu">
-      <summary aria-label={label} title={label}>
-        ⋯
-      </summary>
-      <div className="section-menu-list">{children}</div>
-    </details>
   );
 }
 
