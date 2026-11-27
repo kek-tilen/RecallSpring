@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ASSISTANTS } from "../assistant";
 import { useAssistants, useSession } from "../queries";
-import type { AssistantKey, AssistantsStatus } from "../types";
+import type { AssistantKey, AssistantsStatus, WaitingAnswers } from "../types";
 
 /**
  * "Study in…" on a course card (ADR-012 §3), and "Go through today's plan in…" on Home (2026-11-26): the same
@@ -37,6 +37,19 @@ export function reviewMessage(course: { id: string; title: string }, review: Rev
 }
 
 /** Home's "Go through today's plan in…": the assistant plans today across all courses (no course_id). */
+/** Grade my answers in… (2026-11-27): the saved answers that wait for a grade, so the assistant grades them in one go. */
+export function gradeMessage(w: WaitingAnswers): string {
+  const listed = w.items.slice(0, 20).map(
+    (i) => `- ${i.course_title}: question_id ${i.question_id}, attempt_id ${i.attempt_id}${i.unsure ? " (marked unsure)" : ""}`,
+  );
+  const more = w.total > listed.length ? `\n…and ${w.total - listed.length} more (get_answers_to_grade lists them all).` : "";
+  const n = w.total === 1 ? "1 saved answer waits" : `${w.total} saved answers wait`;
+  return (
+    `Please grade my answers in RecallSpring: ${n} for a grade. For each, read it (get_attempt or get_answer) and grade ` +
+    `it by the grading scale with record_assessment or record_assessments.\n${listed.join("\n")}${more}`
+  );
+}
+
 export const PLAN_MESSAGE = "Let's go through today's plan in RecallSpring: all my courses, and how to split my time today.";
 
 async function copy(text: string) {
@@ -83,11 +96,14 @@ export function StudyIn({
   course,
   review,
   ask,
+  quiet,
 }: {
   course?: { id: string; title: string };
   review?: ReviewOf;
   /** any other start message for the course, e.g. "Similar, new questions" for a simulation (2026-11-26) */
   ask?: { label: string; message: string };
+  /** a secondary button, when another action on the same row is the main one (Review now) */
+  quiet?: boolean;
 }) {
   const navigate = useNavigate();
   const status = useAssistants();
@@ -151,13 +167,13 @@ export function StudyIn({
       {/* Always a choice, never a default launch (owner 2026-11-23); the last one used is only marked. */}
       <button
         type="button"
-        className={course && !ask && review?.due !== false ? "btn small primary" : "btn small"}
+        className={course && !ask && !quiet && review?.due !== false ? "btn small primary" : "btn small"}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={ask ? `${label} in` : review && course ? `${label} ${review.concept?.term ?? course.title} in` : undefined}
         onClick={() => setOpen(!open)}
       >
-        {course ? `${label} in…` : "Go through today's plan in…"}
+        {course || ask ? `${label} in…` : "Go through today's plan in…"}
       </button>
       {open && (
         <div

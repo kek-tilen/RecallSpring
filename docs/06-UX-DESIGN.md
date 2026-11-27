@@ -62,8 +62,13 @@ Review says how many concepts are due ("8 due"; the Review tab and Today show th
 course: its colour, "2 overdue · 4 today", `Review in…`, and its concepts folded below with `Snooze`. Beside them,
 **Next 14 days** shows reviews per day as quiet bars (today highlighted) and lists what comes next. When answering on a
 phone, `Unsure` and `I don't know` stay side by side; choosing `I don't know` after writing asks before the text is
-dropped. Answering in the app (`Review now`) and grading the saved answers in one go (`Grade my answers in…`, "N
-answers waiting for a grade") follow once the server lists saved answers that wait for a grade.
+dropped. `Review now` (beside `Review in…`, which becomes the secondary button) answers the course's due concepts
+here, from memory: one saved question per concept (the least recently answered), `2 of 7` with a thin progress line
+and `End review`. Concepts without a saved open question are named at the end with `Review in…`, where the assistant
+asks new ones. The end shows **Review done**: what was saved (`Saved`, `Saved · unsure`, `I don't know`) and
+"N answers waiting for a grade" with `Grade my answers in…` (the Study in… menu, with one message listing the
+answers). The same block shows on Review and on Today while answers wait; until they are graded their next review
+date stays open.
 
 ### Exams that are behind the learner (owner 2026-11-23)
 

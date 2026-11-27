@@ -226,10 +226,17 @@ function useAnswerClock(questionId: string): { clock: AnswerClock; saved: () => 
   return { clock, saved };
 }
 
-function AnswerForm({ q, sessionId, onSaved }: {
+/** Review now (2026-11-27): the answer form inside a review in the app; after saving, the review moves on. */
+export function ReviewAnswer({ questionId, onSaved }: { questionId: string; onSaved: (kind: AnswerKind, unsure: boolean) => void }) {
+  const question = useQuery({ queryKey: ["questions", questionId], queryFn: () => get<QuestionView>(`/questions/${questionId}`) });
+  return <Async q={question}>{(q) => <AnswerForm key={q.id} q={q} sessionId={null} inReview={onSaved} />}</Async>;
+}
+
+function AnswerForm({ q, sessionId, onSaved, inReview }: {
   q: QuestionView;
   sessionId: string | null;
   onSaved?: (kind: AnswerKind, photoIds: string[], unsure: boolean) => void;
+  inReview?: (kind: AnswerKind, unsure: boolean) => void;
 }) {
   const qc = useQueryClient();
   const [draft, setText, clearDraft] = useDraft(`rs-answer-draft:${q.id}`);
@@ -273,10 +280,14 @@ function AnswerForm({ q, sessionId, onSaved }: {
       setSaved(s);
       void qc.invalidateQueries({ queryKey: keys.dashboard });
       void qc.invalidateQueries({ queryKey: ["questions", q.id] });
+      void qc.invalidateQueries({ queryKey: keys.reviews });
+      void qc.invalidateQueries({ queryKey: ["answers", "waiting"] });
       onSaved?.(kind, sentPhotos, kind === "answer" && markedUnsure);
+      inReview?.(kind, kind === "answer" && markedUnsure);
     },
   });
 
+  if (saved && inReview) return null;
   if (saved && onSaved) {
     return (
       <div className="stack chat-form-saved" style={{ gap: 8 }}>
@@ -335,7 +346,7 @@ function AnswerForm({ q, sessionId, onSaved }: {
         <p id="answer-prompt" className="pre" style={{ margin: 0, fontWeight: 600 }}>
           <MathText text={q.prompt} />
         </p>
-        {q.rubric && (
+        {q.rubric && !inReview && (
           <p className="notice small" style={{ margin: 0 }}>
             You already answered this question once. A new answer is saved as another attempt.
           </p>

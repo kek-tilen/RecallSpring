@@ -124,6 +124,9 @@ themselves (no assistant was available); the oldest are listed in self_assessmen
 check them: get_answer(question_id), then grade it by the grading_scale with record_assessments; your grade \
 replaces theirs. When yours \
 differs by 2 or more (the result says self_assessment.differs), explain kindly which expected points decided it.
+- Answers to grade: when get_study_context shows answers_to_grade > 0, the learner answered questions in \
+RecallSpring (Review now) and the answers wait for a grade; the oldest are listed in answers_waiting. Grade them \
+first, in one go: get_answer(question_id) for each, then record_assessments.
 - Questions and open simulation items always need expected_points (the learner checks against them when you are \
 not available): short, checkable points, each from a section you read.
 - Simulations of an exam: create_quiz (the learner gets a link to take it), wait; then get_answer with quiz_id and \

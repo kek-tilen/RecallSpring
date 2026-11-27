@@ -85,7 +85,18 @@ from ..schemas import (
     TargetUpdateIn,
     WebSourceIn,
 )
-from ..services import assistants, bloom, check_first, explanation_pace, focus, overview, readiness, relearn, week
+from ..services import (
+    assistants,
+    bloom,
+    check_first,
+    explanation_pace,
+    focus,
+    overview,
+    readiness,
+    relearn,
+    review_now,
+    week,
+)
 from ..services import attempts as attempt_svc
 from ..services import explanations as explanation_svc
 from ..services import folders as folder_svc
@@ -807,6 +818,22 @@ def self_assessments_to_check(
     }
 
 
+@router.get("/answers-to-grade")
+def answers_to_grade(
+    course_id: uuid.UUID | None = None, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Saved answers that still wait for a grade, oldest first (at most 50; total counts all). Grade each: get_attempt,
+    then record_assessment (or record_assessments for several). A self_grade is the learner's own provisional grade."""
+    if course_id is not None:
+        owned(db, Course, course_id, ctx.user.id)
+    out = review_now.waiting_answers(db, ctx.user, course_id)
+    out["how_to_grade"] = (
+        "For each: get_attempt(attempt_id), grade it by the grading_scale with record_assessment (or several with "
+        "record_assessments), citing only sections you read. Answers marked unsure: offer a short explanation."
+    )
+    return out
+
+
 @router.get("/courses/{course_id}/context")
 def course_context(
     course_id: uuid.UUID, ctx: Ctx = Depends(connector_ctx), db: Session = Depends(get_db)
@@ -830,6 +857,10 @@ def course_context(
     view["self_assessments_to_check"] = len(to_check)
     # The oldest few, so an assistant can offer to check them right away (get_answer / get_attempt, then grade).
     view["self_assessments"] = to_check[:10]
+    # Answers saved in the app (Review now) that wait for a grade (2026-11-27): offer to grade them first.
+    waiting = review_now.waiting_answers(db, ctx.user, course.id, limit=10)
+    view["answers_to_grade"] = waiting["total"]
+    view["answers_waiting"] = waiting["items"]
     return view
 
 

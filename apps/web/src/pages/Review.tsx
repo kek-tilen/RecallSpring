@@ -8,6 +8,7 @@ import { courseTitles, keys, useCourses, useReviews } from "../queries";
 import type { CourseColor, ReviewItem } from "../types";
 import { CourseDot } from "../components/organise";
 import { StudyIn } from "../components/StudyIn";
+import { WaitingForGrade } from "../components/WaitingForGrade";
 
 function Row({ item, course }: { item: ReviewItem; course: string }) {
   const qc = useQueryClient();
@@ -110,7 +111,12 @@ function DueNow({ due, titles, colors }: { due: Map<string, ReviewItem[]>; title
                   <span className="review-course-name">{title}</span>
                   <span className="muted small review-course-count">{dueWords(list)}</span>
                 </div>
-                <StudyIn course={{ id: courseId, title }} review={{}} />
+                <div className="review-course-actions">
+                  <Link to={`/review/now/${courseId}`} className="btn small primary">
+                    Review now
+                  </Link>
+                  <StudyIn course={{ id: courseId, title }} review={{}} quiet />
+                </div>
                 <details className="review-fold">
                   <summary className="small muted">{plural(list.length, "concept")}</summary>
                   <ul className="list review-concepts">
@@ -124,7 +130,10 @@ function DueNow({ due, titles, colors }: { due: Map<string, ReviewItem[]>; title
           })}
         </ul>
       )}
-      <p className="tiny muted">Your assistant asks one question from memory per concept and grades it; RecallSpring then sets the next date.</p>
+      <p className="tiny muted">
+        Review now asks the questions you saved before, here, from memory; Review in… has your assistant ask new ones. The
+        next date follows the grade.
+      </p>
     </section>
   );
 }
@@ -167,6 +176,7 @@ export function ReviewPage() {
                         ))}
                       </ul>
                     )}
+                    <WaitingForGrade />
                   </section>
                 </div>
               )}

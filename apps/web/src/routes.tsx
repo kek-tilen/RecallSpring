@@ -20,6 +20,7 @@ import { LoginPage } from "./pages/Login";
 import { NotePage, NotesPage } from "./pages/Notes";
 import { ReadinessPage } from "./pages/Readiness";
 import { ReviewPage } from "./pages/Review";
+import { ReviewRunPage } from "./pages/ReviewRun";
 import { SettingsPage } from "./pages/Settings";
 import { SimulationPage, SimulationsPage } from "./pages/Simulations";
 import { WeekPage } from "./pages/Week";
@@ -68,6 +69,7 @@ export const router = createBrowserRouter([
           { path: "week", element: <WeekPage /> },
           { path: "concepts/:conceptId", element: <ConceptPage /> },
           { path: "review", element: <ReviewPage /> },
+          { path: "review/now/:courseId", element: <ReviewRunPage /> },
           { path: "simulations", element: <SimulationsPage /> },
           { path: "simulations/:quizId", element: <SimulationPage /> },
           { path: "library", element: <LibraryPage /> },

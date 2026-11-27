@@ -12,10 +12,11 @@ from ..db import get_db
 from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_seen, write_ctx
 from ..errors import ApiError
 from ..learning.scheduler import local_day_start
-from ..models import Concept, ReviewDeferral, ReviewState
+from ..models import Concept, Course, ReviewDeferral, ReviewState
 from ..schemas import DeferIn, ReviewItemOut, ReviewQueueOut
 from ..services.events import audit, learning_event
 from ..services.ownership import owned
+from ..services.review_now import questions_for_review, waiting_answers
 from ..services.reviews import recompute, review_queue
 
 router = APIRouter(tags=["reviews"])
@@ -46,6 +47,26 @@ def due_reviews(
     now = clock.now()
     rows = review_queue(db, ctx.user, now, horizon_days)
     return ReviewQueueOut(items=[_item(s, c, now) for s, c in rows], generated_at=now)
+
+
+@router.get("/reviews/questions")
+def review_questions(
+    course_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
+) -> dict[str, object]:
+    """Review now (2026-11-27): one open question per concept of the course that is due now, to answer from memory
+    in the app; concepts without an open question are listed apart."""
+    course = owned(db, Course, course_id, ctx.user.id)
+    return questions_for_review(db, ctx.user, course, clock.now())
+
+
+@router.get("/answers/waiting")
+def answers_waiting(
+    course_id: uuid.UUID | None = None, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)
+) -> dict[str, object]:
+    """Saved answers that still wait for a grade, oldest first (Grade my answers in…, 2026-11-27)."""
+    if course_id is not None:
+        owned(db, Course, course_id, ctx.user.id)
+    return waiting_answers(db, ctx.user, course_id)
 
 
 @router.post("/reviews/{concept_id}/defer", response_model=ReviewItemOut)

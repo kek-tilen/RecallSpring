@@ -166,6 +166,9 @@ Start of every study session in a course:
    themselves against the expected points while no assistant was available. Offer to check them:
    get_self_assessments_to_check, then get_attempt and record_assessment for each; your grade replaces theirs.
    When it differs by 2 or more (self_assessment.differs in the result), explain which expected points decided it.
+   Answers to grade: when get_study_context shows answers_to_grade > 0 (or the learner asks you to grade their
+   answers), the learner answered in RecallSpring (Review now) and the answers wait for a grade. Grade them in one
+   go: get_answers_to_grade, then get_attempt and record_assessment (or record_assessments) for each.
    Every question and open simulation item needs expected_points: short, checkable, each from a section you read.
    RETAKES: when a simulation is graded, offer once: retake every question, retake only the questions without full
    points (retake_quiz with scope "not_full", then open_quiz), or similar, new questions (a new create_quiz on the
@@ -774,6 +777,14 @@ async def get_self_assessments_to_check(course_id: str | None = None) -> str:
     oldest first, optionally in one course. Check each: get_attempt(attempt_id), then record_assessment by the
     grading_scale. Your grade becomes the one the review schedule uses; theirs stays in the history."""
     return as_json(await get_client().get("/self-assessments", course_id=course_id))
+
+
+@mcp.tool(annotations=READ)
+async def get_answers_to_grade(course_id: str | None = None) -> str:
+    """Saved answers that still wait for a grade (the learner answered in RecallSpring, e.g. Review now), oldest
+    first, optionally in one course; total counts all. Grade each: get_attempt(attempt_id), then record_assessment
+    (or record_assessments) by the grading_scale. unsure means the learner marked the answer as unsure."""
+    return as_json(await get_client().get("/answers-to-grade", course_id=course_id))
 
 
 @mcp.tool(annotations=READ)

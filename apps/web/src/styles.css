@@ -5567,3 +5567,92 @@ details.c2c-version > summary {
     margin-left: 0;
   }
 }
+
+/* Review now and Grade my answers in… (UI direction, 2026-11-27) */
+.review-course-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.waiting {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+}
+
+.waiting p {
+  margin: 0 0 6px;
+}
+
+.waiting-title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.review-run {
+  max-width: 760px;
+}
+
+.review-run-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.review-run-top a {
+  text-decoration: none;
+}
+
+.review-progress {
+  display: flex;
+  gap: 4px;
+  margin: 10px 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.review-progress li {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.review-progress li.done {
+  background: var(--primary);
+}
+
+.review-progress li.now {
+  background: var(--border-strong);
+}
+
+.review-run-what {
+  margin: 0 0 8px;
+}
+
+.review-done {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.review-done li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.review-run-without {
+  margin-top: 16px;
+}

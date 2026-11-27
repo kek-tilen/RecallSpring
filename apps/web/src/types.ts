@@ -829,6 +829,31 @@ export interface NoteRevision {
   saved_at: string;
 }
 
+/** Review now (2026-11-27): one saved open question per due concept of a course. */
+export interface ReviewQuestions {
+  course_id: string;
+  items: { concept_id: string; term: string; question_id: string; bloom_level: number }[];
+  without_question: { concept_id: string; term: string }[];
+}
+
+export interface WaitingAnswer {
+  attempt_id: string;
+  question_id: string;
+  course_id: string;
+  course_title: string;
+  quiz_id: string | null;
+  prompt: string;
+  unsure: boolean;
+  submitted_at: string;
+  self_grade: number | null;
+}
+
+/** Saved answers that still wait for a grade, oldest first (at most 50 listed; total counts all). */
+export interface WaitingAnswers {
+  items: WaitingAnswer[];
+  total: number;
+}
+
 export interface ReviewItem {
   concept_id: string;
   course_id: string;

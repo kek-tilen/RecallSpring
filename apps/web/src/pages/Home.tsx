@@ -4,6 +4,7 @@ import { useAssistant, type AssistantWords } from "../assistant";
 import { EventList } from "./History";
 import { StudyIn } from "../components/StudyIn";
 import { Upload } from "../components/Upload";
+import { WaitingForGrade } from "../components/WaitingForGrade";
 import { Async, Card, Empty, StudyChip } from "../components/ui";
 import { longToday, nextDays, plural, shortDay } from "../format";
 import { useCourses, useDashboard, useDueCount, useFocusSummary, useSession } from "../queries";
@@ -506,6 +507,7 @@ export function HomePage() {
                     </p>
                   )}
                   {started && next && <NextStep item={next} a={a} />}
+                  {started && <WaitingForGrade />}
                   {started && <TodayPlan items={d.plan.items.slice(0, 5)} />}
                 </header>
                 {started && <WeekPanel d={d} focus={focus.data} />}

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { get } from "./api";
-import type { ArchivedView, AssistantsStatus, BackupStatus, ChatImport, ChatImportSummary, ConceptDetail, ConnectorSettings, Course, CourseOverview, CourseSummary, Dashboard, DeletedTarget, ExamReadiness, FocusSummary, Folder, Group, HistoryRow, Note, PlanRationale, QuizSummary, ReviewItem, QuizView, SessionInfo, Source, StudyPreferences, StudySettings, TimelineTarget, UploadLimits, WeekReview } from "./types";
+import type { ArchivedView, AssistantsStatus, BackupStatus, ChatImport, ChatImportSummary, ConceptDetail, ConnectorSettings, Course, CourseOverview, CourseSummary, Dashboard, DeletedTarget, ExamReadiness, FocusSummary, Folder, Group, HistoryRow, Note, PlanRationale, QuizSummary, ReviewItem, WaitingAnswers, QuizView, SessionInfo, Source, StudyPreferences, StudySettings, TimelineTarget, UploadLimits, WeekReview } from "./types";
 
 export const keys = {
   session: ["session"] as const,
@@ -19,6 +19,7 @@ export const keys = {
   groups: ["groups"] as const,
   targets: ["targets"] as const,
   reviews: ["reviews"] as const,
+  waiting: (courseId?: string) => ["answers", "waiting", courseId ?? "all"] as const,
   studySettings: ["settings", "study"] as const,
   connector: ["settings", "connector"] as const,
   // Under connector, so creating or revoking a token refreshes it too.
@@ -49,6 +50,12 @@ export const useDashboard = () => useQuery({ queryKey: keys.dashboard, queryFn: 
 /** Due and upcoming reviews (14 days): the Review page, and the due count on the Review tab and on Today. */
 export const useReviews = () =>
   useQuery({ queryKey: keys.reviews, queryFn: () => get<{ items: ReviewItem[]; note: string }>("/reviews/due", { horizon_days: 14 }) });
+/** Saved answers waiting for a grade (Grade my answers in…, 2026-11-27). */
+export const useWaitingAnswers = (courseId?: string) =>
+  useQuery({
+    queryKey: keys.waiting(courseId),
+    queryFn: () => get<WaitingAnswers>("/answers/waiting", courseId ? { course_id: courseId } : undefined),
+  });
 /** How many reviews are due now: the same number the Review page shows (today's plan may hold fewer). */
 export const useDueCount = () => useReviews().data?.items.filter((i) => i.is_due).length ?? 0;
 export const useCourses = () => useQuery({ queryKey: keys.courses, queryFn: () => get<Course[]>("/courses"), staleTime: 60_000 });
