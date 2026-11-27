@@ -37,7 +37,7 @@ def _item(
 def recently_deleted(db: Session, user: User) -> dict[str, Any]:
     since = clock.now() - timedelta(days=RESTORE_DAYS)
     gone = set(db.scalars(select(Course.id).where(Course.user_id == user.id, Course.deleted_at.is_not(None))))
-    titles = dict(db.execute(select(Course.id, Course.title).where(Course.user_id == user.id)).tuples().all())
+    titles = {cid: name for cid, name in db.execute(select(Course.id, Course.title).where(Course.user_id == user.id))}
     items: list[dict[str, Any]] = []
 
     def brought(model: Any, course: Course) -> int:
