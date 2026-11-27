@@ -857,6 +857,56 @@ class Export(Base):
     )
 
 
+class DriveConnection(Base):
+    """A learner's own Google Drive (BYOS step 2, migration 0040, 2026-11-27): a readable copy of their material in
+    My Drive › RecallSpring. The refresh token is in secrets_dir (drive-<user id>.bin), never here."""
+
+    __tablename__ = "drive_connections"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(20), nullable=False, server_default="google", default="google")
+    root_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    mirror: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"), default=True)
+    exports: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
+    # Material uploaded from this moment on is copied; NULL = everything (after "Copy what is already here").
+    copy_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    state: Mapped[str] = mapped_column(String(20), nullable=False, server_default="ok", default="ok")
+    progress: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    error: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    failures: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    failing_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_try_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    free_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    connected_at: Mapped[datetime] = _created()
+
+    __table_args__ = (
+        CheckConstraint("provider IN ('google')", name="provider"),
+        CheckConstraint("state IN ('ok','copying','failing','revoked')", name="state"),
+    )
+
+
+class DriveItem(Base):
+    """What RecallSpring made in the learner's Drive and for what: the root, a course's folder, one of the learner's
+    folders, the Exports folder, a copied source or an export (migration 0040). Copying is one way."""
+
+    __tablename__ = "drive_items"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    local_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    local_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    drive_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    byte_size: Mapped[int | None] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = _created()
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "local_kind", "local_id", name="uq_drive_items_local"),
+        CheckConstraint("local_kind IN ('course','source_folder','exports','source','export')", name="local_kind"),
+    )
+
+
 # --------------------------------------------------------------------------- Claude connector (Mode A)
 
 
