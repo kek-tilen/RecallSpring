@@ -233,6 +233,19 @@ describe("ChatGPT using RecallSpring in Chat", () => {
     expect(whileWriting(`${text}}\n\`\`\`\nAfter.`)).toContain("After.");
   });
 
+  it("is laid out as drawn: New chat and Ghost chat, the material on the right, Ask about the course", async () => {
+    const material = [{ id: "s1", course_id: "k1", filename: "Lecture 2.pdf", kind: "pdf", category: "material", has_text: true }];
+    routeFetch([], { ...CONV, material } as typeof CONV);
+    show();
+    expect((await screen.findByText("Material: Lecture 2.pdf")).className).toContain("chat-material-chip");
+    expect(await screen.findByPlaceholderText("Ask about Biology 101…")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Quiz me/ }).getAttribute("aria-current")).toBe("true");
+    expect(screen.getByRole("button", { name: "New chat" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Ghost chat" }));
+    expect(await screen.findByRole("heading", { name: /New ghost chat/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Ghost" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("uploads a file from the composer into the library and this conversation", async () => {
     // jsdom has no modal dialogs: open and close them as attributes.
     Object.assign(HTMLDialogElement.prototype, {

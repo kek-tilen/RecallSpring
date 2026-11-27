@@ -640,12 +640,14 @@ function ConversationSide({
   currentId,
   onPick,
   onNew,
+  onNewGhost,
   canSend,
 }: {
   list: ConversationList;
   currentId: string | null;
   onPick: (id: string) => void;
   onNew: () => void;
+  onNewGhost: () => void;
   canSend: boolean;
 }) {
   const qc = useQueryClient();
@@ -685,9 +687,10 @@ function ConversationSide({
         className={c.id === currentId ? "chat-item active" : "chat-item"}
         aria-current={c.id === currentId ? "true" : undefined}
         onClick={() => onPick(c.id)}
+        title={`${dateTime(c.updated_at)} · ${plural(c.replies, "reply", "replies")}`}
       >
         <span className="chat-item-title">{c.title}</span>
-        <span className="tiny muted">
+        <span className={where ? "tiny muted" : "sr-only"}>
           {where ? `${where} · ` : ""}
           {dateTime(c.updated_at)} · {plural(c.replies, "reply", "replies")}
         </span>
@@ -755,7 +758,7 @@ function ConversationSide({
       <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
         {canSend && (
           <button type="button" className="btn primary" style={{ flex: 1 }} onClick={onNew}>
-            New conversation
+            New chat
           </button>
         )}
         <button
@@ -768,6 +771,11 @@ function ConversationSide({
           <NewFolderIcon />
         </button>
       </div>
+      {canSend && (
+        <button type="button" className="btn chat-new-ghost" onClick={onNewGhost}>
+          Ghost chat
+        </button>
+      )}
       {list.conversations.length > 4 && (
         <label className="field">
           <span className="sr-only">Search conversations</span>
@@ -790,7 +798,7 @@ function ConversationSide({
           )}
           {loose.length > 0 && (
             <>
-              {folders.length > 0 && <div className="tiny muted chat-loose-label">No folder</div>}
+              {folders.length > 0 && <div className="chat-loose-label">Unfiled</div>}
               <ul className="chat-convs" aria-label={folders.length > 0 ? "Conversations without a folder" : "Conversations"}>
                 {loose.map((c) => item(c))}
               </ul>
@@ -875,7 +883,7 @@ function TitleBar({ conv, busy, folders }: { conv: Conversation; busy: boolean; 
         </form>
       ) : (
         <>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: "1 1 240px" }}>
             <h2 className="chat-title">{conv.title}</h2>
             {folder && (
               <span className="tiny chat-in-folder">
@@ -897,6 +905,11 @@ function TitleBar({ conv, busy, folders }: { conv: Conversation; busy: boolean; 
             )}
           </div>
           <span className="row" style={{ gap: 4 }}>
+            {conv.material.length > 0 && (
+              <span className="chip chat-material-chip" title={conv.material.map((f) => f.filename).join(", ")}>
+                Material: {conv.material.length === 1 ? conv.material[0]!.filename : plural(conv.material.length, "file")}
+              </span>
+            )}
             <button
               type="button"
               className="btn small ghost"
@@ -1494,7 +1507,7 @@ export function ChatPage() {
           {sideOpen ? "Hide conversations" : `Conversations (${list.data?.conversations.length ?? 0})`}
         </button>
         <div style={{ minWidth: 0 }} className="chat-top-text">
-          <h1>Chat</h1>
+          <h1 className="sr-only">Chat</h1>
           <p className="tiny muted" style={{ margin: 0 }}>
             ChatGPT on your own plan{s?.connected && s.email ? ` (${s.email})` : ""}. Conversations are saved here, ghost chats
             are not · <Link to="/settings#chatgpt">Sign-in and privacy</Link>
@@ -1545,6 +1558,15 @@ export function ChatPage() {
                 setGhostOn(false);
                 navigate("/chat/new");
               }}
+              onNewGhost={() => {
+                if (!leaveGhost()) return;
+                setSideOpen(false);
+                setDraft([]);
+                send.reset();
+                ghostSend.reset();
+                setGhostOn(true);
+                navigate("/chat/new");
+              }}
               canSend={canSend}
             />
           ) : list.error ? (
@@ -1579,7 +1601,7 @@ export function ChatPage() {
             </div>
           ) : (
             <div className="chat-head">
-              <h2 className="chat-title">{ghostOn ? "New ghost chat" : "New conversation"}</h2>
+              <h2 className="chat-title">{ghostOn ? "New ghost chat" : "New chat"}</h2>
               <span className="row" style={{ gap: 10 }}>
                 <label className="chat-study small">
                   <span className="sr-only">What this chat is for</span>
@@ -1677,10 +1699,12 @@ export function ChatPage() {
                   : ghostActive
                     ? "Write a message (not saved)"
                     : current
-                      ? "Write a message"
+                      ? current.course
+                        ? `Ask about ${current.course.title}…`
+                        : "Write a message"
                       : newCourse
-                        ? "Write e.g. “Start studying”"
-                        : "Start a new conversation"
+                        ? `Ask about ${(courses.data ?? []).find((c) => c.id === newCourse)?.title ?? "this course"}…`
+                        : "Start a new chat"
               }
             />
           </div>

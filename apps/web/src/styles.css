@@ -5941,3 +5941,90 @@ details.c2c-version > summary {
 .results-detail .results-h {
   font-size: 1.6rem;
 }
+
+/* Chat as drawn (UI direction, 2026-11-27): no card around it; the list sits left of a hairline, the open chat
+   on tint, the title in serif with its material on the right, your messages in a grey bubble, a plain composer. */
+.chat-layout {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.chat-side {
+  background: none;
+  padding: 4px 12px 12px 0;
+}
+
+.chat-new-ghost {
+  width: 100%;
+  justify-content: center;
+}
+
+.chat-item {
+  padding: 6px 8px;
+  border: 0;
+}
+
+.chat-item-title {
+  font-weight: 400;
+}
+
+.chat-item.active {
+  background: var(--tint);
+  color: var(--tint-ink);
+  border-color: transparent;
+}
+
+.chat-loose-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding: 6px 8px 2px;
+}
+
+.chat-main .chat-head {
+  border-bottom: 0;
+  padding: 4px 20px 8px;
+}
+
+.chat-title {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.2rem;
+}
+
+.chat-material-chip {
+  background: var(--tint);
+  color: var(--tint-ink);
+  border-color: transparent;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-msg.you .chat-bubble {
+  background: var(--surface);
+  border: 0;
+  border-radius: 12px;
+  max-width: 75%;
+}
+
+.chat-composer {
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: none;
+}
+
+.chat-composer:focus-within {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+}
+
+@media (max-width: 860px) {
+  .chat-side {
+    background: var(--bg);
+    padding: 12px;
+  }
+}
