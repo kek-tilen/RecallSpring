@@ -5902,3 +5902,42 @@ details.c2c-version > summary {
 .results-detail .results-h {
   font-size: 1.4rem;
 }
+
+/* Simulation list as drawn: a plain title, "23 Nov · 2 versions", the score in serif; hairlines between rows, the
+   picked one outlined in sage (2026-11-27). */
+.results-list > li + li {
+  border-top: 1px solid var(--border);
+}
+
+.results-list button.results-row {
+  padding: 12px 14px;
+  border-radius: 12px;
+}
+
+.results-list button.results-row.on {
+  border-color: var(--primary);
+  background: var(--surface-elevated);
+}
+
+.results-list button.results-row:not(.on):hover {
+  background: var(--surface);
+}
+
+.results-row-title {
+  font-weight: 500;
+  font-size: 1.05rem;
+}
+
+.results-row-title .course-dot {
+  width: 10px;
+  height: 10px;
+  margin-right: 4px;
+}
+
+.results-row .results-score {
+  font-size: 1.35rem;
+}
+
+.results-detail .results-h {
+  font-size: 1.6rem;
+}

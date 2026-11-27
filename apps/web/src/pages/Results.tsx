@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { get, request } from "../api";
 import { CourseDot } from "../components/organise";
 import { Async, Empty, ErrorNote, GradeChip, PageHead } from "../components/ui";
-import { GRADE_LABEL, dateLabel, gradeLabel, plural } from "../format";
+import { GRADE_LABEL, dateLabel, gradeLabel, plural, shortDay } from "../format";
 import { courseTitles, useCourses, useQuiz, useQuizzes } from "../queries";
 import type { AttemptRow, CourseColor, QuizComparison, QuizSummary } from "../types";
 import { AnswerDetail } from "./Course";
@@ -38,7 +38,8 @@ function score(q: QuizSummary): string {
 }
 
 function familyNote(f: Family): string {
-  const parts = [dateLabel(f.first.created_at)];
+  // "23 Nov": the course shows as its colour; its name is read out (UI direction, 2026-11-27)
+  const parts = [shortDay(f.first.created_at).replace(/^\S+ /, "")];
   if (f.versions.length > 1) parts.push(plural(f.versions.length, "version"));
   if (f.first.mode === "diagnostic") parts.push("check first");
   if (f.first.status === "open") parts.push("not submitted");
@@ -118,7 +119,7 @@ function FamilyRow({ f, color, course, on, pick }: { f: Family; color: CourseCol
           <CourseDot color={color} /> {f.first.title}
         </span>
         <span className="muted small">
-          {course ? `${course} · ` : ""}
+          {course && <span className="sr-only">{course}, </span>}
           {familyNote(f)}
         </span>
       </span>

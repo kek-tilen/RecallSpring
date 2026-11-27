@@ -72,7 +72,7 @@ date stays open.
 
 ### Results (2026-11-27)
 Results answers "How did I answer?" in two views (`Simulations · Answers`). **Simulations** lists each simulation once,
-with its retakes folded in (course colour, date, "2 versions", "check first" for a diagnostic, and the first version's
+with its retakes folded in (course colour, "23 Nov · 2 versions", "check first" for a diagnostic, and the first version's
 points as the benchmark). The picked one shows beside the list: its versions side by side per question with their
 grades as small chips ("Partial 2"), one line on what the newest version is, `Retake without full points` and
 `Open answers` (the newest version). On phones the list opens a simulation directly, each
