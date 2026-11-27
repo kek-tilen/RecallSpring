@@ -826,6 +826,37 @@ class Job(Base):
     )
 
 
+class Export(Base):
+    """One learner's export of their own material, notes and answers as plain files (migration 0039, 2026-11-27).
+    Built by the worker into a ZIP under storage_dir/exports/<user id>/ and deleted after ``expires_at``."""
+
+    __tablename__ = "exports"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    state: Mapped[str] = mapped_column(String(20), nullable=False, server_default="queued", default="queued")
+    # {"course_ids": [...] | null, "material": bool, "notes": bool, "answers": bool}
+    options: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    destination: Mapped[str] = mapped_column(String(20), nullable=False, server_default="download", default="download")
+    progress: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
+    )
+    counts: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
+    )
+    byte_size: Mapped[int | None] = mapped_column(BigInteger)
+    error: Mapped[str | None] = mapped_column(String(80))
+    created_at: Mapped[datetime] = _created()
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    downloaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("state IN ('queued','running','ready','failed','cancelled','expired')", name="state"),
+        CheckConstraint("destination IN ('download','drive')", name="destination"),
+    )
+
+
 # --------------------------------------------------------------------------- Claude connector (Mode A)
 
 
