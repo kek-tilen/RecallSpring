@@ -2,130 +2,140 @@
   <img src="assets/brand/recallspring-symbol-1024.png" alt="RecallSpring" width="112" height="112" />
 </p>
 
-<h3 align="center">RecallSpring</h3>
+<h1 align="center">RecallSpring</h1>
 
 <p align="center">
-    Open-source study app that plans your reviews and tracks what you have learned.
-    <br />
-    <br />
-    <a href="#introduction"><strong>Introduction</strong></a> ·
-    <a href="#features"><strong>Features</strong></a> ·
-    <a href="#assistants"><strong>Assistants</strong></a> ·
-    <a href="#tech-stack"><strong>Tech Stack</strong></a> ·
-    <a href="#self-hosting"><strong>Self-hosting</strong></a> ·
-    <a href="#contributing"><strong>Contributing</strong></a>
+  <strong>A self-hosted study app for students: your own AI tutors you, RecallSpring remembers what you learned
+  and schedules your reviews up to the exam.</strong>
+  <br />
+  Works with Claude, Codex, Google Antigravity and ChatGPT. Free and open source.
+  <br />
+  <br />
+  <a href="#why-recallspring"><strong>Why</strong></a> ·
+  <a href="#how-it-works"><strong>How it works</strong></a> ·
+  <a href="#features"><strong>Features</strong></a> ·
+  <a href="#get-started"><strong>Get started</strong></a> ·
+  <a href="#contributing"><strong>Contributing</strong></a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-0f766e?style=flat" alt="License: AGPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/self--hosted-your%20data%2C%20your%20choice-0f766e?style=flat" alt="Self-hosted" />
+  <img src="https://img.shields.io/badge/self--hosted-your%20data%2C%20your%20computer-0f766e?style=flat" alt="Self-hosted" />
+  <img src="https://img.shields.io/badge/AI-bring%20your%20own-0f766e?style=flat" alt="Bring your own AI" />
   <img src="https://img.shields.io/badge/status-early%20development-f0a000?style=flat" alt="Status: early development" />
 </p>
 
-<br/>
-
 <p align="center">
-  <img src="assets/screenshots/home.png" alt="RecallSpring's home page: the next step with one button, this week at a glance, and today's plan and exams in detail" width="100%" />
+  <img src="assets/screenshots/today.png" alt="Today: the next step with one button, this week at a glance, and today's plan with the midterm exam coming up" width="100%" />
 </p>
 
-## Introduction
 
-RecallSpring is a self-hosted study app built on **Hybrid Learning**. You lead the new learning: your material,
-your notes, the questions you want to work through. RecallSpring handles the rest: it schedules spaced reviews, keeps
-the evidence of what you really know, and plans your next session up to the kolokvij or exam. You never manage
-flashcards, folders or intervals by hand.
+## Why RecallSpring
 
-The tutoring happens in the assistant you already use (Claude, Codex, Google Antigravity or ChatGPT). RecallSpring is
-the memory behind it: every answer, grade and source citation is saved on your own computer, and the schedule is
-worked out without any AI.
+- **Bring the AI you already have.** Study with Claude, Codex, Google Antigravity or ChatGPT, on the plan you already
+  pay for. No API keys, no extra subscription, and never a silent switch to paid API usage.
+- **Continue anywhere.** Start a topic in Claude tonight and pick it up in Codex tomorrow. Your answers, grades and
+  plan live in RecallSpring, not in a chat, so every assistant knows where you left off. Switch any time; nothing
+  is locked in.
+- **Works without AI too.** The review schedule and your study plan are worked out by RecallSpring itself, with no
+  model call. Without an assistant you still have your material, notes, reviews and self-assessment.
+- **Learn first, no flashcards to manage.** You study your own material and summarise it in your own words; the
+  questions come after. Reviews schedule themselves from your graded answers, planned around your exam dates.
+- **Your data stays yours.** It runs on your own computer. Export everything as plain files, keep a readable copy in
+  your own Google Drive, and back up encrypted.
 
-> **Status:** early development. It is used daily by its author, but expect changes and do not run it for others yet.
+## How it works
+
+```mermaid
+flowchart LR
+    You(["You"]) <--> AI["Your assistant<br/>Claude · Codex · Antigravity · ChatGPT"]
+    AI <-- "MCP connector" --> RS["RecallSpring<br/>on your computer"]
+    You <--> RS
+    RS --- M[("Your material, notes,<br/>answers, grades, plan")]
+```
+
+1. **Add your course and material.** Slides, PDFs, Office files, photos of your notes. Set the date of your midterm
+   exam and, if you have one, add an old exam paper.
+2. **Study with your assistant.** It reads today's plan from RecallSpring, teaches from your material with page
+   citations, and asks you to summarise in your own words before any question.
+3. **Answer, get graded, move on.** Every answer is saved before it is graded, and every grade keeps its reasons and
+   sources. RecallSpring decides what to review and when, so you only open it and press the next step.
+
+<p align="center">
+  <img src="assets/screenshots/assistant.png" alt="Codex studying with RecallSpring: it reads the plan for the Cell Biology midterm exam, explains a topic with page citations and opens a question" width="100%" />
+</p>
+
 
 ## Features
 
-- **Learn first, then practise.** The assistant teaches from your material part by part, every concept completely
-  and with page citations, at the pace you choose: step by step, balanced, larger chunks or auto (a default in
-  Settings, its own per course). You summarise in your own words, and only then come the questions. The assistant
-  never assumes you studied something, and practice on material you have not studied is refused.
-- **Check first, if you like.** Already know part of it? A short check per chapter, or a bit of everything for the
-  midterm, puts what you know in the background and brings the rest forward. A guess never counts as known.
-- **Built on Bloom's taxonomy.** Reading and your own notes come first (remember, understand). Practice then climbs
-  from 3 Apply to 4 Analyze to 5 Evaluate as your answers become solid, steps back after a weak answer, and mixes the
-  levels once you reach the top. 6 Create joins when you choose it or your old exam paper asks for it. RecallSpring
-  works out the next level from your grades, without a model call, and never goes above your practice limit.
-- **Spaced review that schedules itself.** Grades from 0 to 4 on one shared scale set the next review, and the last
-  reviews before an exam are planned around its date. `Review in…` starts a review with your assistant: a new
-  question from memory for each due concept. Provisional grades only bring a short follow-up, never a longer
-  interval.
-- **Say how sure you are.** Mark an open answer as `Unsure`: it is graded like any other, and below Solid the
-  assistant offers to explain that part again. On a multiple-choice question, `I'm guessing` keeps a lucky guess from
-  counting as known.
-- **Midterms and exams.** Set a target and its date, and add an old midterm or exam paper if you have one. Practice
-  and simulations then follow its style: its question types, topic weights and Bloom mix. RecallSpring tracks your
-  readiness per concept and explains why the plan looks the way it does.
-- **Simulations you can retake.** Take a simulation again, all of it or only the questions without full points, and
-  compare the versions question by question. The first version stays the benchmark, and a retake on the same day is
-  practice only. Or ask for similar, new questions.
-- **Concept-to-Clarity.** Explain a concept in your own words, version after version; the assistant says what is
-  correct, missing or wrong. It trains understanding and is never a grade.
-- **Study in your assistant.** `Study in…` on a course and `Go through today's plan in…` on Home open Claude, Codex
-  or the app's Chat with the start message ready (for Antigravity it is copied). Nothing is sent for you.
-- **Your material, searchable.** PDF, Office and ODF files, slides and photos go into the Library; extracted text is
-  split into sections that the assistant cites by ID. Notes keep every revision.
-- **Answers on paper.** Attach photos of handwritten work to an answer; the grading assistant sees them.
-- **Self-assessment.** No assistant at hand? Check your answer against the expected points yourself. The grade is
-  marked as yours and an assistant reviews it later.
-- **Focus timer and history.** Pomodoro sessions per course, and a full, audited history of everything that changed.
-- **Private by default.** Runs on `127.0.0.1`, with daily backups checked by a test restore. Deletions are
-  soft-deletes you can undo, and the app is fully in English while your material can be in any language.
+**Learn**
+
+- **Learn first, then practise.** Your assistant teaches part by part, with page citations, at the pace you choose.
+  Practice on material you have not studied is refused.
+- **Check first, if you like.** A short check per chapter puts what you already know in the background.
+- **Built on Bloom's taxonomy.** Practice climbs from applying to analysing to evaluating as your answers become solid.
+- **Concept-to-Clarity.** Explain a concept in your own words, version after version, and see what is missing.
+
+**Remember**
+
+- **Spaced reviews that schedule themselves.** Grades from 0 to 4 set the next review; the last ones before an exam
+  are planned around its date.
+- **Midterm and final exams.** Your readiness per topic, the weakest first, and why the plan looks the way it does.
+- **Exam simulations you can retake** in the style of your old exam paper, compared question by question.
+- **Say how sure you are.** `Unsure` and `I'm guessing` keep a lucky guess from counting as known.
+
+**Own your data**
+
+- **Private by default.** Runs on `127.0.0.1`; nothing is sent to the RecallSpring authors.
+- **Export** your material by course, notes as Markdown, and answers and grades as CSV and JSON.
+- **Your Google Drive:** a readable copy of your material, by course, in your own account.
+- **Backups** every night, checked by a test restore, optionally encrypted and copied to the cloud.
+- **Nothing is lost by accident.** Deleting can be undone for 30 days, and History shows every change.
 
 <table>
   <tr>
-    <td width="33%"><img src="assets/screenshots/courses.png" alt="Courses by university, faculty and semester, each with its next kolokvij and progress" /></td>
-    <td width="33%"><img src="assets/screenshots/exams.png" alt="Exams on one timeline, with readiness for each" /></td>
-    <td width="33%"><img src="assets/screenshots/review.png" alt="Reviews scheduled from graded answers, with the reason for each date" /></td>
+    <td width="50%"><img src="assets/screenshots/courses.png" alt="Courses, each with its next midterm exam and progress" /></td>
+    <td width="50%"><img src="assets/screenshots/exams.png" alt="Exams on one timeline, with readiness and the weakest topics first" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Courses and progress</sub></td>
-    <td align="center"><sub>Exams on one timeline</sub></td>
-    <td align="center"><sub>Reviews that schedule themselves</sub></td>
+    <td align="center"><sub>Your courses and progress</sub></td>
+    <td align="center"><sub>Exams on one timeline, weakest topics first</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/answer.png" alt="A graded answer with the reasons, the sources it was checked against and the next review date" /></td>
+    <td width="50%"><img src="assets/screenshots/assistants.png" alt="Settings: the assistants you study with, side by side" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Every grade with its reasons and sources</sub></td>
+    <td align="center"><sub>Use one assistant or several</sub></td>
   </tr>
 </table>
 
-<sub>Screenshots from demo data, in the Snow Storm theme (one of seven in Settings → Appearance).</sub>
+<sub>Screenshots from demo data in the default RecallSpring White theme (one of eight in Settings → Appearance).</sub>
+
 
 ## Assistants
 
 | Assistant | How it connects | What you need |
 | --- | --- | --- |
-| **Claude Desktop** | MCP connector (`services/mcp`) | your Claude plan |
+| **Claude Desktop** | MCP connector | your Claude plan |
 | **Codex** | the same MCP connector | your ChatGPT plan |
 | **Google Antigravity** | the same MCP connector | your Google plan |
 | **ChatGPT in RecallSpring** | *Sign in with ChatGPT* in the app's Chat | your ChatGPT plan |
 
-You can use several at once (the **Mix** option). RecallSpring never asks for an API key and never falls back to
-paid API usage. Without any assistant, everything except tutoring and AI grading keeps working: material, notes,
-reviews, planning and self-assessment. See [docs/04-AI-INTEGRATION.md](docs/04-AI-INTEGRATION.md).
+Use one, or several at once. Grades from any of them count the same. See
+[docs/04-AI-INTEGRATION.md](docs/04-AI-INTEGRATION.md).
 
-## Tech Stack
+## Get started
 
-- [FastAPI](https://fastapi.tiangolo.com/) – API
-- [SQLAlchemy](https://www.sqlalchemy.org/) and [Alembic](https://alembic.sqlalchemy.org/) – data model and migrations
-- [PostgreSQL](https://www.postgresql.org/) – database (in Docker, loopback only)
-- [React](https://react.dev/) and [TypeScript](https://www.typescriptlang.org/) – web app
-- [Vite](https://vite.dev/) – build
-- [TanStack Query](https://tanstack.com/query) – data fetching
-- [Model Context Protocol](https://modelcontextprotocol.io/) – the assistant connector, with in-chat forms (MCP Apps)
-- [PDFium](https://pdfium.googlesource.com/pdfium/) – reading PDFs
+RecallSpring runs on your own Windows 10 or 11 computer; a Linux home-server setup comes next.
 
-## Self-hosting
-
-RecallSpring runs on your own computer; Windows is supported now, and a Linux home-server setup comes next.
-
-1. Install Python 3.12+, Node 22+ and Docker Desktop.
-2. Run the installer:
+1. Install Python 3.12+, Node.js 22+, Docker Desktop and Git.
+2. Get the code and run the installer:
 
    ```powershell
+   git clone https://github.com/kek-tilen/RecallSpring.git recallspring
+   cd recallspring
    powershell -ExecutionPolicy Bypass -File scripts\install.ps1
    ```
 
@@ -140,8 +150,9 @@ The API and the worker run in the background without a window:
 | `scripts\start-local.ps1 -Restart` | restart them, e.g. after an update |
 | `scripts\logs.ps1` | follow the API log (`-Worker` for the worker) |
 
-The full guide, including updates and troubleshooting, is in [docs/install-windows.md](docs/install-windows.md).
-Backups go to `local-data/backups` every night (how often is up to you, daily to monthly); choose another disk or a synced folder in Settings → Data & backups for real protection, and turn on encryption there before they go to a cloud folder.
+The full guide, with updates, backups and troubleshooting: [docs/install-windows.md](docs/install-windows.md).
+
+> **Status:** early development. Expect changes, and keep your own backups.
 
 ## Contributing
 
@@ -151,6 +162,12 @@ Issues and pull requests are welcome.
 - Read [AGENTS.md](AGENTS.md) first: its rules apply to people and coding agents alike. In short: no API keys, never
   run model-generated code, and save raw learner input before any model call.
 - Make a pull request in small steps, with tests and the docs it changes.
+
+### Tech stack
+
+FastAPI (API) · SQLAlchemy and Alembic (data model, migrations) · PostgreSQL in Docker, loopback only (database) ·
+React, TypeScript, Vite and TanStack Query (web app) · Model Context Protocol with MCP Apps (assistant connector and
+in-chat forms) · PDFium (reading PDFs)
 
 ### Local development
 

@@ -1,7 +1,7 @@
 # Install RecallSpring on Windows
 
 For one person on their own Windows 10 or 11 computer. Everything stays on that computer: your account, material,
-notes, grades and backups. Nothing is sent to the RecallSpring authors. (Owner decision 2026-11-21: Windows first,
+notes, grades and backups. Nothing is sent to the RecallSpring authors. (Decision 2026-11-21: Windows first,
 the database keeps running in Docker; docs/10.)
 
 ## 1. What you need
@@ -64,7 +64,7 @@ the assistant tutors you with them. Grades from any of them count the same and s
 | Decide later | nothing | material, notes, reviews and plans work without an assistant |
 
 With ChatGPT in RecallSpring, a new Chat conversation with **Planning (all courses)** picked under Study sets up your
-courses, their concepts, kolokvij and exam dates; a conversation with one course picked is for learning it. Your
+courses, their concepts, midterm and exam dates; a conversation with one course picked is for learning it. Your
 material goes in through Library.
 
 **Settings → Assistants** shows which assistants you use and which are connected, when each was last used, and sets
