@@ -39,6 +39,10 @@ It does three things and changes nothing else:
 
 Then restart Codex.
 
+### Codex on another computer
+
+When RecallSpring runs elsewhere (a home server with an address), Codex connects to that address instead and nothing is installed next to Codex: Settings › Assistants › Codex › Set up › From another computer gives the token, the `setx RECALLSPRING_TOKEN` command and the `config.toml` lines (docs/remote-connector.md).
+
 ## 3. Study
 
 1. Open a course folder in Codex (the app: open the folder as a project; CLI: `cd` into it and run `codex`) and

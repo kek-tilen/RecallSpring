@@ -384,11 +384,13 @@ _EVENT_TEXT = {
     "connector.limit_changed": "Connector limit changed",
     "connector.token_created": "Connector token created",
     "connector.token_revoked": "Connector token revoked",
+    "connector.disconnected": "Assistant disconnected",
     "concepts.marked_known": "You marked concepts as known",
     "study.settings_changed": "Study settings changed",
     "study.availability_changed": "Study time changed",
     "study.focus_changed": "Focus changed",
     "course.goal_changed": "Interest goal changed",
+    "course.studied_in_changed": "Usually studied in changed",
     "backup.created": "Backup made",
     "backup.failed": "Backup failed",
     "backup.folder_changed": "Backup folder changed",
@@ -448,6 +450,15 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         return str(payload.get("message") or payload.get("code"))
     if event_type in ("backup.folder_changed", "backup.schedule_changed"):
         return f"{payload.get('from')} → {payload.get('to')}"
+    if event_type == "course.studied_in_changed":
+        before, after = (
+            assistants.DEFAULT_LABEL.get(str(v), "ChatGPT") if v else "any"
+            for v in (payload.get("from"), payload.get("to"))
+        )
+        return f"{before} → {after}"
+    if event_type == "connector.disconnected":
+        n, client = payload.get("tokens"), str(payload.get("client"))
+        return f"{assistants.DEFAULT_LABEL.get(client, client)}, {n} token{'' if n == 1 else 's'}"
     if event_type in ("backup.encryption_on", "backup.key_replaced"):
         return f"key {payload.get('key_id')}"
     if event_type == "backup.unencrypted_removed":

@@ -85,6 +85,15 @@ class RecallSpringClient:
             raise ConnectorError(_error_message(response))
         return response.json()
 
+    async def check(self) -> int:
+        """The status of ``GET /hello`` (the remote connector's token check): 200 accepted, 401 invalid or revoked,
+        429 daily limit, 0 when the API is not reachable."""
+        try:
+            response = await self._http.get("/hello")
+        except httpx.TransportError:
+            return 0
+        return response.status_code
+
     async def aclose(self) -> None:
         await self._http.aclose()
 

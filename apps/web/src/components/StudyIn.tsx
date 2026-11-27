@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ASSISTANTS } from "../assistant";
-import { useAssistants, useSession } from "../queries";
+import { useAssistants, useCourses, useSession } from "../queries";
 import type { AssistantKey, AssistantsStatus, WaitingAnswers } from "../types";
 
 /**
@@ -108,7 +108,11 @@ export function StudyIn({
   const navigate = useNavigate();
   const status = useAssistants();
   const chosen = useSession().data?.user?.assistant;
-  const offered = offeredAssistants(status.data, chosen);
+  const courses = useCourses().data;
+  const usual = (Array.isArray(courses) ? courses.find((c) => c.id === course?.id)?.usually_studied_in : null) ?? null;
+  const all = offeredAssistants(status.data, chosen);
+  // The course's "Usually studied in" comes first (2026-11-27); every other assistant stays in the menu.
+  const offered = usual && all.includes(usual) ? [usual, ...all.filter((k) => k !== usual)] : all;
   const [last, setLast] = useState<AssistantKey | null>(() => remembered());
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -185,9 +189,16 @@ export function StudyIn({
           }}
         >
           {offered.map((k) => (
-            <button key={k} type="button" role="menuitem" autoFocus={k === (last && offered.includes(last) ? last : offered[0])} onClick={() => void study(k)}>
+            <button
+              key={k}
+              type="button"
+              role="menuitem"
+              autoFocus={k === (usual && offered.includes(usual) ? usual : last && offered.includes(last) ? last : offered[0])}
+              onClick={() => void study(k)}
+            >
               {LABEL[k]}
-              {k === last && <span className="muted tiny"> · last used</span>}
+              {k === usual && <span className="muted tiny"> · usually</span>}
+              {k === last && k !== usual && <span className="muted tiny"> · last used</span>}
             </button>
           ))}
           <button type="button" role="menuitem" onClick={() => void study("copy")}>

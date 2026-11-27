@@ -16,6 +16,8 @@ Thin MCP server that Claude Desktop starts over stdio. Every tool calls RecallSp
 
 Configuration: `RS_API_URL` (default `http://127.0.0.1:4318`), `RS_CONNECTOR_TOKEN_FILE` (default `%LOCALAPPDATA%\RecallSpring\connector-token`).
 
+**Remote (2026-11-27):** `recallspring-mcp --http [--host 127.0.0.1] [--port 4319]` serves the same tools at `/mcp` over MCP streamable HTTP for an assistant on another computer. It needs `RS_REMOTE_URL` (the address other computers use) and reads no token file: every request brings its own connector token (`Authorization: Bearer rsc_…`), checked with the API (`remote.py`). Setup and proxy: `docs/remote-connector.md`.
+
 ```bash
 .venv/Scripts/python -m pip install --require-hashes -r requirements-dev.lock && .venv/Scripts/python -m pip install --no-deps --no-build-isolation -e .
 ```

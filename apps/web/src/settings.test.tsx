@@ -45,9 +45,7 @@ describe("Settings", () => {
   it("opens the section that holds a card an old link names", () => {
     show("/settings#chatgpt");
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Assistants"]);
-    expect(where("ChatGPT (preview)")).toBe("assistants");
-    expect(where("Assistant connector")).toBe("assistants");
-    expect(document.getElementById("chatgpt")).toBeTruthy();
+    expect(document.getElementById("connector")?.closest(".settings-section")?.id).toBe("assistants");
     cleanup();
     show("/settings#service");
     expect(where("Profile")).toBe("account");

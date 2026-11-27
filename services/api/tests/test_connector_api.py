@@ -41,6 +41,40 @@ def test_t25_connector_surface_is_read_and_append_only(client: TestClient) -> No
         assert not any(word in path for word in ("delete", "export", "settings", "token", "budget", "consent"))
 
 
+def test_disconnecting_an_assistant_revokes_all_its_tokens(owner_api: Api, conn: ConnectorApi) -> None:
+    owner_api.post("/settings/connector/tokens", {"client": "codex", "label": "Codex laptop"})
+    owner_api.post("/settings/connector/tokens", {"client": "codex", "label": "Codex desktop"})
+    first = owner_api.post("/settings/connector/clients/codex/disconnect")
+    assert first.status_code == 200 and first.json() == {"client": "codex", "revoked": 2}
+    again = owner_api.post("/settings/connector/clients/codex/disconnect")
+    assert again.json()["revoked"] == 0  # nothing left to revoke, nothing audited
+    items = {i["key"]: i for i in owner_api.get("/settings/assistants").json()["items"]}
+    assert not items["codex"]["connected"] and items["claude"]["connected"]  # other assistants stay connected
+    assert conn.get("/courses").status_code == 200
+    assert owner_api.post("/settings/connector/clients/chatgpt/disconnect").status_code == 422
+
+
+def test_hello_names_the_assistant_and_marks_the_token_used(owner_api: Api, conn: ConnectorApi) -> None:
+    assert owner_api.get("/settings/connector").json()["tokens"][0]["last_used_at"] is None
+    assert conn.get("/hello").json() == {"client": "claude"}
+    assert owner_api.get("/settings/connector").json()["tokens"][0]["last_used_at"] is not None
+
+
+def test_settings_show_the_remote_address_only_when_one_is_set(owner_api: Api, monkeypatch: pytest.MonkeyPatch) -> None:
+    view = owner_api.get("/settings/connector").json()
+    assert view["remote_url"] is None and view["remote_from_internet"] is False
+    monkeypatch.setenv("RS_REMOTE_URL", "https://study.example.org")
+    monkeypatch.setenv("RS_REMOTE_FROM_INTERNET", "true")
+    get_settings.cache_clear()
+    try:
+        view = owner_api.get("/settings/connector").json()
+    finally:
+        monkeypatch.delenv("RS_REMOTE_URL")
+        monkeypatch.delenv("RS_REMOTE_FROM_INTERNET")
+        get_settings.cache_clear()
+    assert view["remote_url"] == "https://study.example.org/mcp" and view["remote_from_internet"] is True
+
+
 def test_revoked_token_is_rejected(owner_api: Api, conn: ConnectorApi) -> None:
     token_id = owner_api.get("/settings/connector").json()["tokens"][0]["id"]
     assert owner_api.post(f"/settings/connector/tokens/{token_id}/revoke").status_code == 200

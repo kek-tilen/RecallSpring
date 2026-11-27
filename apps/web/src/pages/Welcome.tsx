@@ -287,7 +287,7 @@ export function useSaveProfile() {
 }
 
 /** The welcome page's tiles (UI direction, 2026-11-27): tick any; two or more is a mix, none is "not chosen". */
-const TILE: Record<AssistantKey, { name: string; note: string }> = {
+export const TILE: Record<AssistantKey, { name: string; note: string }> = {
   claude: { name: "Claude Desktop", note: "Connector · one command" },
   codex: { name: "Codex", note: "Connector · one command" },
   antigravity: { name: "Antigravity", note: "Connector · one command" },
@@ -301,7 +301,7 @@ export function connectorCommand(picked: AssistantKey[], username: string): stri
   return `powershell -ExecutionPolicy Bypass -File scripts\\install-connectors.ps1 -Assistants ${apps.join(",")} -Username ${username}`;
 }
 
-function choiceBody(picked: AssistantKey[]): { assistant: AssistantChoice | null; assistant_mix?: AssistantKey[] } {
+export function choiceBody(picked: AssistantKey[]): { assistant: AssistantChoice | null; assistant_mix?: AssistantKey[] } {
   if (picked.length === 0) return { assistant: null };
   if (picked.length === 1) return { assistant: picked[0] ?? null };
   return { assistant: "mix", assistant_mix: picked };

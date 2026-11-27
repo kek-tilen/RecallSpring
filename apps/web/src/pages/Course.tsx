@@ -9,6 +9,7 @@ import { CourseDialog, CourseDot, FocusControl, groupPath } from "../components/
 import { TargetDialog } from "../components/TargetDialog";
 import { CheckChip, CheckFirstPanel, PracticeLimitControl } from "../components/CheckFirst";
 import { ExplanationPaceControl } from "../components/ExplanationPace";
+import { StudiedInControl } from "../components/StudiedIn";
 import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
 import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, attemptKind, dateLabel, dateTime, gradeLabel, gradedBy, plural, relativeDay } from "../format";
 import { keys, useCourseOverview, useGroups, useReviews, useSources } from "../queries";
@@ -97,6 +98,7 @@ export function CoursePage() {
                   <FocusControl course={o.course} />
                   {o.practice_limit && <PracticeLimitControl courseId={o.course.id} limit={o.practice_limit} />}
                   <ExplanationPaceControl courseId={o.course.id} />
+                  <StudiedInControl courseId={o.course.id} />
                 </section>
               )}
               {editCourse && <CourseDialog course={o.course} open onClose={() => setEditCourse(false)} />}

@@ -94,7 +94,7 @@ export function ChatGptPanel() {
   });
 
   return (
-    <div className="stack" id="chatgpt">
+    <div className="stack">
       {outcome && (
         <div className={outcome.warn ? "notice warn small" : "notice small"} role="status">
           {outcome.text} {!outcome.warn && <Link to="/chat">Open Chat</Link>}{" "}

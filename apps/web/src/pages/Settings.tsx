@@ -1,19 +1,18 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { AssistantNextSteps, TimeZoneSelect, useSaveProfile } from "./Welcome";
+import { TimeZoneSelect, useSaveProfile } from "./Welcome";
 import { greeting } from "./Home";
-import { ASSISTANTS } from "../assistant";
 import { request } from "../api";
 import { Async, Card, Confirm, ErrorNote } from "../components/ui";
 import { Link, useLocation, useNavigate } from "react-router";
 import { bytes, dateLabel, dateTime, plural, relativeDay, timeOnly } from "../format";
 import { keys, useAssistants, useBackup, useConnector, useSession, useStudySettings } from "../queries";
 import { PreferencesEditor } from "./Import";
-import { ChatGptPanel } from "../components/ChatGpt";
+import { AssistantsPanel } from "../components/Assistants";
 import { ExplanationPaceDefault } from "../components/ExplanationPace";
 import { ServiceStatus } from "../components/ServiceStatus";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
-import type { AssistantClient, AssistantKey, AssistantsStatus, BackupFolderCheck, BackupKey, BackupStatus, ConnectorSettings, ConnectorToken, StudySettings } from "../types";
+import type { BackupFolderCheck, BackupKey, BackupStatus, StudySettings } from "../types";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -108,158 +107,6 @@ function StudyForm({ initial }: { initial: StudySettings }) {
         {save.isSuccess && !dirty && <span className="small muted">Saved.</span>}
       </div>
     </form>
-  );
-}
-
-const ASSISTANT: Record<AssistantClient, string> = { claude: "Claude Desktop", codex: "Codex", antigravity: "Antigravity" };
-
-/** One token as a compact row (no wide table): name and assistant, dates below, Revoke on the right. */
-function TokenRow({ t, onRevoke }: { t: ConnectorToken; onRevoke: (t: ConnectorToken) => void }) {
-  const assistant = ASSISTANT[t.client] ?? t.client;
-  return (
-    <li className="token-item">
-      <div className="token-main">
-        <div className="row" style={{ gap: 8 }}>
-          <strong>{t.label}</strong>
-          {t.label !== assistant && <span className="chip">{assistant}</span>}
-        </div>
-        <span className="tiny muted">
-          Created {dateTime(t.created_at)} · Last used {t.last_used_at ? dateTime(t.last_used_at) : "never"}
-        </span>
-      </div>
-      {t.revoked_at ? (
-        <span className="chip">Revoked {dateTime(t.revoked_at)}</span>
-      ) : (
-        <button type="button" className="btn small danger" onClick={() => onRevoke(t)} aria-label={`Revoke ${t.label} (${assistant})`}>
-          Revoke
-        </button>
-      )}
-    </li>
-  );
-}
-
-function ConnectorPanel({ c }: { c: ConnectorSettings }) {
-  const qc = useQueryClient();
-  const [percent, setPercent] = useState(c.limit_percent);
-  const [revoking, setRevoking] = useState<ConnectorToken | null>(null);
-  const [shown, setShown] = useState<{ token: string; client: AssistantClient } | null>(null);
-  const [copied, setCopied] = useState(false);
-  useEffect(() => setPercent(c.limit_percent), [c.limit_percent]);
-  const refresh = () => void qc.invalidateQueries({ queryKey: keys.connector });
-
-  const limit = useMutation({
-    mutationFn: () => request<ConnectorSettings>("/settings/connector", { method: "PUT", json: { limit_percent: percent } }),
-    onSuccess: refresh,
-  });
-  const create = useMutation({
-    mutationFn: (client: AssistantClient) => request<ConnectorToken & { token: string | null }>("/settings/connector/tokens", { json: { client } }),
-    onSuccess: (t) => {
-      setShown(t.token ? { token: t.token, client: t.client } : null);
-      setCopied(false);
-      refresh();
-    },
-  });
-  const revoke = useMutation({
-    mutationFn: (t: ConnectorToken) => request<ConnectorToken>(`/settings/connector/tokens/${t.id}/revoke`, { method: "POST", json: {} }),
-    onSuccess: () => {
-      setRevoking(null);
-      refresh();
-    },
-  });
-  const projected = Math.max(1, Math.round((c.daily_default * percent) / 100));
-
-  return (
-    <div className="stack" style={{ gap: 18 }}>
-      <p className="small">
-        Claude Desktop, Codex or Antigravity uses RecallSpring through the connector, on your own Claude, ChatGPT or Google plan. RecallSpring never sees
-        those sign-ins. Each assistant has its own token, and its grades are labelled with its name. Requests today: <strong>{c.used_today}</strong> of <strong>{c.daily_limit}</strong>.
-      </p>
-      <form
-        className="stack"
-        onSubmit={(e) => {
-          e.preventDefault();
-          limit.mutate();
-        }}
-      >
-        <label className="field">
-          Daily request limit: {percent}% ({projected} requests)
-          <span className="hint">Caps how many connector calls your assistants can make per day together, to protect your plan's usage.</span>
-          <input type="range" min={1} max={100} value={percent} onChange={(e) => setPercent(Number(e.target.value))} />
-        </label>
-        {limit.error && <ErrorNote error={limit.error} />}
-        <div>
-          <button type="submit" className="btn" disabled={percent === c.limit_percent || limit.isPending}>
-            Save limit
-          </button>
-        </div>
-      </form>
-      <hr className="soft" />
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h3>Connector tokens</h3>
-        <div className="row">
-          <button type="button" className="btn small" onClick={() => create.mutate("claude")} disabled={create.isPending}>
-            New token for Claude Desktop
-          </button>
-          <button type="button" className="btn small" onClick={() => create.mutate("codex")} disabled={create.isPending}>
-            New token for Codex
-          </button>
-          <button type="button" className="btn small" onClick={() => create.mutate("antigravity")} disabled={create.isPending}>
-            New token for Antigravity
-          </button>
-        </div>
-      </div>
-      {create.error && <ErrorNote error={create.error} />}
-      {shown && (
-        <div className="notice warn stack" role="status">
-          <strong>Copy this token now. It is shown only once.</strong>
-          <div className="token-box">{shown.token}</div>
-          <div className="row">
-            <button
-              type="button"
-              className="btn small"
-              onClick={() => {
-                void navigator.clipboard.writeText(shown.token).then(() => setCopied(true));
-              }}
-            >
-              {copied ? "Copied" : "Copy"}
-            </button>
-            <button type="button" className="btn small ghost" onClick={() => setShown(null)}>
-              Hide
-            </button>
-          </div>
-          <span className="tiny">
-            {shown.client === "codex"
-              ? "Usually you do not need this: scripts/install-codex-connector.ps1 creates its own Codex token; see docs/codex-setup.md."
-              : shown.client === "antigravity"
-                ? "Usually you do not need this: scripts/install-antigravity-connector.ps1 creates its own token; see docs/antigravity-setup.md."
-                : "The installer script writes it to the connector's token file for you; see docs/connector-setup.md."}{" "}
-            Never paste it into a chat.
-          </span>
-        </div>
-      )}
-      {c.tokens.length > 0 ? (
-        <ul className="token-list" aria-label="Connector tokens">
-          {c.tokens.map((t) => (
-            <TokenRow key={t.id} t={t} onRevoke={setRevoking} />
-          ))}
-        </ul>
-      ) : (
-        <p className="small muted">No tokens yet.</p>
-      )}
-      <Confirm
-        open={revoking !== null}
-        title="Revoke connector token?"
-        confirmLabel="Revoke token"
-        danger
-        busy={revoke.isPending}
-        onConfirm={() => revoking && revoke.mutate(revoking)}
-        onClose={() => setRevoking(null)}
-      >
-        {revoking ? ASSISTANT[revoking.client] : "The assistant"} using “{revoking?.label}” loses access to RecallSpring immediately. Your study records stay as they are. This
-        cannot be undone; create a new token to reconnect.
-        {revoke.error && <ErrorNote error={revoke.error} />}
-      </Confirm>
-    </div>
   );
 }
 
@@ -897,89 +744,6 @@ function ThemePicker() {
   );
 }
 
-const STUDY_IN: Record<AssistantKey, string> = {
-  claude: "Claude Desktop, through the connector",
-  codex: "Codex (app, CLI or IDE extension), through the connector",
-  antigravity: "Google Antigravity (app or CLI), through the connector",
-  chatgpt: "RecallSpring's Chat, signed in with ChatGPT (preview)",
-};
-
-/** Which assistants are connected, from RecallSpring's own records (tokens, ChatGPT sign-in), with the next step. */
-export function AssistantsPanel({ s }: { s: AssistantsStatus }) {
-  const label = (key: AssistantKey) => ASSISTANTS.find((a) => a.key === key)?.label ?? key;
-  const connected = s.items.filter((i) => i.connected);
-  const username = useSession().data?.user.username ?? "";
-  const [steps, setSteps] = useState<AssistantKey | null>(null);
-  const mix = s.mix ?? [];
-  return (
-    <div className="stack" style={{ gap: 12 }}>
-      <ul className="list assistants-list">
-        {s.items.map((i) => (
-          <li key={i.key} className="row" style={{ justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-            <div style={{ minWidth: 0 }}>
-              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                <strong>{label(i.key)}</strong>
-                <span className={i.connected ? "chip good" : "chip"}>{i.connected ? "Connected" : "Not connected"}</span>
-                {i.in_mix && <span className="chip">In your mix</span>}
-              </div>
-              <div className="small muted">
-                {STUDY_IN[i.key]}
-                {i.last_used_at ? ` · last used ${dateTime(i.last_used_at)}` : i.connected ? " · not used yet" : ""}
-                {i.tokens > 1 ? ` · ${i.tokens} tokens` : ""}
-              </div>
-            </div>
-            <div className="row" style={{ gap: 6, flexShrink: 0 }}>
-              {i.key === "chatgpt" ? (
-                i.connected ? (
-                  <Link className="btn small" to="/chat">
-                    Open Chat
-                  </Link>
-                ) : (
-                  <a className="btn small" href="#chatgpt">
-                    Sign in
-                  </a>
-                )
-              ) : i.connected ? (
-                <a className="btn small" href="#connector" aria-label={`Manage the ${label(i.key)} token`}>
-                  Manage
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  className="btn small"
-                  aria-expanded={steps === i.key}
-                  aria-label={`Set up ${label(i.key)}`}
-                  onClick={() => setSteps(steps === i.key ? null : i.key)}
-                >
-                  {steps === i.key ? "Hide steps" : "Set up"}
-                </button>
-              )}
-            </div>
-            {steps === i.key && !i.connected && i.key !== "chatgpt" && (
-              <div className="assistant-steps">
-                <AssistantNextSteps assistant={i.key} username={username} />
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-      <p className="hint small muted" style={{ margin: 0 }}>
-        {connected.length > 1
-          ? `${connected.map((i) => label(i.key)).join(" and ")} are connected, so RecallSpring says “your assistant”. `
-          : connected.length === 1
-            ? `RecallSpring names ${label(connected[0]!.key)} in its tips. `
-            : s.chosen === "mix"
-              ? `Nothing is connected yet; your mix is ${mix.map(label).join(" and ")}, so tips say “your assistant”. `
-              : s.chosen
-                ? `Nothing is connected yet; tips follow your choice on the welcome page (${label(s.chosen)}). `
-                : "Nothing is connected yet. "}
-        Every connected assistant works at the same time, and grades are labelled with the one that gave them.{" "}
-        <Link to="/welcome">Change your choice</Link>
-      </p>
-    </div>
-  );
-}
-
 /** Username, session, what Home calls you and time zone. */
 function ProfileForm() {
   const qc = useQueryClient();
@@ -1167,16 +931,8 @@ export function SettingsPage() {
           )}
           {current === "assistants" && (
             <Section id="assistants">
-              <Card title="Your assistants" level={3}>
-                <Async q={assistants}>{(s) => <AssistantsPanel s={s} />}</Async>
-              </Card>
-              <div className="grid cols-2" style={{ alignItems: "start" }}>
-                <Card title="ChatGPT (preview)" id="chatgpt" level={3}>
-                  <ChatGptPanel />
-                </Card>
-                <Card title="Assistant connector" id="connector" level={3}>
-                  <Async q={connector}>{(c) => <ConnectorPanel c={c} />}</Async>
-                </Card>
+              <div className="settings-rows" id="connector">
+                <Async q={assistants}>{(s) => <AssistantsPanel s={s} c={connector.data} />}</Async>
               </div>
             </Section>
           )}

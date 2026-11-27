@@ -25,7 +25,8 @@ from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, Field
 
 from . import __version__
-from .client import RecallSpringClient
+from .client import ConnectorError, RecallSpringClient
+from .remote import request_client
 
 FORM_URI = "ui://recallspring/answer-form"
 QUIZ_URI = "ui://recallspring/quiz"
@@ -259,8 +260,15 @@ apps = Apps()
 _client: RecallSpringClient | None = None
 
 
+_remote = False  # serving other computers (--http): only the token of the request counts, never a token file
+
+
 def get_client() -> RecallSpringClient:
     global _client
+    if (per_request := request_client.get()) is not None:
+        return per_request
+    if _remote:
+        raise ConnectorError("This request has no RecallSpring connector token.")
     if _client is None:
         _client = RecallSpringClient.from_environment()
     return _client
@@ -1640,9 +1648,37 @@ def continue_from_chatgpt(course: str = "") -> str:
     )
 
 
-def main() -> int:
+def serve_http(host: str, port: int) -> None:
+    """The remote connector: the same tools at http://<host>:<port>/mcp, for the proxy to serve at
+    RS_REMOTE_URL/mcp. Each request brings its own connector token; there is no token file."""
+    import uvicorn
+
+    from .client import DEFAULT_API_URL
+    from .remote import build_app, security_for
+
+    global _remote
+    public = os.environ.get("RS_REMOTE_URL", "").rstrip("/")
+    if not public.startswith(("https://", "http://")):
+        raise SystemExit("Set RS_REMOTE_URL to the address other computers use, e.g. https://study.example.org")
+    os.environ.setdefault("RS_WEB_URL", public)  # links in tool results open the web app at that address
+    api_url = os.environ.get("RS_API_URL", DEFAULT_API_URL)
+    _remote = True
+    app = build_app(mcp, lambda token: RecallSpringClient(api_url, token), security_for(public, port))
+    uvicorn.run(app, host=host, port=port, log_level="warning", proxy_headers=True, server_header=False)
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
     import logging
 
+    parser = argparse.ArgumentParser(prog="recallspring-mcp", description="RecallSpring connector (MCP server).")
+    parser.add_argument("--http", action="store_true", help="serve other computers over HTTP at /mcp (remote)")
+    parser.add_argument("--host", default="127.0.0.1", help="with --http: the address to listen on")
+    parser.add_argument("--port", type=int, default=4319, help="with --http: the port (default 4319)")
+    args = parser.parse_args(argv)
     logging.getLogger("httpx").setLevel(logging.WARNING)  # keep request URLs out of Claude Desktop's server log
-    mcp.run(transport="stdio")
+    if args.http:
+        serve_http(args.host, args.port)
+    else:
+        mcp.run(transport="stdio")
     return 0

@@ -94,6 +94,8 @@ class CourseOut(_Out):
     group_id: uuid.UUID | None = None
     # null = the learner's default explanation pace
     explanation_pace: ExplanationPace | None = None
+    # null = any assistant (Today and the tips say "your assistant" or name the one in use)
+    usually_studied_in: AssistantKey | None = None
     revision: int
     created_at: datetime
     updated_at: datetime
@@ -818,6 +820,9 @@ class ConnectorSettingsOut(BaseModel):
     daily_limit: int
     used_today: int
     tokens: list[ConnectorTokenOut]
+    # The remote connector's address (<remote_url>/mcp), or None when it works on this computer only.
+    remote_url: str | None = None
+    remote_from_internet: bool = False
 
 
 # ---------------------------------------------------------------- connector (Mode A) requests

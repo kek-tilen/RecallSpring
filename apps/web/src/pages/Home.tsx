@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { useAssistant, type AssistantWords } from "../assistant";
+import { assistantWords, useAssistant, type AssistantWords } from "../assistant";
 import { EventList } from "./History";
 import { StudyIn } from "../components/StudyIn";
 import { Upload } from "../components/Upload";
@@ -161,7 +161,11 @@ function WhyLink({ exam }: { exam: TargetCapacity }) {
 }
 
 /** The next step: one primary button beside "Go through today's plan in…" (UI direction, 2026-11-27). */
-function NextStep({ item, a }: { item: PlanItem; a: AssistantWords }) {
+function NextStep({ item, a: inUse }: { item: PlanItem; a: AssistantWords }) {
+  // A course's "Usually studied in" (2026-11-27) names that assistant for it; otherwise the one in use.
+  const courses = useCourses().data;
+  const usual = Array.isArray(courses) ? courses.find((c) => c.id === item.course_id)?.usually_studied_in : null;
+  const a = usual ? assistantWords(usual) : inUse;
   const button = isReview(item)
     ? { to: "/review", label: "Start reviews" }
       : a.key === "chatgpt"

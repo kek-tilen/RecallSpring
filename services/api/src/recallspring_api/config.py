@@ -101,6 +101,13 @@ class Settings(BaseSettings):
     # Claude connector (Mode A): requests per learner-local day at 100 %; the owner scales it 1–100 %.
     connector_daily_requests_default: int = 600
     connector_note_chars: int = 8_000  # per note; keeps tool output (and Claude plan usage) small
+    # Remote connector (2026-11-27): the address other computers use to reach this RecallSpring, such as
+    # https://study.example.org, where the proxy sends /mcp to `recallspring-mcp --http` (services/mcp). Empty: the
+    # connector works on this computer only. remote_from_internet: that address is reachable from the internet over
+    # HTTPS on port 443, which Claude needs (it connects from Anthropic's cloud; Codex and Antigravity connect from
+    # the computer they run on). Settings only shows these; opening an address is a step on the server and proxy.
+    remote_url: str | None = Field(default=None, pattern=r"^https?://[^/\s]+$")
+    remote_from_internet: bool = False
 
     # AI (Mode B). "none" disables in-app AI; "mock" is for development/tests and is always labelled Simulated.
     ai_evaluation_provider: Literal["none", "mock"] = "none"

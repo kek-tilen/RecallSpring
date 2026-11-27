@@ -64,8 +64,8 @@ With ChatGPT in RecallSpring, a new Chat conversation with **Planning (all cours
 courses, their concepts, kolokvij and exam dates; a conversation with one course picked is for learning it. Your
 material goes in through Library.
 
-**Settings → Assistants** shows which assistants are connected and when each was last used; you can use several at
-once. The time zone is in **Settings → Profile**.
+**Settings → Assistants** shows which assistants you use and which are connected, when each was last used, and sets
+each one up, manages its tokens or disconnects it; you can use several at once. The time zone is in **Settings → Profile**.
 
 ## 4. Every day
 

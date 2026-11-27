@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { StudiedInControl } from "./components/StudiedIn";
 import { PLAN_MESSAGE, StudyIn, STUDY_IN_STORE, launcher, offeredAssistants, startMessage } from "./components/StudyIn";
 import type { AssistantsStatus } from "./types";
 
@@ -15,10 +16,11 @@ const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200
 const item = (key: AssistantsStatus["items"][number]["key"], connected: boolean) => ({ key, connected, tokens: 0, last_used_at: null });
 const COURSE = { id: "k1", title: "Biology 101" };
 
-function serve(status: AssistantsStatus) {
+function serve(status: AssistantsStatus, courses: unknown[] = []) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const path = new URL(typeof input === "string" ? input : (input as Request).url, "http://localhost").pathname.replace("/api/v1", "");
     if (path === "/settings/assistants") return json(status);
+    if (path === "/courses") return json(courses);
     if (path === "/auth/session") return json({ user: { assistant: null } });
     return new Response("{}", { status: 404 });
   });
@@ -134,5 +136,60 @@ describe("Go through today's plan in… on Home (2026-11-26)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Go through today's plan in…" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Chat (ChatGPT)" }));
     expect(await screen.findByText(`at /chat/new?message=${encodeURIComponent(PLAN_MESSAGE)}`)).toBeTruthy();
+  });
+});
+
+describe("Study in… with Usually studied in (2026-11-27)", () => {
+  it("lists the course's usual assistant first and keeps the others", async () => {
+    serve({ items: [item("claude", true), item("codex", true), item("chatgpt", false)], in_use: null, chosen: "claude" }, [
+      { ...COURSE, usually_studied_in: "codex" },
+    ]);
+    show();
+    const button = await screen.findByRole("button", { name: /Study in/ });
+    await waitFor(() => {
+      fireEvent.click(button);
+      expect(screen.getAllByRole("menuitem")[0]!.textContent).toContain("Codex · usually");
+    });
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Codex · usually", "Claude Desktop", "Copy the start message only"]);
+  });
+});
+
+describe("Usually studied in on a course (2026-11-27)", () => {
+  function course(status: AssistantsStatus) {
+    const puts: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = new URL(typeof input === "string" ? input : (input as Request).url, "http://localhost").pathname.replace("/api/v1", "");
+      if (path === "/settings/assistants") return json(status);
+      if (path === "/courses") return json([{ ...COURSE, usually_studied_in: null }]);
+      if (path === "/courses/k1/studied-in") {
+        puts.push(JSON.parse(String(init?.body)));
+        return json({ ...COURSE, usually_studied_in: "codex" });
+      }
+      return new Response("{}", { status: 404 });
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <StudiedInControl courseId="k1" />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    return puts;
+  }
+
+  it("is offered only with more than one assistant and saves the choice", async () => {
+    const puts = course({ items: [item("claude", true), item("codex", true), item("chatgpt", false)], in_use: null, chosen: "claude" });
+    const select = await screen.findByRole("combobox", { name: "Usually studied in" });
+    await waitFor(() => expect(select).toHaveProperty("disabled", false));
+    expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(["Any", "Claude Desktop", "Codex"]);
+    fireEvent.change(select, { target: { value: "codex" } });
+    await waitFor(() => expect(puts).toEqual([{ assistant: "codex" }]));
+  });
+
+  it("stays hidden with one assistant", async () => {
+    course({ items: [item("claude", false), item("codex", true), item("chatgpt", false)], in_use: "codex", chosen: "codex" });
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    expect(screen.queryByRole("combobox", { name: "Usually studied in" })).toBeNull();
   });
 });

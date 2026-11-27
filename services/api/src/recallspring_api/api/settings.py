@@ -50,6 +50,8 @@ def _settings_view(db: Session, user: User) -> dict[str, Any]:
         daily_limit=daily_limit(user),
         used_today=used_today(db, user),
         tokens=[ConnectorTokenOut.model_validate(t, from_attributes=True) for t in tokens],
+        remote_url=f"{remote}/mcp" if (remote := get_settings().remote_url) else None,
+        remote_from_internet=bool(remote) and get_settings().remote_from_internet,
     ).model_dump(mode="json")
 
 
@@ -434,3 +436,35 @@ def revoke_token(
     return commit_with_response(
         db, ctx, None, 200, ConnectorTokenOut.model_validate(row, from_attributes=True).model_dump(mode="json")
     )
+
+
+@router.post("/settings/connector/clients/{client}/disconnect")
+def disconnect_client(
+    client: Literal["claude", "codex", "antigravity"], ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Disconnect one assistant: revoke all its active tokens at once (unticking it in Settings, 2026-11-27).
+    Its grades and records stay; a new token connects it again."""
+    if replay := replay_if_seen(db, ctx, None):
+        return replay
+    rows = db.scalars(
+        select(ConnectorToken)
+        .where(
+            ConnectorToken.user_id == ctx.user.id,
+            ConnectorToken.client == client,
+            ConnectorToken.revoked_at.is_(None),
+        )
+        .with_for_update()
+    ).all()
+    now = clock.now()
+    for row in rows:
+        row.revoked_at = now
+    if rows:
+        audit(
+            db,
+            actor_id=ctx.user.id,
+            action="connector.disconnected",
+            details={"client": client, "tokens": len(rows)},
+            request_id=ctx.request_id,
+        )
+    db.flush()
+    return commit_with_response(db, ctx, None, 200, {"client": client, "revoked": len(rows)})

@@ -134,6 +134,13 @@ router = APIRouter(prefix="/connector", tags=["connector"])
 UNTRUSTED = "learner_material"  # marker the MCP server turns into an untrusted-content wrapper
 
 
+@router.get("/hello")
+def hello(ctx: Ctx = Depends(connector_ctx)) -> dict[str, Any]:
+    """The remote connector checks a token with this when an assistant connects (counted like any request; it
+    also marks the token as used, which Settings' Check connection waits for)."""
+    return {"client": ctx.client}
+
+
 @router.get("/plan", response_model=PlanOut)
 def plan(
     minutes: int | None = Query(default=None, ge=0, le=720, description="Default: today's availability"),

@@ -197,6 +197,9 @@ class Course(Base):
     bloom_ceiling_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Explanation pace for this course (migration 0035); NULL = the learner's default (users.explanation_pace).
     explanation_pace: Mapped[str | None] = mapped_column(String(16))
+    # Usually studied in (migration 0037): the assistant Today and the tips name for this course; NULL = any. Wording
+    # only: every connected assistant works with every course.
+    usually_studied_in: Mapped[str | None] = mapped_column(String(16))
     revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
@@ -212,6 +215,10 @@ class Course(Base):
         CheckConstraint(
             "explanation_pace IS NULL OR explanation_pace IN ('step','balanced','chunks','auto')",
             name="explanation_pace",
+        ),
+        CheckConstraint(
+            "usually_studied_in IS NULL OR usually_studied_in IN ('claude','codex','antigravity','chatgpt')",
+            name="usually_studied_in",
         ),
     )
 

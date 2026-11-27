@@ -835,6 +835,8 @@ export interface Course {
   group_id: string | null;
   /** null = the learner's default explanation pace */
   explanation_pace?: ExplanationPace | null;
+  /** The assistant Today and the tips name for this course (2026-11-27); null = any. */
+  usually_studied_in?: AssistantKey | null;
 }
 
 /** A Library file a note links with [name](source:<id>) or shows with ![name](source:<id>). */
@@ -948,6 +950,10 @@ export interface ConnectorSettings {
   daily_limit: number;
   used_today: number;
   tokens: ConnectorToken[];
+  /** The remote connector's address (…/mcp) when other computers can reach this RecallSpring, else null. */
+  remote_url?: string | null;
+  /** That address is reachable from the internet (HTTPS, port 443): Claude needs it. */
+  remote_from_internet?: boolean;
 }
 
 export interface StudySettings {
