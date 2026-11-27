@@ -2,33 +2,31 @@
   <img src="assets/brand/recallspring-symbol-1024.png" alt="RecallSpring" width="112" height="112" />
 </p>
 
-<h1 align="center">RecallSpring</h1>
+<h3 align="center">RecallSpring</h3>
 
 <p align="center">
-  <strong>A self-hosted study app for students: your own AI tutors you, RecallSpring remembers what you learned
-  and schedules your reviews up to the exam.</strong>
-  <br />
-  Works with Claude, Codex, Google Antigravity and ChatGPT. Free and open source.
-  <br />
-  <br />
-  <a href="#why-recallspring"><strong>Why</strong></a> ·
-  <a href="#how-it-works"><strong>How it works</strong></a> ·
-  <a href="#features"><strong>Features</strong></a> ·
-  <a href="#get-started"><strong>Get started</strong></a> ·
-  <a href="#contributing"><strong>Contributing</strong></a>
+    Open-source study app that plans your reviews and tracks what you have learned.
+    <br />
+    <br />
+    <a href="#why-recallspring"><strong>Why RecallSpring</strong></a> ·
+    <a href="#how-it-works"><strong>How it works</strong></a> ·
+    <a href="#features"><strong>Features</strong></a> ·
+    <a href="#assistants"><strong>Assistants</strong></a> ·
+    <a href="#get-started"><strong>Get started</strong></a> ·
+    <a href="#contributing"><strong>Contributing</strong></a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-0f766e?style=flat" alt="License: AGPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/self--hosted-your%20data%2C%20your%20computer-0f766e?style=flat" alt="Self-hosted" />
-  <img src="https://img.shields.io/badge/AI-bring%20your%20own-0f766e?style=flat" alt="Bring your own AI" />
+  <img src="https://img.shields.io/badge/self--hosted-your%20data%2C%20your%20choice-0f766e?style=flat" alt="Self-hosted" />
   <img src="https://img.shields.io/badge/status-early%20development-f0a000?style=flat" alt="Status: early development" />
 </p>
+
+<br/>
 
 <p align="center">
   <img src="assets/screenshots/today.png" alt="Today: the next step with one button, this week at a glance, and today's plan with the midterm exam coming up" width="100%" />
 </p>
-
 
 ## Why RecallSpring
 
@@ -46,13 +44,12 @@
 
 ## How it works
 
-```mermaid
-flowchart LR
-    You(["You"]) <--> AI["Your assistant<br/>Claude · Codex · Antigravity · ChatGPT"]
-    AI <-- "MCP connector" --> RS["RecallSpring<br/>on your computer"]
-    You <--> RS
-    RS --- M[("Your material, notes,<br/>answers, grades, plan")]
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/how-it-works-dark.svg" />
+    <img src="assets/diagrams/how-it-works-light.svg" alt="You study in your own assistant (Claude, Codex, Antigravity or ChatGPT), which talks to RecallSpring on your computer through the MCP connector; RecallSpring schedules your reviews, plans up to the exam and keeps every grade, next to your material, notes, answers and history" width="100%" />
+  </picture>
+</p>
 
 1. **Add your course and material.** Slides, PDFs, Office files, photos of your notes. Set the date of your midterm
    exam and, if you have one, add an old exam paper.
