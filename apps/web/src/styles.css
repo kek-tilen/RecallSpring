@@ -7213,3 +7213,34 @@ input.switch:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+/* Settings › Data & backups rows that open in place (2026-11-27) */
+.warn-text {
+  color: var(--warning);
+}
+.deleted-list li + li {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.restore-steps {
+  margin: 0;
+  padding-left: 1.3rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+#getting-it-back .assistant-steps,
+#recently-deleted .assistant-steps {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.command-line {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+}

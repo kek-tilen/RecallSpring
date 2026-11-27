@@ -1038,3 +1038,24 @@ export interface FocusSummary {
   removed: FocusBlock[]; // removed in the last `restore_days` days, newest first
   restore_days: number;
 }
+
+/** One item in Settings › Data & backups › Recently deleted (GET /deleted, 2026-11-27). */
+export interface DeletedItem {
+  type: "course" | "exam" | "note" | "focus" | "chat";
+  id: string;
+  title: string;
+  course_title: string | null;
+  deleted_at: string;
+  restorable_until: string;
+  /** A course: what comes back with it. */
+  brings?: { notes: number; exams: number; materials: number };
+  color?: string;
+  due_date?: string;
+  started_at?: string;
+  ended_at?: string;
+}
+
+export interface DeletedList {
+  restorable_days: number;
+  items: DeletedItem[];
+}

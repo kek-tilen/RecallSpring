@@ -139,7 +139,7 @@ hashes; no OAuth credential, `.env` file or password is copied. The page-render 
   next to a plain `manifest.json` with totals, the key id and the dump's SHA-256; uploads are sealed once as
   `sealed/<HMAC>.age` (names keyed per installation and key, so they say nothing about the file). The dump is made
   and test-restored in a temporary folder under `RS_RUN_DIR` (`backup-work/`), never in the backup folder, and
-  removed afterwards. *New key* replaces the key for new backups; older ones still need the key they were made
+  removed afterwards. *Recovery key* › *Make a new key* replaces the key for new backups; older ones still need the key they were made
   with (the manifest names it). Older unencrypted backups are kept (they age out with the usual retention) or,
   when the learner chooses so and confirms, deleted after the first encrypted one (`backup.unencrypted_removed`).
   Audited as `backup.encryption_on` / `backup.key_replaced` with the key id only; no key ever reaches the

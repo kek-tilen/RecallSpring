@@ -19,7 +19,7 @@ from ..deps import Ctx, WriteCtx, commit_with_response, current_ctx, replay_if_s
 from ..errors import not_found
 from ..models import Concept, Course, Quiz
 from ..schemas import QuizDraftIn, QuizSubmitIn, RetakeIn
-from ..services import calendar, overview, week
+from ..services import calendar, deleted, overview, week
 from ..services import quizzes as quiz_svc
 from ..services.ownership import course_alive, owned
 from ..services.planner import today_plan
@@ -34,6 +34,13 @@ def _quiz(db: Session, quiz_id: uuid.UUID, user_id: uuid.UUID, *, lock: bool = F
     if quiz is None or not course_alive(db, quiz.course_id):
         raise not_found("Simulation")
     return quiz
+
+
+@router.get("/deleted")
+def recently_deleted(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Courses, exams, notes, focus blocks and chats deleted in the last 30 days, newest first (restore each with its
+    own endpoint)."""
+    return deleted.recently_deleted(db, ctx.user)
 
 
 @router.get("/dashboard")

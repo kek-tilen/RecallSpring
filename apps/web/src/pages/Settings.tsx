@@ -11,6 +11,7 @@ import { PreferencesEditor } from "./Import";
 import { AssistantsPanel } from "../components/Assistants";
 import { ExplanationPaceDefault } from "../components/ExplanationPace";
 import { ServiceStatus } from "../components/ServiceStatus";
+import { GettingItBack, RecentlyDeletedRow } from "../components/DataRows";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
 import type { BackupFolderCheck, BackupKey, BackupStatus, StudySettings } from "../types";
 
@@ -129,7 +130,6 @@ function BackupPanel({ b }: { b: BackupStatus }) {
       void qc.invalidateQueries({ queryKey: keys.dashboard });
     },
   });
-  const last = b.last;
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="settings-row">
@@ -161,7 +161,15 @@ function BackupPanel({ b }: { b: BackupStatus }) {
           Backed up and checked.
         </div>
       )}
-      <details className="settings-details">
+    </div>
+  );
+}
+
+/** Backup details, under all Data & backups rows (2026-11-27). */
+function BackupDetails({ b }: { b: BackupStatus }) {
+  const last = b.last;
+  return (
+    <details className="settings-details">
         <summary>Backup details</summary>
       <div className="stack" style={{ gap: 14 }}>
       <p className="small">
@@ -208,20 +216,8 @@ function BackupPanel({ b }: { b: BackupStatus }) {
           then.
         </div>
       )}
-      <p className="tiny muted">
-        Restoring never overwrites anything: <code>recallspring backup-restore --database &lt;new name&gt;</code> creates a new database
-        from a backup, then you choose to switch (docs/08 → Backups).
-        {b.encryption.on && (
-          <>
-            {" "}
-            An encrypted backup also needs <code>--key &lt;recovery key file&gt;</code>.
-          </>
-        )}{" "}
-        Backups in a folder used before: add <code>--from &lt;that folder&gt;</code>.
-      </p>
       </div>
       </details>
-    </div>
   );
 }
 
@@ -488,7 +484,7 @@ function BackupFolder({ b }: { b: BackupStatus }) {
   );
 }
 
-type KeyStep = "about" | "key" | "check";
+type KeyStep = "manage" | "about" | "key" | "check";
 
 function keyFile(k: BackupKey): string {
   return [
@@ -565,8 +561,13 @@ function BackupEncryption({ b }: { b: BackupStatus }) {
           </span>
         </span>
         {b.can_change && step === null && (
-          <button type="button" className="btn small" onClick={() => setStep("about")}>
-            {on ? "New key" : "Turn on"}
+          <button type="button" className="btn small" aria-expanded={false} onClick={() => setStep(on ? "manage" : "about")}>
+            {on ? "Recovery key" : "Turn on"}
+          </button>
+        )}
+        {step === "manage" && (
+          <button type="button" className="btn small" aria-expanded onClick={close}>
+            Close
           </button>
         )}
       </div>
@@ -574,6 +575,35 @@ function BackupEncryption({ b }: { b: BackupStatus }) {
         <p className="tiny muted" style={{ margin: 0 }}>
           {plural(plainCount, "unencrypted backup")} will be removed after the next encrypted one.
         </p>
+      )}
+      {step === "manage" && (
+        <section className="backup-key stack" aria-labelledby="backup-key-h">
+          <h4 id="backup-key-h" className="backup-key-title">
+            Your recovery key
+          </h4>
+          <ul className="folder-checks">
+            <li data-level="ok">
+              <span aria-hidden="true">✓</span>
+              <span>
+                Made {b.encryption.key_created_at ? `on ${dateLabel(b.encryption.key_created_at)}` : "earlier"} (key {b.encryption.key_id}). Backups
+                made since then need it.
+              </span>
+            </li>
+            <li data-level="ok">
+              <span aria-hidden="true">✓</span>
+              <span>RecallSpring keeps only the half that locks; it cannot open a backup or show the key again.</span>
+            </li>
+          </ul>
+          <p className="small" style={{ margin: 0 }}>
+            Lost it, or think someone else has it? Make a new one. New backups use the new key; backups made before still need the old
+            one.
+          </p>
+          <div className="row">
+            <button type="button" className="btn small" onClick={() => setStep("about")}>
+              Make a new key
+            </button>
+          </div>
+        </section>
       )}
       {step === "about" && (
         <section className="backup-key stack" aria-labelledby="backup-key-h">
@@ -958,6 +988,8 @@ export function SettingsPage() {
                     <BackupEncryption b={backup.data} />
                   </div>
                 )}
+                {backup.data && <GettingItBack b={backup.data} />}
+                <RecentlyDeletedRow />
                 <div className="settings-row" id="history">
                   <span>
                     <h3 className="settings-row-title">History</h3>
@@ -967,16 +999,8 @@ export function SettingsPage() {
                     Open history
                   </Link>
                 </div>
-                <div className="settings-row">
-                  <span>
-                    <h3 className="settings-row-title">Recently deleted</h3>
-                    <span className="small muted">
-                      Courses, exams, notes, focus blocks and chats stay restorable for 30 days, each in its own list
-                    </span>
-                  </span>
-                  <span />
-                </div>
               </div>
+              {backup.data && <BackupDetails b={backup.data} />}
             </Section>
           )}
           {current === "appearance" && (
