@@ -8,6 +8,7 @@ import { Upload } from "../components/Upload";
 import { CATEGORY_LABEL, COUNT_LABEL, SOURCE_KIND, bytes, dateLabel, dateTime, parseNoteLabel, plural } from "../format";
 import { LIBRARY_KEYS, useCourses, useFolders, useGroups, useSources } from "../queries";
 import type { Course, Folder, Group, MaterialCategory, SearchHit, Section, Source } from "../types";
+import type { ConceptRow } from "../types";
 
 const STATE: Record<Source["parse_state"], { tone: string; label: string }> = {
   pending: { tone: "chip", label: "Queued" },
@@ -184,6 +185,82 @@ export function SourceTable({
         </tbody>
       </table>
     </div>
+    </>
+  );
+}
+
+const KIND_NAME: Record<string, string> = { pdf: "PDF", docx: "Word", pptx: "Slides", xlsx: "Excel", md: "Markdown", txt: "Text", text: "Text", html: "Web page" };
+
+/** Material inside a course as drawn (UI direction, 2026-11-27): one row per file with its kind, pages and the
+ * concepts made from it, and whether those are read yet; selection and dragging work as in the table. */
+export function SourceRows({
+  sources,
+  concepts,
+  selected,
+  onToggle,
+  showFolder,
+}: {
+  sources: Source[];
+  concepts: ConceptRow[];
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  showFolder?: boolean;
+}) {
+  if (sources.length === 0) return null;
+  const failed = sources.filter((s) => s.parse_state === "failed");
+  const dragStart = (e: DragEvent, id: string) => {
+    const ids = selected.has(id) ? [...selected] : [id];
+    e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(ids));
+    e.dataTransfer.effectAllowed = "move";
+  };
+  return (
+    <>
+      {failed.length > 0 && <ReadAgain sources={failed} />}
+      <ul className="source-rows" aria-label="Material">
+        {sources.map((s) => {
+          const made = concepts.filter((c) => c.sections.some((x) => x.filename === s.filename));
+          const read = made.filter((c) => c.study_status !== "not_studied").length;
+          const meta = [
+            KIND_NAME[s.kind] ?? (CATEGORY_LABEL[s.category] || s.kind),
+            s.page_count ? plural(s.page_count, "page") : null,
+            made.length ? plural(made.length, "concept") : null,
+            showFolder ? (s.folder ?? "Top level") : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          return (
+            <li
+              key={s.id}
+              draggable
+              onDragStart={(e) => dragStart(e, s.id)}
+              className={selected.has(s.id) ? "source-row selected" : "source-row"}
+            >
+              <input type="checkbox" checked={selected.has(s.id)} onChange={() => onToggle(s.id)} aria-label={`Select ${s.filename}`} />
+              <span className="source-row-name">
+                <Link to={`/library/${s.id}`}>{s.filename}</Link>
+                <span className="small muted">
+                  {meta}
+                  {s.duplicate_of_id && " · same file as another upload"}
+                  {s.origin === "web" && " · from the web, not your course material"}
+                </span>
+              </span>
+              {s.parse_state !== "ready" ? (
+                <StateChip state={s.parse_state} />
+              ) : made.length === 0 ? (
+                <span />
+              ) : read === made.length ? (
+                <span className="chip tint-chip" title="Every concept from this file is studied">
+                  Read
+                </span>
+              ) : (
+                <span className="small muted" title={`${read} of ${made.length} concepts from this file studied`}>
+                  {read === 0 ? "New" : `${read} of ${made.length} read`}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </>
   );
 }
@@ -517,10 +594,13 @@ export function FolderBrowser({
   folderId,
   href,
   addCategory,
+  concepts,
 }: {
   courseId: string;
   folderId: string | null;
   href: (folderId: string | null) => string;
+  /** Inside a course (2026-11-27): the course's concepts, so each file shows what was made from it, as rows. */
+  concepts?: ConceptRow[];
   /** Opened from "Add old paper": the upload starts as this kind and is scrolled into view. */
   addCategory?: MaterialCategory;
 }) {
@@ -758,9 +838,12 @@ export function FolderBrowser({
           {inFolders === 1 ? "The file is in a folder above." : `All ${inFolders} files are in the folders above.`}
         </p>
       )}
-      {files.length > 0 && (
-        <SourceTable sources={files} selected={selected} onToggle={toggle} onToggleAll={toggleAll} showFolder={category !== "all" && inFolders > 0} />
-      )}
+      {files.length > 0 &&
+        (concepts ? (
+          <SourceRows sources={files} concepts={concepts} selected={selected} onToggle={toggle} showFolder={category !== "all" && inFolders > 0} />
+        ) : (
+          <SourceTable sources={files} selected={selected} onToggle={toggle} onToggleAll={toggleAll} showFolder={category !== "all" && inFolders > 0} />
+        ))}
       {images.length > 0 && (
         <Card
           title="Photos"
@@ -799,9 +882,16 @@ export function FolderBrowser({
             }
           }}
         >
-          <Card title={current ? `Add material to ${current.name}` : "Add material"}>
-            <Upload key={addCategory ?? "material"} courseId={courseId} folderId={folderId} category={addCategory} />
-          </Card>
+          {concepts ? (
+            <div className="course-upload">
+              <h3 className="sr-only">{current ? `Add material to ${current.name}` : "Add material"}</h3>
+              <Upload key={addCategory ?? "material"} courseId={courseId} folderId={folderId} category={addCategory} />
+            </div>
+          ) : (
+            <Card title={current ? `Add material to ${current.name}` : "Add material"}>
+              <Upload key={addCategory ?? "material"} courseId={courseId} folderId={folderId} category={addCategory} />
+            </Card>
+          )}
         </div>
       )}
       {dialog && (

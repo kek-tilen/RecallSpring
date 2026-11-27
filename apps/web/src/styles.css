@@ -6028,3 +6028,335 @@ details.c2c-version > summary {
     padding: 12px;
   }
 }
+
+/* Courses as drawn (UI direction, 2026-11-27): quiet section lines that open and close, one row per course with its
+   study bar, due count and Study in…; rarer actions sit in a small ⋯ menu. */
+.courses-groups {
+  gap: 8px;
+}
+
+.courses-page .group {
+  gap: 0;
+}
+
+.courses-page .group-children {
+  padding-left: 0;
+  border-left: 0;
+  gap: 0;
+}
+
+.courses-page .group-head {
+  align-items: center;
+  margin: 14px 0 4px;
+  flex-wrap: nowrap;
+}
+
+.courses-page .group-head h2,
+.courses-page .group-head h3 {
+  flex: 1;
+  align-items: center;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin: 0;
+}
+
+.group-count {
+  margin-left: auto;
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.courses-archived {
+  margin-top: 8px;
+}
+
+.section-menu {
+  position: relative;
+  flex: none;
+}
+
+.section-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.section-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.section-menu > summary:hover,
+.section-menu[open] > summary {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.section-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+}
+
+.section-menu-list .btn {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.section-menu-list > span {
+  padding: 4px 10px;
+}
+
+.course-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.course-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 70px auto;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.course-row.archived {
+  opacity: 0.7;
+}
+
+.course-row-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.course-row-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.course-row-title:hover {
+  text-decoration: underline;
+}
+
+.course-row-line {
+  padding-left: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.course-row-meter .meter {
+  height: 6px;
+  border-radius: 3px;
+  margin: 4px 0 2px;
+}
+
+.course-row-act {
+  justify-self: end;
+}
+
+@media (max-width: 640px) {
+  .course-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px;
+  }
+
+  .course-row-meter {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .course-row-due {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .course-row-act {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-self: start;
+  }
+}
+
+/* A course as drawn: serif title with its dot, one quiet line, Study in… and Course settings on the right; four
+   underlined tabs; Material and Notes side by side. */
+.course-page .crumbs a::before {
+  content: "‹ ";
+}
+
+.course-page-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.course-page .page-head {
+  align-items: flex-start;
+}
+
+.course-settings {
+  gap: 14px;
+}
+
+.course-tabs {
+  gap: 22px;
+}
+
+.course-tabs a {
+  padding: 8px 0;
+  border-bottom-width: 2px;
+  font-weight: 500;
+}
+
+.course-tabs a[aria-current="page"] {
+  color: var(--tint-ink);
+  border-bottom-color: var(--tint-ink);
+}
+
+.course-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.course-progress p {
+  margin: 0;
+}
+
+.course-mn {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.course-mn > section {
+  min-width: 0;
+}
+
+.course-mn-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.course-mn-h {
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  margin: 0 0 8px;
+}
+
+@media (max-width: 960px) {
+  .course-mn {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Material & notes inside a course (2026-11-27): rows instead of tables, a dashed drop zone, deleted notes folded. */
+.source-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.source-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+
+.source-row:not(:has(input)) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.source-row.selected {
+  background: color-mix(in srgb, var(--tint) 55%, transparent);
+}
+
+.source-row-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.source-row-name a {
+  color: var(--ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.source-row-name a:hover {
+  text-decoration: underline;
+}
+
+.tint-chip {
+  background: var(--tint);
+  color: var(--tint-ink);
+  border-color: transparent;
+}
+
+.course-upload {
+  margin-top: 4px;
+}
+
+.notes-deleted {
+  border-top: 1px solid var(--border);
+  padding: 9px 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.notes-deleted > summary {
+  display: flex;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.notes-deleted .list {
+  margin-top: 8px;
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .course-tabs {
+    gap: 16px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .course-tabs a {
+    white-space: nowrap;
+  }
+}

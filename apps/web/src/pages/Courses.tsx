@@ -2,16 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
 import { request } from "../api";
-import {
-  CourseDialog,
-  CourseDot,
-  GroupDialog,
-  KIND_LABEL,
-  NewInterestDialog,
-  cc,
-  isFocused,
-  useInvalidateOrganisation,
-} from "../components/organise";
+import { CourseDot, GroupDialog, KIND_LABEL, NewInterestDialog, cc, isFocused, useInvalidateOrganisation } from "../components/organise";
 import { NewCourseDialog, RecentlyDeletedCourses } from "../components/CourseForms";
 import { StudyIn } from "../components/StudyIn";
 import { Async, Chevron, Confirm, Empty, ErrorNote, PageHead, StudyMeter } from "../components/ui";
@@ -19,6 +10,9 @@ import { dateLabel, plural } from "../format";
 import { useArchived, useCourseSummary, useGroups } from "../queries";
 import { ArchivedCourses } from "./Archived";
 import type { CourseSummary, Group } from "../types";
+
+// Courses as drawn (UI direction, 2026-11-27): one row per course in groups that open and close, interests apart;
+// material and notes live inside each course, its settings behind Course settings on the course page.
 
 /** Sections the learner closed on Courses (group IDs, "loose", "interests", "archived"), remembered on the device. */
 export const COLLAPSED_STORE = "rs.courses.collapsed";
@@ -47,15 +41,15 @@ function useCollapse(id: string): [boolean, () => void] {
   return [closed, toggle];
 }
 
-/** The heading of a section that opens and closes; ``shut`` is what it holds, shown while closed. */
-function SectionToggle({ open, onToggle, children, shut }: { open: boolean; onToggle: () => void; children: React.ReactNode; shut: string }) {
+/** The quiet heading of a section that opens and closes, with how much it holds on the right. */
+function SectionToggle({ open, onToggle, children, count }: { open: boolean; onToggle: () => void; children: React.ReactNode; count: string }) {
   return (
     <>
       <button type="button" className="group-toggle" aria-expanded={open} onClick={onToggle}>
         <Chevron open={open} />
         {children}
       </button>
-      {!open && <span className="small muted group-shut">{shut}</span>}
+      <span className="group-count">{count}</span>
     </>
   );
 }
@@ -68,60 +62,66 @@ function coursesInside(group: Group, groups: Group[], courses: CourseSummary[], 
     .reduce((n, g) => n + coursesInside(g, groups, courses, showArchived), own);
 }
 
-function CourseCard({ c }: { c: CourseSummary }) {
-  const [editing, setEditing] = useState(false);
+const LAST_STATUS: Record<string, string> = { passed: "passed", failed: "not passed yet", cancelled: "cancelled" };
+
+function inDays(n: number): string {
+  if (n < 0) return "date passed";
+  if (n === 0) return "today";
+  if (n === 1) return "tomorrow";
+  return `in ${n} days`;
+}
+
+/** What a course works towards, in one quiet line under its name. */
+function courseLine(c: CourseSummary): string {
+  if (c.status === "archived") return c.long_term_retention ? "Archived: due reviews continue as maintenance" : "Archived";
+  if (c.kind === "interest") return c.description || "No goal yet: your assistant asks for it in your first session";
+  if (c.active_target) return `${c.active_target.name} · ${inDays(c.active_target.days_left)}`;
+  if (c.last_target) return `${c.last_target.name} · ${LAST_STATUS[c.last_target.status] ?? "result not recorded"} · no exam coming up`;
+  return "No exam or midterm set yet";
+}
+
+function CourseRow({ c }: { c: CourseSummary }) {
   return (
-    <article className={`card stack course-card ${cc(c.color)} ${c.status === "archived" ? "archived" : ""}`}>
-      {/* The title side takes the room and Edit stays top right, also beside a long description. */}
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", flexWrap: "nowrap" }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <h3 className="row" style={{ gap: 8, overflowWrap: "anywhere" }}>
-            <CourseDot color={c.color} />
-            <Link to={`/courses/${c.id}`}>{c.title}</Link>
-            {isFocused(c) && <span className="chip solid">Focus until {dateLabel(c.focus_until ?? "")}</span>}
-          </h3>
-          {c.description && c.kind !== "interest" && <p className="muted small">{c.description}</p>}
-        </div>
-        <button type="button" className="btn small ghost" onClick={() => setEditing(true)} aria-label={`Edit ${c.title}`}>
-          Edit
-        </button>
+    <li className={`course-row ${cc(c.color)} ${c.status === "archived" ? "archived" : ""}`}>
+      <div className="course-row-name">
+        <Link to={`/courses/${c.id}`} className="course-row-title">
+          <CourseDot color={c.color} />
+          {c.title}
+        </Link>
+        <span className="small muted course-row-line">
+          {courseLine(c)}
+          {isFocused(c) && ` · Focus until ${dateLabel(c.focus_until ?? "")}`}
+        </span>
       </div>
-      {c.status === "archived" ? (
-        <div className="notice small muted">Archived{c.long_term_retention ? ": due reviews continue as maintenance." : "."}</div>
-      ) : c.kind === "interest" ? (
-        <div className="notice small">
-          {c.description ? (
-            <>
-              <strong>Goal:</strong> {c.description}
-            </>
-          ) : (
-            <span className="muted">No goal yet: your assistant asks for it in your first session.</span>
-          )}
-        </div>
-      ) : c.active_target ? (
-        <div className="notice small">
-          <strong>{c.active_target.name}</strong> on {dateLabel(c.active_target.due_date)} ·{" "}
-          {c.active_target.days_left >= 0 ? `${plural(c.active_target.days_left, "day")} left` : "date passed"}
-        </div>
-      ) : c.last_target ? (
-        <div className="notice small">
-          <strong>{c.last_target.name}</strong> on {dateLabel(c.last_target.due_date)} · {LAST_STATUS[c.last_target.status] ?? "result not recorded"}
-          <span className="muted"> · no exam coming up</span>
-        </div>
-      ) : (
-        <div className="notice small muted">No exam or midterm set yet.</div>
-      )}
-      <StudyMeter progress={c.progress} />
-      <div className="row small muted" style={{ gap: 16 }}>
-        <span>{plural(c.progress.concepts, "concept")}</span>
-        <span>{plural(c.sources, "material")}</span>
-        <span>{plural(c.notes, "note")}</span>
-        <span>{plural(c.simulations, "simulation")}</span>
-        {c.due_reviews > 0 && <span className="chip warn">{c.due_reviews} due</span>}
+      <div className="course-row-meter">
+        <StudyMeter progress={c.progress} compact />
+        <span className="tiny muted">{plural(c.progress.concepts, "concept")}</span>
       </div>
-      {c.status !== "archived" && <StudyIn course={c} />}
-      {editing && <CourseDialog course={c} open onClose={() => setEditing(false)} />}
-    </article>
+      <span className="small muted course-row-due">{c.due_reviews > 0 ? `${c.due_reviews} due` : ""}</span>
+      <span className="course-row-act">{c.status !== "archived" && <StudyIn course={c} quiet />}</span>
+    </li>
+  );
+}
+
+function CourseRows({ courses, label }: { courses: CourseSummary[]; label: string }) {
+  return (
+    <ul className="course-rows" aria-label={label}>
+      {courses.map((c) => (
+        <CourseRow key={c.id} c={c} />
+      ))}
+    </ul>
+  );
+}
+
+/** A small menu for the rarer actions of a section, so its heading stays one quiet line. */
+function SectionMenu({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <details className="section-menu">
+      <summary aria-label={label} title={label}>
+        ⋯
+      </summary>
+      <div className="section-menu-list">{children}</div>
+    </details>
   );
 }
 
@@ -150,24 +150,26 @@ function GroupBlock({ group, groups, courses, showArchived, depth }: {
   const [closed, toggle] = useCollapse(group.id);
   const filled = children.length > 0 || own.length > 0;
   const open = !filled || !closed;
+  const name = (
+    <>
+      <span className="sr-only">{KIND_LABEL[group.kind]} </span>
+      {group.name}
+    </>
+  );
   return (
     <section className={`group ${archived ? "archived" : ""}`} aria-label={`${KIND_LABEL[group.kind]} ${group.name}`}>
       <div className="group-head">
         <Heading>
           {filled ? (
-            <SectionToggle open={open} onToggle={toggle} shut={plural(coursesInside(group, groups, courses, showArchived), "course")}>
-              <span className="kind">{KIND_LABEL[group.kind]}</span>
-              {group.name}
+            <SectionToggle open={open} onToggle={toggle} count={plural(coursesInside(group, groups, courses, showArchived), "course")}>
+              {name}
             </SectionToggle>
           ) : (
-            <>
-              <span className="kind">{KIND_LABEL[group.kind]}</span>
-              {group.name}
-            </>
+            <span className="group-toggle">{name}</span>
           )}
           {archived && <span className="chip">Archived</span>}
         </Heading>
-        <div className="row">
+        <SectionMenu label={`Actions for ${group.name}`}>
           {(group.starts_on || group.ends_on) && (
             <span className="small muted">
               {group.starts_on ? dateLabel(group.starts_on) : "…"} – {group.ends_on ? dateLabel(group.ends_on) : "…"}
@@ -181,21 +183,15 @@ function GroupBlock({ group, groups, courses, showArchived, depth }: {
           <button type="button" className="btn small ghost" onClick={() => setEditing(true)}>
             Edit
           </button>
-          <button type="button" className="btn small" onClick={() => (archived ? archive.mutate(false) : setConfirm(true))}>
+          <button type="button" className="btn small ghost" onClick={() => (archived ? archive.mutate(false) : setConfirm(true))}>
             {archived ? "Restore" : "Archive"}
           </button>
-        </div>
+        </SectionMenu>
       </div>
       {archive.error && !confirm && <ErrorNote error={archive.error} />}
       {filled && open && (
         <div className="group-children">
-          {own.length > 0 && (
-            <div className="grid cols-2">
-              {own.map((c) => (
-                <CourseCard key={c.id} c={c} />
-              ))}
-            </div>
-          )}
+          {own.length > 0 && <CourseRows courses={own} label={`Courses in ${group.name}`} />}
           {children.map((g) => (
             <GroupBlock key={g.id} group={g} groups={groups} courses={courses} showArchived={showArchived} depth={depth + 1} />
           ))}
@@ -203,7 +199,7 @@ function GroupBlock({ group, groups, courses, showArchived, depth }: {
       )}
       {children.length === 0 && own.length === 0 && (
         <p className="small muted">
-          Empty. File a course here with its Edit button{group.kind === "semester" ? "" : ", or add a semester inside"}.
+          Empty. File a course here in its Course settings{group.kind === "semester" ? "" : ", or add a semester inside"}.
         </p>
       )}
       {editing && <GroupDialog group={group} open onClose={() => setEditing(false)} />}
@@ -224,8 +220,6 @@ function GroupBlock({ group, groups, courses, showArchived, depth }: {
   );
 }
 
-const LAST_STATUS: Record<string, string> = { passed: "passed", failed: "not passed yet", cancelled: "cancelled" };
-
 export function CoursesPage() {
   const q = useCourseSummary();
   const groups = useGroups();
@@ -239,30 +233,28 @@ export function CoursesPage() {
   const [archiveClosed, toggleArchive] = useCollapse("archived");
   const archivedCount = archived.data ? archived.data.groups.length + archived.data.courses.length : 0;
   return (
-    <div className="page">
-      <PageHead
-        title="Courses"
-        sub="Organised by university, faculty and semester, plus your own interests. Each shows its next exam or goal and progress."
-      >
-        {/* Library and Notes left the menu (2026-11-27); until they move into each course they open from here. */}
-        <Link to="/library" className="btn ghost">
-          Library
-        </Link>
-        <Link to="/notes" className="btn ghost">
-          Notes
-        </Link>
-        <a href="#archived" className="btn ghost">
-          Archived{archived.data ? ` (${archivedCount})` : ""}
-        </a>
-        <button type="button" className="btn primary" onClick={() => setAddingCourse(true)}>
-          New course
+    <div className="page courses-page">
+      <PageHead title="Courses">
+        <button type="button" className="btn" onClick={() => setAddingCourse(true)}>
+          + New course
         </button>
-        <button type="button" className="btn" onClick={() => setCreating(true)}>
-          New university, faculty or semester
-        </button>
-        <button type="button" className="btn" onClick={() => setAddingInterest(true)}>
-          New interest
-        </button>
+        <SectionMenu label="More">
+          <button type="button" className="btn small ghost" onClick={() => setCreating(true)}>
+            New university, faculty or semester
+          </button>
+          <button type="button" className="btn small ghost" onClick={() => setAddingInterest(true)}>
+            New interest
+          </button>
+          <Link to="/library/import" className="btn small ghost">
+            Move in
+          </Link>
+          <Link to="/library" className="btn small ghost">
+            All material
+          </Link>
+          <Link to="/notes" className="btn small ghost">
+            All notes
+          </Link>
+        </SectionMenu>
       </PageHead>
       <Async q={q} lines={6}>
         {(courses) => {
@@ -281,7 +273,7 @@ export function CoursesPage() {
             );
           }
           return (
-            <div className="stack" style={{ gap: 28 }}>
+            <div className="stack courses-groups">
               {roots.map((g) => (
                 <GroupBlock key={g.id} group={g} groups={all} courses={courses} showArchived={showArchived} depth={0} />
               ))}
@@ -290,48 +282,34 @@ export function CoursesPage() {
                   {roots.length > 0 && (
                     <div className="group-head">
                       <h2>
-                        <SectionToggle open={!looseClosed} onToggle={toggleLoose} shut={plural(loose.length, "course")}>
-                          <span className="kind">Not filed</span>
+                        <SectionToggle open={!looseClosed} onToggle={toggleLoose} count={plural(loose.length, "course")}>
+                          Not filed
                         </SectionToggle>
                       </h2>
                     </div>
                   )}
-                  {(roots.length === 0 || !looseClosed) && (
-                    <div className="grid cols-2">
-                      {loose.map((c) => (
-                        <CourseCard key={c.id} c={c} />
-                      ))}
-                    </div>
-                  )}
+                  {(roots.length === 0 || !looseClosed) && <CourseRows courses={loose} label="Courses not filed" />}
                 </section>
               )}
               <section className="group" aria-label="Interests">
                 <div className="group-head">
                   <h2>
                     {interests.length > 0 ? (
-                      <SectionToggle open={!interestsClosed} onToggle={toggleInterests} shut={plural(interests.length, "interest")}>
-                        <span className="kind">Interests</span>
-                        Outside university
+                      <SectionToggle open={!interestsClosed} onToggle={toggleInterests} count={plural(interests.length, "interest")}>
+                        Interests
                       </SectionToggle>
                     ) : (
-                      <>
-                        <span className="kind">Interests</span>
-                        Outside university
-                      </>
+                      <span className="group-toggle">Interests</span>
                     )}
                   </h2>
-                  <button type="button" className="btn small ghost" onClick={() => setAddingInterest(true)}>
-                    Add interest
-                  </button>
+                  <SectionMenu label="Actions for Interests">
+                    <button type="button" className="btn small ghost" onClick={() => setAddingInterest(true)}>
+                      Add interest
+                    </button>
+                  </SectionMenu>
                 </div>
                 {interests.length > 0 ? (
-                  !interestsClosed && (
-                    <div className="grid cols-2">
-                      {interests.map((c) => (
-                        <CourseCard key={c.id} c={c} />
-                      ))}
-                    </div>
-                  )
+                  !interestsClosed && <CourseRows courses={interests} label="Interests" />
                 ) : (
                   <p className="small muted">
                     Learn something in your free time, without an exam: data analysis, machine learning, a language.
@@ -344,24 +322,22 @@ export function CoursesPage() {
           );
         }}
       </Async>
-      <section id="archived" className="group" aria-label="Archived" style={{ marginTop: 28 }}>
+      <section id="archived" className="group courses-archived" aria-label="Archived">
         <div className="group-head">
           <h2>
             {archivedCount > 0 ? (
-              <SectionToggle open={!archiveClosed} onToggle={toggleArchive} shut={plural(archivedCount, "item")}>
-                <span className="kind">Archived</span>
-                Put away, nothing deleted
+              <SectionToggle open={!archiveClosed} onToggle={toggleArchive} count={plural(archivedCount, "item")}>
+                Archived
               </SectionToggle>
             ) : (
-              <>
-                <span className="kind">Archived</span>
-                Put away, nothing deleted
-              </>
+              <span className="group-toggle">Archived</span>
             )}
           </h2>
-          <Link to="/library/archived" className="btn small ghost">
-            Archived folders and files
-          </Link>
+          <SectionMenu label="Actions for Archived">
+            <Link to="/library/archived" className="btn small ghost">
+              Archived folders and files
+            </Link>
+          </SectionMenu>
         </div>
         {(archivedCount === 0 || !archiveClosed) && (
           <Async q={archived} lines={2}>

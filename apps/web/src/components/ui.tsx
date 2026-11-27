@@ -219,7 +219,8 @@ interface Segment {
 }
 
 /** Ordinal stacked meter (one hue, light → dark) with an always-visible legend carrying the counts. */
-export function Meter({ segments, label }: { segments: Segment[]; label: string }) {
+/** ``compact``: the bar alone (its numbers stay in its label), for a row in a list. */
+export function Meter({ segments, label, compact }: { segments: Segment[]; label: string; compact?: boolean }) {
   const total = segments.reduce((s, x) => s + x.value, 0);
   const summary = segments.map((s) => `${s.label}: ${s.value}`).join(", ");
   return (
@@ -235,6 +236,7 @@ export function Meter({ segments, label }: { segments: Segment[]; label: string 
             ))
         )}
       </div>
+      {!compact && (
       <figcaption className="legend">
         {segments.map((s) => (
           <span key={s.label} className="key">
@@ -243,13 +245,15 @@ export function Meter({ segments, label }: { segments: Segment[]; label: string 
           </span>
         ))}
       </figcaption>
+      )}
     </figure>
   );
 }
 
-export function StudyMeter({ progress }: { progress: Progress }) {
+export function StudyMeter({ progress, compact }: { progress: Progress; compact?: boolean }) {
   return (
     <Meter
+      compact={compact}
       label="Study progress"
       segments={[
         { label: "Not studied", value: progress.study.not_studied, step: 0 },

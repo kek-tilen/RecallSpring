@@ -11,139 +11,141 @@ import { CheckChip, CheckFirstPanel, PracticeLimitControl } from "../components/
 import { ExplanationPaceControl } from "../components/ExplanationPace";
 import { SelfAssessOffer, SelfCheckNote, SelfTag } from "../components/SelfAssess";
 import { ATTEMPT_KIND, CAPTURED_VIA, STUDY_LABEL, TARGET_KIND, attemptKind, dateLabel, dateTime, gradeLabel, gradedBy, plural, relativeDay } from "../format";
-import { keys, useCourseOverview, useGroups, useSources } from "../queries";
+import { keys, useCourseOverview, useGroups, useReviews, useSources } from "../queries";
+import { StudyIn } from "../components/StudyIn";
 import type { AttemptDetail, AttemptRow, ConceptRow, CourseOverview, ProfileTopic, StudyStatus, Target, TargetProfile } from "../types";
 import { NewNoteButton, NoteList } from "./Notes";
 import { FolderBrowser } from "./Library";
-import { QuizTable } from "./Simulations";
+import { CourseResults } from "./Results";
 import { ConfirmProfile, Papers } from "./WhyPlan";
 
+// A course as drawn (UI direction, 2026-11-27): four tabs instead of six. Material and notes share one tab, the
+// course's simulations and answers are its Results; colour, pace, practice limit and archive sit behind Course
+// settings. Older links (?tab=notes, simulations, answers) still land on the tab that holds them now.
 const TABS = [
   { id: "concepts", label: "Concepts" },
+  { id: "materials", label: "Material & notes" },
+  { id: "results", label: "Results" },
   { id: "targets", label: "Exams" },
-  { id: "materials", label: "Materials" },
-  { id: "notes", label: "Notes" },
-  { id: "simulations", label: "Simulations" },
-  { id: "answers", label: "Answers" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
+const MOVED: Record<string, Tab> = { notes: "materials", simulations: "results", answers: "results" };
+
+function inDays(n: number): string {
+  if (n < 0) return "date passed";
+  if (n === 0) return "today";
+  if (n === 1) return "tomorrow";
+  return `in ${n} days`;
+}
 
 export function CoursePage() {
   const { courseId = "" } = useParams();
   const [params] = useSearchParams();
-  const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "concepts") as Tab;
+  const asked = params.get("tab") ?? "";
+  const tab = (TABS.find((t) => t.id === asked)?.id ?? MOVED[asked] ?? "concepts") as Tab;
   const q = useCourseOverview(courseId);
   const groups = useGroups();
+  const reviews = useReviews();
   const [editCourse, setEditCourse] = useState(false);
+  const [settings, setSettings] = useState(false);
 
   return (
-    <div className="page">
+    <div className="page course-page">
       <Async q={q} lines={8}>
         {(o) => {
           const active = o.targets.find((t) => t.id === o.active_target_id);
           const isInterest = o.course.kind === "interest";
           const tabs = TABS.filter((t) => !(isInterest && t.id === "targets"));
-          const counts: Record<Tab, number | null> = {
-            concepts: o.concepts.length,
-            targets: o.targets.length,
-            materials: o.sources.length,
-            notes: o.notes,
-            simulations: o.quizzes.length,
-            answers: null,
-          };
+          const due = (reviews.data?.items ?? []).filter((i) => i.course_id === o.course.id && i.is_due).length;
+          const path = groupPath(groups.data, o.course.group_id);
+          const line = [
+            isInterest ? o.course.description || "Personal interest: no exam, no deadline" : active ? `${active.name} ${inDays(active.days_left)}` : "No exam or midterm set",
+            plural(o.concepts.length, "concept"),
+            due > 0 ? `${due} due` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
           return (
             <>
               <PageHead
                 title={
-                  <span className="row" style={{ gap: 10 }}>
+                  <span className="course-page-title">
                     <CourseDot color={o.course.color} />
                     {o.course.title}
                     {isInterest && <span className="chip">Interest</span>}
                     {o.course.status === "archived" && <span className="chip">Archived</span>}
                   </span>
                 }
-                sub={
-                  isInterest
-                    ? "Personal interest: no exam, no deadline."
-                    : [groupPath(groups.data, o.course.group_id), o.course.description].filter(Boolean).join(" · ") || undefined
-                }
-                crumbs={[{ to: "/courses", label: "Courses" }]}
+                sub={line}
+                crumbs={[{ to: "/courses", label: path ? `Courses · ${path.replace(/ › /g, " · ")}` : "Courses" }]}
               >
-                <FocusControl course={o.course} />
-                <button type="button" className="btn" onClick={() => setEditCourse(true)}>
-                  {isInterest ? "Edit interest" : "Edit course"}
+                {o.course.status !== "archived" && <StudyIn course={o.course} />}
+                <button type="button" className="btn small" aria-expanded={settings} onClick={() => setSettings(!settings)}>
+                  Course settings
                 </button>
               </PageHead>
-              {editCourse && <CourseDialog course={o.course} open onClose={() => setEditCourse(false)} />}
-              <div className="grid cols-2">
-                {isInterest ? (
-                  <Card title="Goal" tint>
-                    {o.course.description ? (
-                      <p className="small pre">{o.course.description}</p>
-                    ) : (
-                      <p className="small muted">
-                        No goal yet. Your assistant asks for it at the start of a session, or add it with Edit interest.
-                      </p>
-                    )}
-                  </Card>
-                ) : (
-                <Card title="Next exam" tint>
-                  {active ? (
-                    <div className="stack" style={{ gap: 6 }}>
-                      <div style={{ fontWeight: 650 }}>
-                        {active.name} · {dateLabel(active.due_date)}
-                      </div>
-                      <div className="small muted">
-                        {active.days_left >= 0 ? `${plural(active.days_left, "day")} left` : "Date passed"} ·{" "}
-                        {plural(active.concepts_in_scope, "concept")} in scope
-                      </div>
-                      <div className="small pre">{active.scope_description}</div>
-                    </div>
-                  ) : (
-                    <p className="small muted">No exam or midterm is set. Your assistant asks for it at the start of a study session.</p>
-                  )}
-                </Card>
-                )}
-                <Card title="Progress" tint>
-                  <div className="stack">
-                    <StudyMeter progress={o.progress} />
-                    <BandMeter progress={o.progress} />
-                    <p className="tiny muted">{o.note}</p>
-                    {o.practice_limit && <PracticeLimitControl courseId={o.course.id} limit={o.practice_limit} />}
-                    <ExplanationPaceControl courseId={o.course.id} />
+              {settings && (
+                <section className="card stack course-settings" aria-label="Course settings">
+                  <div className="row" style={{ justifyContent: "space-between" }}>
+                    <span className="small muted">
+                      {isInterest ? "Name, goal, colour, group and archive" : "Name, description, colour, semester and archive"}
+                    </span>
+                    <button type="button" className="btn small" onClick={() => setEditCourse(true)}>
+                      {isInterest ? "Edit interest" : "Edit course"}
+                    </button>
                   </div>
-                </Card>
-              </div>
+                  <FocusControl course={o.course} />
+                  {o.practice_limit && <PracticeLimitControl courseId={o.course.id} limit={o.practice_limit} />}
+                  <ExplanationPaceControl courseId={o.course.id} />
+                </section>
+              )}
+              {editCourse && <CourseDialog course={o.course} open onClose={() => setEditCourse(false)} />}
 
-              <nav className="tabs" aria-label="Course sections">
+              <nav className="tabs course-tabs" aria-label="Course sections">
                 {tabs.map((t) => (
                   <Link key={t.id} to={`?tab=${t.id}`} aria-current={tab === t.id ? "page" : undefined} replace>
                     {t.label}
-                    {counts[t.id] !== null && <span className="n">{counts[t.id]}</span>}
                   </Link>
                 ))}
               </nav>
 
-              {tab === "concepts" && <ConceptsTab o={o} />}
+              {tab === "concepts" && (
+                <>
+                  <section className="course-progress" aria-label="Progress">
+                    <StudyMeter progress={o.progress} />
+                    <BandMeter progress={o.progress} />
+                    <p className="tiny muted">{o.note}</p>
+                  </section>
+                  <ConceptsTab o={o} />
+                </>
+              )}
               {tab === "targets" && !isInterest && <TargetsTab targets={o.targets} activeId={o.active_target_id} courseId={o.course.id} />}
               {tab === "materials" && (
-                <FolderBrowser
-                  courseId={o.course.id}
-                  folderId={params.get("folder")}
-                  href={(id) => `?tab=materials${id ? `&folder=${id}` : ""}`}
-                  addCategory={params.get("add") === "past_paper" ? "past_paper" : undefined}
-                />
-              )}
-              {tab === "notes" && (
-                <div className="stack">
-                  <div className="row" style={{ justifyContent: "flex-end" }}>
-                    <NewNoteButton courseId={o.course.id} />
-                  </div>
-                  <NoteList courseId={o.course.id} />
+                <div className="course-mn">
+                  <section aria-labelledby="course-material">
+                    <h2 id="course-material" className="course-mn-h">
+                      Material
+                    </h2>
+                    <FolderBrowser
+                      courseId={o.course.id}
+                      folderId={params.get("folder")}
+                      href={(id) => `?tab=materials${id ? `&folder=${id}` : ""}`}
+                      addCategory={params.get("add") === "past_paper" ? "past_paper" : undefined}
+                      concepts={o.concepts}
+                    />
+                  </section>
+                  <section aria-labelledby="course-notes">
+                    <div className="course-mn-head">
+                      <h2 id="course-notes" className="course-mn-h">
+                        Notes
+                      </h2>
+                      <NewNoteButton courseId={o.course.id} />
+                    </div>
+                    <NoteList courseId={o.course.id} rows />
+                  </section>
                 </div>
               )}
-              {tab === "simulations" && <QuizTable quizzes={o.quizzes} />}
-              {tab === "answers" && <AnswersTab courseId={o.course.id} />}
+              {tab === "results" && <CourseResults courseId={o.course.id} answers={asked === "answers" || params.get("view") === "answers"} />}
             </>
           );
         }}

@@ -5,7 +5,7 @@ import { ApiError, get, newKey, request } from "../api";
 import { Markdown, SOURCE_REF, SourceRef, type Refs } from "../components/Markdown";
 import { NoteAttachDialog, refText, type PickedFile } from "../components/NoteAttach";
 import { Async, Card, Confirm, Empty, ErrorNote, PageHead } from "../components/ui";
-import { dateTime, relativeDay } from "../format";
+import { dateLabel, dateTime, plural, relativeDay } from "../format";
 import { courseTitles, useCourses, useNotes } from "../queries";
 import type { Note, NoteRef, NoteRevision } from "../types";
 
@@ -38,12 +38,42 @@ export function NewNoteButton({ courseId }: { courseId: string }) {
   );
 }
 
-export function NoteList({ courseId, titles }: { courseId?: string; titles?: Record<string, string> }) {
+const NOTE_KIND: Record<string, string> = { summary_form: "Summary", assistant_transcription: "Transcribed" };
+
+/** Notes inside a course as drawn (UI direction, 2026-11-27): one row each, recently deleted folded below. */
+function NoteRows({ notes, courseId }: { notes: Note[]; courseId: string }) {
+  return (
+    <>
+      {notes.length === 0 ? (
+        <p className="small muted">No notes yet. Summaries you write after a learning session are saved here.</p>
+      ) : (
+        <ul className="source-rows" aria-label="Notes">
+          {notes.map((n) => (
+            <li key={n.id} className="source-row">
+              <span className="source-row-name">
+                <Link to={`/notes/${n.id}`}>{n.title}</Link>
+                <span className="small muted" title={n.captured_via === "assistant_transcription" ? TRANSCRIBED : undefined}>
+                  {NOTE_KIND[n.captured_via ?? ""] ?? "Note"} · {dateLabel(n.saved_at)}
+                  {n.references?.length ? ` · ${plural(n.references.length, "file")}` : ""}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <DeletedNotes titles={{}} courseId={courseId} folded />
+    </>
+  );
+}
+
+export function NoteList({ courseId, titles, rows }: { courseId?: string; titles?: Record<string, string>; rows?: boolean }) {
   const q = useNotes(courseId);
   return (
     <Async q={q}>
       {(notes) =>
-        notes.length === 0 ? (
+        rows && courseId ? (
+          <NoteRows notes={notes} courseId={courseId} />
+        ) : notes.length === 0 ? (
           <Empty title="No notes yet">Summaries you write after a learning session are saved here as notes.</Empty>
         ) : (
           <div className="table-wrap">
@@ -117,27 +147,24 @@ export function NotesPage() {
 }
 
 /** Notes deleted in the last 30 days, with Restore. Shown only when there are some. */
-function DeletedNotes({ titles }: { titles: Record<string, string> }) {
+function DeletedNotes({ titles, courseId, folded }: { titles: Record<string, string>; courseId?: string; folded?: boolean }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["notes", "deleted"], queryFn: () => get<Note[]>("/notes/deleted") });
   const restore = useMutation({
     mutationFn: (id: string) => request<Note>(`/notes/${id}/restore`, { method: "POST" }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["notes"] }),
   });
-  if (!q.data?.length) return null;
-  return (
-    <Card title="Recently deleted">
-      <p className="small muted" style={{ marginTop: 0 }}>
-        Deleted notes can be restored for 30 days. Their linked files stay in your Library.
-      </p>
+  const deleted = (q.data ?? []).filter((n) => !courseId || n.course_id === courseId);
+  if (!deleted.length) return null;
+  const list = (
       <ul className="list small">
-        {q.data.map((n) => (
+        {deleted.map((n) => (
           <li key={n.id} className="row" style={{ justifyContent: "space-between", gap: 8 }}>
             <span>
               <strong>{n.title}</strong>
               <span className="muted">
                 {" "}
-                · {titles[n.course_id] ?? "Course"} · deleted {n.deleted_at ? relativeDay(n.deleted_at) : ""}
+                {courseId ? "" : `· ${titles[n.course_id] ?? "Course"} `}· deleted {n.deleted_at ? relativeDay(n.deleted_at) : ""}
               </span>
             </span>
             <button
@@ -152,6 +179,25 @@ function DeletedNotes({ titles }: { titles: Record<string, string> }) {
           </li>
         ))}
       </ul>
+  );
+  if (folded) {
+    return (
+      <details className="notes-deleted">
+        <summary>
+          <span>Recently deleted (30 days)</span>
+          <span>{deleted.length}</span>
+        </summary>
+        {list}
+        {restore.error && <ErrorNote error={restore.error} />}
+      </details>
+    );
+  }
+  return (
+    <Card title="Recently deleted">
+      <p className="small muted" style={{ marginTop: 0 }}>
+        Deleted notes can be restored for 30 days. Their linked files stay in your Library.
+      </p>
+      {list}
       {restore.error && <ErrorNote error={restore.error} />}
     </Card>
   );

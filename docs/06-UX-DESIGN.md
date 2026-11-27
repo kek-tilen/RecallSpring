@@ -40,7 +40,7 @@ All text/action contrast must meet WCAG 2.2 AA; change tones as needed.
 
 ## Navigation hierarchy
 
-**Six areas (2026-11-27)**: `Today` (Home, with the weekly review), `Courses` (each course with its concepts, material and notes), `Review`, `Exams` (academic only), `Results` (simulations and graded answers) and `Focus`; `Chat` is listed when ChatGPT is one of the learner's assistants (chosen, in the mix or connected). History lives in Settings › Data & backups, the Guide behind a help button, Sign out in Settings › Account & system. Pages that moved into an area keep it highlighted (Library, Notes and concepts → Courses; Week → Today; Simulations → Results). Until Library and Notes move into each course, the Courses page links to them.  
+**Six areas (2026-11-27)**: `Today` (Home, with the weekly review), `Courses` (each course with its concepts, material and notes), `Review`, `Exams` (academic only), `Results` (simulations and graded answers) and `Focus`; `Chat` is listed when ChatGPT is one of the learner's assistants (chosen, in the mix or connected). History lives in Settings › Data & backups, the Guide behind a help button, Sign out in Settings › Account & system. Pages that moved into an area keep it highlighted (Library, Notes and concepts → Courses; Week → Today; Simulations → Results). Library and Notes live inside each course (`Material & notes`); the Courses page's `⋯` menu still opens all material and all notes across courses.  
 **Desktop**: a rail with the RecallSpring symbol and name, an icon (Tabler, MIT) left of every label and the Review count; Settings and Help at the bottom. The active area uses the logo teal on a light sage tint. The rail can be hidden (button next to the logo or `Ctrl+\`, remembered on the device in `rs-rail`) so the page uses the whole width; a small button at the top left brings it back and takes the keyboard focus.  
 **Phones** (≤ 860 px): a top bar with the symbol, Settings and Help (and Chat when it is listed), and an opaque bottom bar `Review · Results · Today · Courses · Focus` with Today as the RecallSpring symbol in the middle (grey when another tab is active). Exams open from the exam card on Today and from a course.  
 **Look**: RecallSpring White is the "quiet paper" palette: a cool page tone `#F6F8F9`, white raised surfaces, hairlines instead of shadows; page titles in Newsreader (shipped with the app, OFL). The other themes keep their colours.
@@ -80,14 +80,32 @@ retake has its own row, and the latest graded answers follow. **Answers** lists 
 as "concept · first sentence of the feedback" with its grade or "Waiting for a grade", filtered by course and grade;
 a row opens the answer and the full explanation of its grade in place. "AI grades are study feedback, not a score."
 
+### Courses and a course (UI direction, 2026-11-27)
+
+**Courses** (`/courses`): the serif heading with `+ New course`; a `⋯` menu holds New university, faculty or semester,
+New interest, Move in (import), All material and All notes. Each university, faculty and semester is one quiet line
+that opens and closes with its count on the right ("2 courses"), its Add inside, Edit and Archive in a `⋯` menu.
+Each course is one row: its colour dot and name, the next exam ("Midterm 1 · in 10 days"; an interest shows its
+goal), a thin study bar with "8 concepts", the due count and `Study in…`. `Interests` and `Archived` follow, each
+closable; Recently deleted courses stay below.
+
+**A course** (`/courses/:id`): `‹ Courses · University · Semester`, the serif title with its dot, one line ("Midterm
+1 in 10 days · 8 concepts · 6 due"), `Study in…` and `Course settings` (name, colour, semester and archive via Edit
+course, focus, the practice limit and the explanation pace). Four tabs: **Concepts** (study and knowledge bars, then
+the concept table), **Material & notes** (material as rows, e.g. "PDF · 42 pages · 3 concepts" with `Read` once
+every concept from the file is studied or `New` before; folders, kind filters, selection, moving, archiving and the
+drop zone as in the library; notes as rows "Summary · 23 Nov" with Recently deleted (30 days) folded below),
+**Results** (the Results views for this course: Simulations and Answers) and **Exams**. Older links
+(`?tab=notes`, `simulations`, `answers`) open the tab that holds them now.
+
 ### Exams that are behind the learner (owner 2026-11-23)
 
 - Marking an exam **Passed** or **Cancelled** when its course is in focus and has no other exam coming up asks: "<course> is in focus until <date>. … End the focus now?" with `Keep until <date>` and `End focus`. Failed does not ask (a retake usually follows). Ending it is the same audited change as `End focus` on the course.
-- **Sections open and close** (owner 2026-11-23): on Courses every university, faculty and semester with something in
+- **Sections open and close** (2026-11-23): on Courses every university, faculty and semester with something in
   it, `Not filed`, `Interests` (when there are some) and `Archived` (when something is in it) has a heading button
-  with an arrow (`aria-expanded`). Closed, it shows what it holds ("2 courses", "1 interest", "3 items"); closing a
+  with an arrow (`aria-expanded`) and what it holds on the right ("2 courses", "1 interest", "3 items"); closing a
   university hides everything inside. Closed sections are remembered on the device; Edit, Add inside and Archive stay
-  usable while closed.
+  usable while closed (in the section's `⋯` menu, 2026-11-27).
 - **Study in…** (ADR-012 §3, 2026-11-23): each active course card has `Study in…`, which always opens a menu (owner
   2026-11-23: a choice every time, never a default launch; the last one used is marked `last used` and focused): the
   learner's connected assistants (else the welcome page's choice or mix, else

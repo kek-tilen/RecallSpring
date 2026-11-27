@@ -82,7 +82,7 @@ describe("Courses: sections open and close (owner 2026-11-23)", () => {
     fireEvent.click(uni);
     fireEvent.click(screen.getByRole("button", { name: /5th semester/, expanded: true }));
     expect(screen.queryByText("Chemistry")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Outside university/, expanded: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Interests", expanded: true }));
     expect(screen.queryByText("Spanish")).toBeNull();
     expect(screen.getByText("1 interest")).toBeTruthy();
     cleanup();
@@ -90,14 +90,14 @@ describe("Courses: sections open and close (owner 2026-11-23)", () => {
     // remembered on the device
     show();
     expect(await screen.findByRole("button", { name: /5th semester/, expanded: false })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Outside university/, expanded: false })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Interests", expanded: false })).toBeTruthy();
   });
 
   it("the archive closes only when something is in it", async () => {
     serve({ groups: [], courses: [] });
     show();
     expect(await screen.findByText("No archived semesters or courses.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Put away, nothing deleted/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Archived" })).toBeNull();
     cleanup();
 
     serve({
@@ -105,7 +105,7 @@ describe("Courses: sections open and close (owner 2026-11-23)", () => {
       courses: [],
     });
     show();
-    const archive = await screen.findByRole("button", { name: /Put away, nothing deleted/, expanded: true });
+    const archive = await screen.findByRole("button", { name: "Archived", expanded: true });
     expect(await screen.findByText("Example University / 4th semester")).toBeTruthy();
     fireEvent.click(archive);
     expect(screen.queryByText("Example University / 4th semester")).toBeNull();

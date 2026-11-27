@@ -46,13 +46,13 @@ function familyNote(f: Family): string {
   return parts.join(" · ");
 }
 
-function ViewTabs({ tab }: { tab: "simulations" | "answers" }) {
+function ViewTabs({ tab, base = "/simulations?" }: { tab: "simulations" | "answers"; base?: string }) {
   return (
     <nav className="views" aria-label="Results">
-      <Link to="/simulations" aria-current={tab === "simulations" ? "page" : undefined}>
+      <Link to={base.replace(/[?&]$/, "")} aria-current={tab === "simulations" ? "page" : undefined} replace={base !== "/simulations?"}>
         Simulations
       </Link>
-      <Link to="/simulations?view=answers" aria-current={tab === "answers" ? "page" : undefined}>
+      <Link to={`${base}view=answers`} aria-current={tab === "answers" ? "page" : undefined} replace={base !== "/simulations?"}>
         Answers
       </Link>
     </nav>
@@ -73,9 +73,19 @@ export function ResultsPage() {
   );
 }
 
+/** A course's Results tab: the same two views, for this course only. */
+export function CourseResults({ courseId, answers }: { courseId: string; answers: boolean }) {
+  return (
+    <div className="stack">
+      <ViewTabs tab={answers ? "answers" : "simulations"} base="?tab=results&" />
+      {answers ? <Answers courseId={courseId} /> : <Simulations courseId={courseId} />}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- simulations
 
-function Simulations() {
+function Simulations({ courseId }: { courseId?: string }) {
   const q = useQuizzes();
   const courses = useCourses();
   const colors = new Map((courses.data ?? []).map((c) => [c.id, c.color]));
@@ -84,7 +94,7 @@ function Simulations() {
   return (
     <Async q={q} lines={5}>
       {(quizzes) => {
-        const list = families(quizzes);
+        const list = families(courseId ? quizzes.filter((x) => x.course_id === courseId) : quizzes);
         if (list.length === 0) {
           return <Empty title="No simulations yet">Ask your assistant for a midterm simulation once you have studied the material.</Empty>;
         }
@@ -103,7 +113,7 @@ function Simulations() {
                 <FamilyDetail f={chosen} />
               </section>
             </div>
-            <LatestAnswers />
+            {!courseId && <LatestAnswers />}
           </>
         );
       }}
@@ -331,11 +341,12 @@ const GRADES = [
   ["0", "No evidence (0)"],
 ] as const;
 
-function Answers() {
+function Answers({ courseId }: { courseId?: string }) {
   const q = useAttempts();
   const courses = useCourses();
   const titles = courseTitles(courses.data);
-  const [course, setCourse] = useState("all");
+  const [picked, setCourse] = useState("all");
+  const course = courseId ?? picked;
   const [grade, setGrade] = useState("all");
   const [open, setOpen] = useState<string | null>(null);
   return (
@@ -349,6 +360,7 @@ function Answers() {
         return (
           <>
             <div className="results-filters">
+              {!courseId && (
               <label className="field">
                 Course
                 <select value={course} onChange={(e) => setCourse(e.target.value)}>
@@ -360,6 +372,7 @@ function Answers() {
                   ))}
                 </select>
               </label>
+              )}
               <label className="field">
                 Grade
                 <select value={grade} onChange={(e) => setGrade(e.target.value)}>
