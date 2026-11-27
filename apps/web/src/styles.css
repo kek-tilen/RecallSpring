@@ -6844,6 +6844,13 @@ input.switch:focus-visible {
   margin: 0;
 }
 
+.settings-toc .settings-guide a {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
 .settings-page .settings-section-head h2 {
   font-family: var(--serif);
   font-weight: 500;
