@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PomodoroProvider } from "./components/Pomodoro";
@@ -109,30 +109,32 @@ describe("calm home (ADR-012, variant A)", () => {
     expect(todaySentence(dashboard({ targets: [], items: [] }))).toBe("Nothing is planned for today, so you're free to explore.");
   });
 
-  it("shows one next step, the rest of today, the week and today in detail", async () => {
+  it("shows the next step beside the plan button, today's plan, the week and today in detail", async () => {
     renderHome(dashboard());
     expect((await screen.findByRole("heading", { level: 1 })).textContent).toMatch(/^Good (morning|afternoon|evening), Tina$/);
     const next = screen.getByRole("region", { name: "Next step" });
-    expect(next.textContent).toContain("Next: learn IEEE 754 · Computer Architecture");
-    expect(next.querySelectorAll("a.btn")).toHaveLength(1);
-    // today's plan across all courses can be taken to an assistant (2026-11-26)
-    expect(screen.getByRole("button", { name: "Go through today's plan in…" }).getAttribute("aria-haspopup")).toBe("menu");
-    expect(screen.getByRole("region", { name: "Then today" }).textContent).toContain("Two's complement");
+    expect(next.querySelector("a.btn")?.textContent).toBe("Open concept");
+    // today's plan across all courses can be taken to an assistant (2026-11-26), beside the next step (2026-11-27)
+    expect(within(next).getByRole("button", { name: "Go through today's plan in…" }).getAttribute("aria-haspopup")).toBe("menu");
+    const plan = screen.getByRole("region", { name: "Today's plan" });
+    expect(plan.textContent).toContain("IEEE 754 · Computer Architecture · learn");
+    expect(plan.textContent).toContain("Two's complement");
 
     const week = screen.getByRole("region", { name: "This week" });
-    expect(week.textContent).toContain("1st midterm · Computer Architecture");
-    expect(week.textContent).toContain("Fri 27 Nov"); // short date, no year
+    expect(week.textContent).toContain("1st midterm · Fri 27 Nov"); // short date, no year
+    expect(week.textContent).toContain("Computer Architecture");
+    expect(within(week).getByRole("link", { name: "Weekly review" }).getAttribute("href")).toBe("/week");
     expect(week.textContent).toContain("Reviews today1");
     expect(week.querySelectorAll(".home-strip li")).toHaveLength(7);
     expect(await screen.findByText("50 min")).toBeTruthy();
     expect(screen.queryByText(/streak/i)).toBeNull();
 
     // today in detail is open by default; hiding it is remembered
-    expect(screen.getByText("Today's plan")).toBeTruthy();
+    expect(screen.getByText("Full plan")).toBeTruthy();
     expect(screen.getByText("Exams and midterms")).toBeTruthy();
     expect(screen.getByText("Make a backup")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Hide" }));
-    expect(screen.queryByText("Today's plan")).toBeNull();
+    expect(screen.queryByText("Full plan")).toBeNull();
     expect(localStorage.getItem("rs.home.detail")).toBe("hidden");
     expect(screen.getByRole("button", { name: "Show" }).getAttribute("aria-expanded")).toBe("false");
   });
@@ -158,8 +160,8 @@ describe("calm home (ADR-012, variant A)", () => {
     const quick: PlanItem = { ...ITEM, category: "Review due", concept_id: "c5", term: "Mantissa", depth: "quick", estimated_minutes: 3 };
     renderHome(dashboard({ items: [relearn, quick] }));
     const next = await screen.findByRole("region", { name: "Next step" });
-    expect(next.textContent).toContain("Next: try again Bias");
     expect(next.querySelector("a.btn")?.textContent).toBe("Start reviews");
+    expect(screen.getByRole("region", { name: "Today's plan" }).textContent).toContain("Bias · Computer Architecture · try again");
     expect(screen.getByRole("region", { name: "This week" }).textContent).toContain("Reviews today2");
     expect(screen.getByText("3 min · quick check")).toBeTruthy();
   });
@@ -170,7 +172,7 @@ describe("Today (UI direction, 2026-11-27)", () => {
     renderHome(dashboard());
     const week = await screen.findByRole("region", { name: "This week" });
     const exam = week.querySelector('.home-exams a[href="/exams/t1"]');
-    expect(exam?.textContent).toBe("1st midterm · Computer Architecture");
+    expect(exam?.textContent).toBe("1st midterm · Fri 27 NovComputer Architecture");
     expect(week.querySelector(".home-exams")?.textContent).toContain("On track");
   });
 });

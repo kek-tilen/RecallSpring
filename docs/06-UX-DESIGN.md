@@ -46,10 +46,14 @@ All text/action contrast must meet WCAG 2.2 AA; change tones as needed.
 **Look**: RecallSpring White is the "quiet paper" palette: a cool page tone `#F6F8F9`, white raised surfaces, hairlines instead of shadows; page titles in Newsreader (shipped with the app, OFL). The other themes keep their colours.
 
 ### Today (2026-11-27)
-The Home page is now **Today**. Its week panel shows the next seven days (exams marked in their course's colour; a click
-on the strip opens the weekly review), reviews due today, minutes focused this week, and the exams ahead with their
-status, each opening its exam. The weekly review is Today's second view (`Today · This week` at the top of `/week`).
-On phones Today keeps only the essentials: the greeting, the next step, the rest of today, the week and the exams;
+The Home page is now **Today**. Under the date, the serif greeting and one sentence (with a quiet `Why?` for the
+nearest exam) come two buttons side by side: the next step (`Start reviews`, `Open Chat` or `Open concept`) and
+`Go through today's plan in…`. Below them, **Today's plan** lists the first five items as "term · course · kind" with
+their minutes; the full plan stays in "Today in detail". The week panel, without a box, shows the next seven days
+(today on the sage tint, exams marked in their course's colour; the strip opens the weekly review), reviews due today,
+minutes focused this week, and the exams ahead ("target · date", the course below, the status on the right), each
+opening its exam. The weekly review is Today's second view (`Today · This week` at the top of `/week`).
+On phones Today keeps only the essentials: the greeting, the buttons, today's plan, the week and the exams;
 "Today in detail" (full plan, recent activity, upload, what RecallSpring holds) stays on larger screens, except
 "Needs attention" when something does.
 

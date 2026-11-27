@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { useAssistant, type AssistantWords } from "../assistant";
 import { EventList } from "./History";
 import { StudyIn } from "../components/StudyIn";
@@ -131,15 +131,6 @@ export function todaySentence(d: Dashboard): string {
   return exam ? `${exam} ${work}` : work;
 }
 
-const NEXT_VERB: Record<PlanItem["category"], string> = {
-  "Learn next": "learn",
-  "Review due": "review",
-  Relearn: "try again",
-  Strengthen: "strengthen",
-  Practice: "practise",
-  Maintain: "keep fresh",
-};
-
 const SHORT_TAG: Record<PlanItem["category"], string> = {
   "Learn next": "Learn",
   "Review due": "Review",
@@ -168,8 +159,8 @@ function WhyLink({ exam }: { exam: TargetCapacity }) {
   );
 }
 
-/** The one next step: a line of text and one button. */
-function NextStep({ item, a, exam }: { item: PlanItem; a: AssistantWords; exam: TargetCapacity | null }) {
+/** The next step: one primary button beside "Go through today's plan in…" (UI direction, 2026-11-27). */
+function NextStep({ item, a }: { item: PlanItem; a: AssistantWords }) {
   const button = isReview(item)
     ? { to: "/review", label: "Start reviews" }
       : a.key === "chatgpt"
@@ -177,38 +168,36 @@ function NextStep({ item, a, exam }: { item: PlanItem; a: AssistantWords; exam: 
         : { to: `/concepts/${item.concept_id}`, label: "Open concept" };
   return (
     <section className="home-next" aria-label="Next step">
-      <p className="home-next-text">
-        Next: {NEXT_VERB[item.category]} <Link to={`/concepts/${item.concept_id}`}>{item.term}</Link>
-        <span className="muted"> · {item.course_title}</span>
-        {exam && (
-          <span className="small">
-            {" "}
-            · <WhyLink exam={exam} />
-          </span>
-        )}
-      </p>
-      {!isReview(item) && <p className="small muted">{continueHint(a, item.course_title)}</p>}
-      <div>
+      <div className="home-actions">
         <Link to={button.to} className="btn primary">
           {button.label}
         </Link>
+        <StudyIn />
       </div>
+      {!isReview(item) && <p className="small muted">{continueHint(a, item.course_title)}</p>}
     </section>
   );
 }
 
-/** The two plan items after the next step, quietly. */
-function ThenToday({ items }: { items: PlanItem[] }) {
+/** Today's plan, quietly: the first few items as "term · course · kind" with their minutes. The full plan is below. */
+function TodayPlan({ items }: { items: PlanItem[] }) {
   if (items.length === 0) return null;
   return (
-    <section className="home-then" aria-labelledby="home-then-title">
-      <h2 id="home-then-title">Then today</h2>
+    <section className="home-plan" aria-labelledby="home-plan-title">
+      <h2 id="home-plan-title" className="home-h">
+        Today's plan
+      </h2>
       <ul>
         {items.map((i) => (
           <li key={`${i.category}-${i.concept_id}`}>
-            <span className={CATEGORY_TONE[i.category]}>{SHORT_TAG[i.category]}</span>
-            <Link to={`/concepts/${i.concept_id}`}>{i.term}</Link>
-            <span className="muted small home-then-min">{i.estimated_minutes} min</span>
+            <span className="home-plan-what">
+              <Link to={`/concepts/${i.concept_id}`}>{i.term}</Link>
+              <span className="muted">
+                {" "}
+                · {i.course_title} · {SHORT_TAG[i.category].toLowerCase()}
+              </span>
+            </span>
+            <span className="chip home-mins">{i.estimated_minutes} min</span>
           </li>
         ))}
       </ul>
@@ -223,21 +212,18 @@ const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "
  * exams ahead with their status. Exams are marked in their course's colour (UI direction, 2026-11-27).
  */
 function WeekPanel({ d, focus }: { d: Dashboard; focus: FocusSummary | undefined }) {
-  const navigate = useNavigate();
   const colors = new Map((useCourses().data ?? []).map((c) => [c.id, c.color]));
   const days = nextDays(7);
   const ahead = d.plan.targets.filter((t) => t.days_left >= 0).sort((x, y) => x.days_left - y.days_left);
   const due = d.plan.items.filter(isReview).length;
   return (
-    <section className="card home-week" aria-labelledby="home-week-title">
-      <div className="home-card-head">
-        <h2 id="home-week-title">This week</h2>
-        <Link to="/week" className="small">
-          Weekly review
-        </Link>
-      </div>
-      {/* A click anywhere on the strip opens the weekly review; keyboard users have the link above. */}
-      <ol className="home-strip" onClick={() => navigate("/week")}>
+    <section className="home-week" aria-labelledby="home-week-title">
+      <h2 id="home-week-title" className="home-h">
+        This week
+      </h2>
+      {/* The strip opens the weekly review, Today's second view. */}
+      <Link to="/week" className="home-strip-link" aria-label="Weekly review">
+      <ol className="home-strip">
         {days.map((day, i) => {
           const dates = d.plan.targets.filter((t) => t.due_date.slice(0, 10) === day);
           const label = `${shortDay(day)}${dates.length ? `: ${dates.map((t) => `${t.target}, ${t.course_title}`).join("; ")}` : ""}`;
@@ -258,6 +244,7 @@ function WeekPanel({ d, focus }: { d: Dashboard; focus: FocusSummary | undefined
           );
         })}
       </ol>
+      </Link>
       <ul className="home-rows">
         <li>
           <Link to="/review">Reviews today</Link>
@@ -270,18 +257,18 @@ function WeekPanel({ d, focus }: { d: Dashboard; focus: FocusSummary | undefined
       </ul>
       {ahead.length > 0 && (
         <>
-          <h3 className="home-week-sub">Exams</h3>
+          <h3 className="home-h home-week-sub">Exams</h3>
           <ul className="home-rows home-exams">
             {ahead.slice(0, 4).map((t) => (
               <li key={t.target_id}>
                 <span className="home-exam">
                   <CourseDot color={colors.get(t.course_id)} />
-                  <span>
-                    <Link to={`/exams/${t.target_id}`}>
-                      {t.target} · {t.course_title}
-                    </Link>
-                    <span className="muted small home-exam-when">{when(t)}</span>
-                  </span>
+                  <Link to={`/exams/${t.target_id}`}>
+                    <span className="home-exam-what">
+                      {t.target} · {when(t)}
+                    </span>
+                    <span className="muted small home-exam-course">{t.course_title}</span>
+                  </Link>
                 </span>
                 <span className={CAPACITY[t.status].tone}>{CAPACITY[t.status].label}</span>
               </li>
@@ -332,7 +319,7 @@ function Detail({ children }: { children: ReactNode }) {
 
 function PlanCard({ d }: { d: Dashboard }) {
   return (
-    <Card title="Today's plan" meta={`${d.plan.planned_minutes} of ${d.plan.available_minutes} min`}>
+    <Card title="Full plan" meta={`${d.plan.planned_minutes} of ${d.plan.available_minutes} min`}>
       {d.plan.message && <p className="notice small" style={{ marginBottom: 12 }}>{d.plan.message}</p>}
       {d.plan.focus && (
         <p className="notice small" style={{ marginBottom: 12 }}>
@@ -502,19 +489,24 @@ export function HomePage() {
                 <header className="home-hello">
                   <p className="home-date">{longToday()}</p>
                   <h1 className="home-greeting">{greeting(new Date().getHours(), name)}</h1>
-                  {started && <p className="home-sentence">{todaySentence(d)}</p>}
+                  {started && (
+                    <p className="home-sentence">
+                      {todaySentence(d)}
+                      {next && examFor(d, next) && (
+                        <span className="small">
+                          {" "}
+                          <WhyLink exam={examFor(d, next)!} />
+                        </span>
+                      )}
+                    </p>
+                  )}
                   {a.key === null && started && (
                     <p className="home-quiet small">
                       Which assistant do you study with? <Link to="/welcome">Choose it</Link>
                     </p>
                   )}
-                  {started && next && <NextStep item={next} a={a} exam={examFor(d, next)} />}
-                  {started && <ThenToday items={d.plan.items.slice(1, 3)} />}
-                  {started && d.plan.items.length > 0 && (
-                    <div className="home-plan-in">
-                      <StudyIn />
-                    </div>
-                  )}
+                  {started && next && <NextStep item={next} a={a} />}
+                  {started && <TodayPlan items={d.plan.items.slice(0, 5)} />}
                 </header>
                 {started && <WeekPanel d={d} focus={focus.data} />}
               </div>
