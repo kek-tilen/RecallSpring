@@ -38,7 +38,8 @@
 - **Works without AI too.** The review schedule and your study plan are worked out by RecallSpring itself, with no
   model call. Without an assistant you still have your material, notes, reviews and self-assessment.
 - **Learn first, no flashcards to manage.** You study your own material and summarise it in your own words; the
-  questions come after. Reviews schedule themselves from your graded answers, planned around your exam dates.
+  questions come after. Spaced repetition runs by itself: reviews are scheduled from your graded answers and planned
+  around your exam dates.
 - **Your data stays yours.** It runs on your own computer. Export everything as plain files, keep a readable copy in
   your own Google Drive, and back up encrypted.
 
@@ -75,7 +76,7 @@
 
 **Remember**
 
-- **Spaced reviews that schedule themselves.** Grades from 0 to 4 set the next review; the last ones before an exam
+- **Spaced repetition that schedules itself.** Grades from 0 to 4 set the next review; the last ones before an exam
   are planned around its date.
 - **Midterm and final exams.** Your readiness per topic, the weakest first, and why the plan looks the way it does.
 - **Exam simulations you can retake** in the style of your old exam paper, compared question by question.
