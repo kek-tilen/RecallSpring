@@ -243,8 +243,10 @@ def poll_google(*, actor_id: uuid.UUID | None = None, request_id: str | None = N
     return "denied" if error == "access_denied" else "expired"
 
 
-def _access_token(http: httpx.Client) -> str:
-    token = _read_secret(_token_path())
+def _access_token(http: httpx.Client, token_file: Path | None = None) -> str:
+    """A fresh access token from the installation's sign-in, or from ``token_file`` (a learner's own Drive,
+    my_drive.py)."""
+    token = _read_secret(token_file or _token_path())
     if not token:
         raise CloudError("revoked", "Google Drive is not connected any more. Connect it again in Settings.")
     client_id, secret = _client()
@@ -331,14 +333,23 @@ def _ensure_folder(http: httpx.Client, token: str, name: str, parent: str | None
     )
 
 
-def _upload(http: httpx.Client, token: str, path: Path, parent: str, on_bytes: Callable[[int], None]) -> int:
+def _upload(
+    http: httpx.Client,
+    token: str,
+    path: Path,
+    parent: str,
+    on_bytes: Callable[[int], None],
+    name: str | None = None,
+    file_id: list[str] | None = None,
+) -> int:
     """Resumable upload in 8 MiB pieces; a dropped piece asks Google how far it got and continues. Returns the size
-    Google reports."""
+    Google reports. ``name`` is the name in Drive (default: the file's own); the new file's id is appended to
+    ``file_id`` when given."""
     size = path.stat().st_size
     start = http.post(
         DRIVE_UPLOAD,
         params={"uploadType": "resumable", "fields": "id,size"},
-        json={"name": path.name, "parents": [parent]},
+        json={"name": name or path.name, "parents": [parent]},
         headers=_auth(token)
         | {"X-Upload-Content-Type": "application/octet-stream", "X-Upload-Content-Length": str(size)},
     )
@@ -364,6 +375,8 @@ def _upload(http: httpx.Client, token: str, path: Path, parent: str, on_bytes: C
             ask = False
             if r.status_code in (200, 201):
                 on_bytes(size - offset)
+                if file_id is not None:
+                    file_id.append(str(r.json().get("id") or ""))
                 return int(r.json().get("size") or size)
             if r.status_code != 308:
                 _check(r)

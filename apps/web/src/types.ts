@@ -599,7 +599,7 @@ export interface Plan {
 }
 
 export interface AttentionItem {
-  kind: "source" | "quiz" | "answers" | "duplicates" | "backup" | "cloud" | "export";
+  kind: "source" | "quiz" | "answers" | "duplicates" | "backup" | "cloud" | "export" | "drive";
   id: string | null;
   course_id: string | null;
   title: string;
@@ -1135,4 +1135,25 @@ export interface ExportView {
   current: ExportItem | null;
   last_export_at: string | null;
   keep_hours: number;
+  /** "To my Drive" is offered (Your Google Drive connected, "Exports go here too" on). */
+  drive?: boolean;
+}
+
+/** Settings › Your Google Drive (BYOS, 2026-11-27). No token, device code or account details. */
+export interface DriveView {
+  available: boolean;
+  state: "off" | "ok" | "copying" | "failing" | "revoked";
+  pending: CloudDevice | null;
+  connected_at?: string;
+  folder?: string;
+  mirror?: boolean;
+  exports?: boolean;
+  files?: number;
+  bytes?: number;
+  not_yet?: { files: number; bytes: number };
+  free_bytes?: number | null;
+  last_success_at?: string | null;
+  progress?: { done_files: number; total_files: number; done_bytes: number; total_bytes: number } | null;
+  error?: { code: string; message: string; at: string } | null;
+  next_try_at?: string | null;
 }

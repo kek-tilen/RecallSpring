@@ -13,6 +13,12 @@ const FAILURES: Record<string, string> = {
   export_failed: "Something went wrong while making it. Try again.",
 };
 
+const DRIVE_FAILURES: Record<string, string> = {
+  drive_revoked: "Google Drive no longer allows RecallSpring.",
+  drive_no_room: "Not enough room in your Google Drive.",
+  drive_busy: "A copy to your Google Drive was running.",
+};
+
 function readyNow(c: ExportItem | null): boolean {
   return !!c && c.state === "ready" && !!c.expires_at && Date.parse(c.expires_at) > Date.now();
 }
@@ -23,7 +29,10 @@ function summary(v: ExportView): string {
     const p = c.progress;
     return p?.total_files ? `Being made · ${p.done_files} of ${p.total_files} items` : "Being made…";
   }
+  if (c && readyNow(c) && c.destination === "drive" && c.error) return "Could not go to your Google Drive · ready to download instead";
   if (c && readyNow(c)) return `Ready · ${bytes(c.byte_size ?? 0)} · kept until ${dateTime(c.expires_at!)}`;
+  if (c?.destination === "drive" && c.state === "expired" && c.finished_at && !c.error)
+    return `Sent to your Google Drive · ${dateLabel(c.finished_at)} · My Drive › RecallSpring › Exports`;
   if (c?.state === "failed") return `The last export failed · ${FAILURES[c.error ?? ""] ?? "try again"}`;
   if (v.last_export_at) return `Your material, notes and answers as plain files · last export ${dateLabel(v.last_export_at)}`;
   return "Never · your material, notes and answers as a ZIP to download";
@@ -93,6 +102,7 @@ function Choose({ v, onDone, onCancel }: { v: ExportView; onDone: () => void; on
   const [material, setMaterial] = useState(true);
   const [notes, setNotes] = useState(true);
   const [answers, setAnswers] = useState(true);
+  const [toDrive, setToDrive] = useState(!!v.drive);
   const chosen = all ? v.courses : v.courses.filter((c) => picked.has(c.id));
   const total = {
     bytes: material ? chosen.reduce((n, c) => n + c.bytes, 0) : 0,
@@ -104,7 +114,7 @@ function Choose({ v, onDone, onCancel }: { v: ExportView; onDone: () => void; on
     mutationFn: () =>
       request<ExportView>("/exports", {
         method: "POST",
-        json: { course_ids: all ? null : [...picked], material, notes, answers, destination: "download" },
+        json: { course_ids: all ? null : [...picked], material, notes, answers, destination: toDrive && v.drive ? "drive" : "download" },
       }),
     onSuccess: (next) => {
       qc.setQueryData(KEY, next);
@@ -161,6 +171,19 @@ function Choose({ v, onDone, onCancel }: { v: ExportView; onDone: () => void; on
           <input type="checkbox" checked={answers} onChange={(e) => setAnswers(e.target.checked)} /> Answers and grades (CSV and JSON)
         </label>
       </fieldset>
+      {v.drive && (
+        <fieldset className="plain-fieldset stack" style={{ gap: 6 }}>
+          <legend className="small muted">Where</legend>
+          <div className="row" role="radiogroup" aria-label="Where the export goes">
+            <label className="small">
+              <input type="radio" name="export-where" checked={!toDrive} onChange={() => setToDrive(false)} /> Download a ZIP
+            </label>
+            <label className="small">
+              <input type="radio" name="export-where" checked={toDrive} onChange={() => setToDrive(true)} /> To my Drive
+            </label>
+          </div>
+        </fieldset>
+      )}
       <p className="tiny muted" style={{ margin: 0 }} aria-live="polite">
         About {bytes(total.bytes)} · {plural(total.files, "file")}, {plural(total.notes, "note")}, {plural(total.answers, "answer")}
       </p>
@@ -218,6 +241,11 @@ function Ready({ c, keepHours, onNew, onRemove }: { c: ExportItem; keepHours: nu
           </li>
         )}
       </ul>
+      {c.destination === "drive" && c.error && (
+        <p className="small warn-text" style={{ margin: 0 }}>
+          It could not go to your Google Drive: {DRIVE_FAILURES[c.error] ?? "Google Drive could not be reached."} Download it here instead.
+        </p>
+      )}
       <p className="notice small" style={{ margin: 0 }}>
         Kept here for {keepHours} hours, then deleted. It is not encrypted: store it where only you can open it.
       </p>

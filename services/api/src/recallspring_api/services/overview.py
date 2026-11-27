@@ -37,7 +37,7 @@ from ..models import (
     StudyTarget,
     User,
 )
-from . import assistants, check_first, exports, mastery
+from . import assistants, check_first, exports, mastery, my_drive
 from .attempts import assessments_for
 from .folders import tree as folder_tree
 from .learning import effective_status
@@ -418,6 +418,10 @@ _EVENT_TEXT = {
     "export.created": "Export started",
     "export.downloaded": "Export downloaded",
     "export.sent_to_drive": "Export sent to your Google Drive",
+    "drive.connected": "Your Google Drive connected",
+    "drive.disconnected": "Your Google Drive disconnected",
+    "drive.failed": "Copying to your Google Drive failed",
+    "drive.copy_existing": "Copying earlier material to your Google Drive",
     "auth.passkey_added": "Passkey added",
     "auth.passkey_renamed": "Passkey renamed",
     "auth.passkey_removed": "Passkey removed",
@@ -488,6 +492,13 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         return f"Google Drive, files {payload.get('files')}"
     if event_type == "backup.cloud_failed":
         return CLOUD_FAILURE.get(str(payload.get("code")), str(payload.get("code")))
+    if event_type == "drive.disconnected":
+        return f"files {payload.get('files')}"
+    if event_type == "drive.failed":
+        return CLOUD_FAILURE.get(str(payload.get("code")), str(payload.get("code")))
+    if event_type == "drive.copy_existing":
+        n = payload.get("files")
+        return f"{n} file{'' if n == 1 else 's'}"
     if event_type == "backup.unencrypted_removed":
         n = payload.get("count")
         return f"{n} backup{'' if n == 1 else 's'}"
@@ -592,7 +603,9 @@ def history(db: Session, user: User, limit: int) -> list[dict[str, Any]]:
             "kind": "audit",
             "type": a.action,
             "text": _EVENT_TEXT.get(a.action, a.action),
-            "detail": _detail(a.action, a.details) if a.action.startswith(("backup.", "focus.", "auth.")) else None,
+            "detail": _detail(a.action, a.details)
+            if a.action.startswith(("backup.", "focus.", "auth.", "drive."))
+            else None,
             "entity_type": a.target_type,
             "entity_id": str(a.target_id) if a.target_id else None,
             "label": labels.get(a.target_id) if a.target_id else None,
@@ -628,6 +641,8 @@ def attention(db: Session, user: User) -> list[dict[str, Any]]:
     if item := cloud.attention_item():
         items.append(item)
     if item := exports.attention_item(db, user):
+        items.append(item)
+    if item := my_drive.attention_item(db, user):
         items.append(item)
     live = list(
         db.scalars(

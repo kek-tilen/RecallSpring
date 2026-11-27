@@ -22,7 +22,7 @@ class ExportIn(BaseModel):
     material: bool = True
     notes: bool = True
     answers: bool = True
-    destination: Literal["download"] = "download"
+    destination: Literal["download", "drive"] = "download"
 
 
 @router.get("/exports")

@@ -13,6 +13,7 @@ import { ExplanationPaceDefault } from "../components/ExplanationPace";
 import { ServiceStatus } from "../components/ServiceStatus";
 import { GettingItBack, RecentlyDeletedRow } from "../components/DataRows";
 import { CloudCopyRow } from "../components/CloudCopy";
+import { DriveRow } from "../components/DriveRow";
 import { ExportRow } from "../components/ExportRow";
 import { SignInRows } from "../components/SignInRows";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
@@ -875,6 +876,7 @@ const CARD_SECTION: Record<string, SectionId> = {
   "backup-encryption": "data",
   history: "data",
   export: "data",
+  drive: "data",
   profile: "account",
   "sign-in": "account",
   service: "account",
@@ -986,6 +988,7 @@ export function SettingsPage() {
                   </Link>
                 </div>
                 <ExportRow />
+                <DriveRow />
               </div>
               {backup.data && <BackupDetails b={backup.data} />}
             </Section>

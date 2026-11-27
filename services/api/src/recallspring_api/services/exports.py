@@ -239,7 +239,16 @@ def view(db: Session, user: User) -> dict[str, Any]:
         "current": item(latest) if latest else None,
         "last_export_at": last_ready.isoformat() if last_ready else None,
         "keep_hours": int(KEEP_FOR.total_seconds() // 3600),
+        "drive": _drive_ready(db, user),
     }
+
+
+def _drive_ready(db: Session, user: User) -> bool:
+    """Whether "To my Drive" is offered: the learner's Drive is connected and they chose "Exports go here too"."""
+    from . import my_drive
+
+    conn = my_drive.connection(db, user.id)
+    return conn is not None and conn.exports and conn.state != "revoked"
 
 
 def owned(db: Session, user: User, export_id: uuid.UUID) -> Export:
@@ -270,6 +279,8 @@ def create(
     busy = db.scalar(select(Export.id).where(Export.user_id == user.id, Export.state.in_(ACTIVE)))
     if busy:
         raise ApiError(409, "export_running", "An export is already being made. Wait for it or stop it.")
+    if destination == "drive" and not _drive_ready(db, user):
+        raise ApiError(409, "drive_not_connected", "Connect your Google Drive and turn on Exports go here too first.")
     courses = _courses(db, user, course_ids)
     if course_ids is not None and len(courses) != len(set(course_ids)):
         raise ApiError(404, "not_found", "One of those courses is not there any more.")
@@ -525,6 +536,7 @@ def build(export_id: uuid.UUID) -> None:
         db.commit()
     try:
         _build(export_id)
+        _deliver(export_id)
     except Cancelled:
         with new_session() as db:
             row = db.get(Export, export_id)
@@ -540,6 +552,28 @@ def build(export_id: uuid.UUID) -> None:
                 _remove_file(row)
                 row.state, row.error, row.finished_at = "failed", code, clock.now()
                 db.commit()
+
+
+def _deliver(export_id: uuid.UUID) -> None:
+    """For destination ``drive``: upload the finished ZIP to My Drive › RecallSpring › Exports and delete it here.
+    When Drive fails the ZIP stays here to download, with the reason (``drive_<code>``)."""
+    from . import my_drive
+
+    with new_session() as db:
+        row = db.get(Export, export_id)
+        if row is None or row.state != "ready" or row.destination != "drive":
+            return
+    code = my_drive.send_export(export_id)
+    with new_session() as db:
+        row = db.get(Export, export_id, with_for_update=True)
+        if row is None or row.state != "ready":
+            return
+        if code is None:
+            _remove_file(row)
+            row.state, row.expires_at, row.error = "expired", clock.now(), None
+        else:
+            row.error = f"drive_{code}"
+        db.commit()
 
 
 def _build(export_id: uuid.UUID) -> None:
@@ -666,9 +700,16 @@ def expire_all() -> int:
 def attention_item(db: Session, user: User) -> dict[str, Any] | None:
     """Today › Needs attention: a finished export waiting to be downloaded, or one that failed."""
     row = _latest(db, user)
-    if row is None or row.destination != "download":
+    if row is None:
         return None
     base = {"kind": "export", "id": str(row.id), "course_id": None}
+    if row.destination == "drive" and row.state == "ready" and row.error and row.downloaded_at is None:
+        return base | {
+            "title": "Your export could not go to Google Drive",
+            "text": "Download it in Settings → Data & backups → Export instead; it is kept for 24 hours.",
+        }
+    if row.destination != "download":
+        return None
     if row.state == "ready" and row.downloaded_at is None and row.expires_at and row.expires_at > clock.now():
         return base | {
             "title": "Your export is ready",

@@ -212,10 +212,10 @@ BACKUP_CHECK_SECONDS = 600
 def run_worker(poll_seconds: float = 2.0, should_stop: Callable[[], bool] = lambda: False) -> None:
     """Process jobs and write a heartbeat every 30 seconds (runtime.py); every 10 minutes also make a backup when
     one is due (backup.py) and remove staged imports past their retention (chatgpt_import.py); neither raises."""
-    from ..services import chatgpt_import
+    from ..services import chatgpt_import, my_drive
 
     log.info("worker started")
-    next_backup_check = next_heartbeat = 0.0
+    next_backup_check = next_heartbeat = next_drive_check = 0.0
     while not should_stop():
         if time.monotonic() >= next_heartbeat:
             runtime.write_heartbeat()  # Settings shows whether the worker runs (runtime.worker_status)
@@ -226,5 +226,8 @@ def run_worker(poll_seconds: float = 2.0, should_stop: Callable[[], bool] = lamb
             chatgpt_import.expire_all()
             exports.expire_all()  # finished exports are kept 24 hours
             next_backup_check = time.monotonic() + BACKUP_CHECK_SECONDS
+        if time.monotonic() >= next_drive_check:
+            my_drive.sync_all()  # each learner's own Google Drive copy, when connected (services/my_drive.py)
+            next_drive_check = time.monotonic() + my_drive.CHECK_SECONDS
         if not run_once():
             time.sleep(poll_seconds)
