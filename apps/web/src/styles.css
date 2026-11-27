@@ -7301,3 +7301,27 @@ input.switch:focus-visible {
     flex-wrap: wrap;
   }
 }
+
+/* Export (BYOS step 1, 2026-11-27) */
+.plain-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.plain-fieldset legend {
+  padding: 0;
+  margin-bottom: 2px;
+}
+.export-courses {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 4px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 2px 12px;
+}
+#export .assistant-steps {
+  margin-top: 8px;
+  min-width: 0;
+}

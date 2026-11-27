@@ -37,7 +37,7 @@ from ..models import (
     StudyTarget,
     User,
 )
-from . import assistants, check_first, mastery
+from . import assistants, check_first, exports, mastery
 from .attempts import assessments_for
 from .folders import tree as folder_tree
 from .learning import effective_status
@@ -415,6 +415,9 @@ _EVENT_TEXT = {
     "assessment.grade_override": "Grade overridden",
     "auth.login": "Signed in",
     "auth.logout": "Signed out",
+    "export.created": "Export started",
+    "export.downloaded": "Export downloaded",
+    "export.sent_to_drive": "Export sent to your Google Drive",
     "auth.passkey_added": "Passkey added",
     "auth.passkey_renamed": "Passkey renamed",
     "auth.passkey_removed": "Passkey removed",
@@ -623,6 +626,8 @@ def attention(db: Session, user: User) -> list[dict[str, Any]]:
     if item := backup.attention_item():
         items.append(item)
     if item := cloud.attention_item():
+        items.append(item)
+    if item := exports.attention_item(db, user):
         items.append(item)
     live = list(
         db.scalars(

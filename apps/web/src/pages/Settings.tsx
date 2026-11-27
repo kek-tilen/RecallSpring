@@ -13,6 +13,7 @@ import { ExplanationPaceDefault } from "../components/ExplanationPace";
 import { ServiceStatus } from "../components/ServiceStatus";
 import { GettingItBack, RecentlyDeletedRow } from "../components/DataRows";
 import { CloudCopyRow } from "../components/CloudCopy";
+import { ExportRow } from "../components/ExportRow";
 import { SignInRows } from "../components/SignInRows";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
 import type { BackupFolderCheck, BackupKey, BackupStatus, StudySettings } from "../types";
@@ -873,6 +874,7 @@ const CARD_SECTION: Record<string, SectionId> = {
   "cloud-copy": "data",
   "backup-encryption": "data",
   history: "data",
+  export: "data",
   profile: "account",
   "sign-in": "account",
   service: "account",
@@ -983,6 +985,7 @@ export function SettingsPage() {
                     Open history
                   </Link>
                 </div>
+                <ExportRow />
               </div>
               {backup.data && <BackupDetails b={backup.data} />}
             </Section>

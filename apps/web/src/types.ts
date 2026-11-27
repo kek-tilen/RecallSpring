@@ -599,7 +599,7 @@ export interface Plan {
 }
 
 export interface AttentionItem {
-  kind: "source" | "quiz" | "answers" | "duplicates" | "backup" | "cloud";
+  kind: "source" | "quiz" | "answers" | "duplicates" | "backup" | "cloud" | "export";
   id: string | null;
   course_id: string | null;
   title: string;
@@ -1102,4 +1102,37 @@ export interface SignInView {
   password_changed: boolean;
   passkeys: PasskeyItem[];
   confirmed_until: string | null;
+}
+
+/** Settings › Data & backups › Export (GET /exports; BYOS step 1). */
+export interface ExportCourse {
+  id: string;
+  title: string;
+  files: number;
+  bytes: number;
+  notes: number;
+  answers: number;
+}
+
+export interface ExportItem {
+  id: string;
+  state: "queued" | "running" | "ready" | "failed" | "cancelled" | "expired";
+  destination: "download" | "drive";
+  options: { course_ids: string[] | null; material: boolean; notes: boolean; answers: boolean };
+  progress: { done_files: number; total_files: number } | null;
+  counts: { files: number; notes: number; answers: number } | null;
+  byte_size: number | null;
+  file_name: string | null;
+  error: string | null;
+  created_at: string | null;
+  finished_at: string | null;
+  expires_at: string | null;
+  downloaded_at: string | null;
+}
+
+export interface ExportView {
+  courses: ExportCourse[];
+  current: ExportItem | null;
+  last_export_at: string | null;
+  keep_hours: number;
 }

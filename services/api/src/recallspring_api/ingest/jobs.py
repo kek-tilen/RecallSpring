@@ -24,7 +24,9 @@ from .. import backup, clock, cloud, runtime
 from ..config import get_settings
 from ..db import new_session
 from ..models import Job, Source, SourceSection
+from ..services import exports
 from ..services.events import learning_event
+from ..services.exports import MAKE_EXPORT
 from . import extract as extractor
 from .storage import blob_path
 
@@ -164,8 +166,12 @@ def run_once() -> bool:
         if job is None:
             return False
         job_id = job.id
+        export_id = job.payload.get("export_id") if job.type == MAKE_EXPORT else None
         work = _start_extract(db, job) if job.type == EXTRACT_SOURCE else None
         db.commit()
+
+    if export_id is not None:  # an export reports its own outcome on its row (services/exports.py)
+        exports.build(uuid.UUID(export_id))
 
     error: str | None = None
     result: extractor.Result | None = None
@@ -218,6 +224,7 @@ def run_worker(poll_seconds: float = 2.0, should_stop: Callable[[], bool] = lamb
             backup.run_if_due()
             cloud.copy_if_due()  # the encrypted backups to Google Drive, when connected (cloud.py)
             chatgpt_import.expire_all()
+            exports.expire_all()  # finished exports are kept 24 hours
             next_backup_check = time.monotonic() + BACKUP_CHECK_SECONDS
         if not run_once():
             time.sleep(poll_seconds)
