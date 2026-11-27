@@ -1,11 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
-import { get, request } from "../api";
-import { Async, Card, Empty, ErrorNote, PageHead } from "../components/ui";
+import { request } from "../api";
+import { Async, Empty, ErrorNote, PageHead } from "../components/ui";
 import { dateLabel, daysFromToday, plural, relativeDay } from "../format";
-import { courseTitles, keys, useCourses } from "../queries";
-import type { ReviewItem } from "../types";
+import { courseTitles, keys, useCourses, useReviews } from "../queries";
+import type { CourseColor, ReviewItem } from "../types";
+import { CourseDot } from "../components/organise";
 import { StudyIn } from "../components/StudyIn";
 
 function Row({ item, course }: { item: ReviewItem; course: string }) {
@@ -28,7 +29,7 @@ function Row({ item, course }: { item: ReviewItem; course: string }) {
           <Link to={`/concepts/${item.concept_id}`} style={{ fontWeight: 600 }}>
             {item.term}
           </Link>
-          <span className="muted small"> · {course}</span>
+          {course && <span className="muted small"> · {course}</span>}
         </div>
         <div className="row">
           <span className="small muted">
@@ -58,72 +59,119 @@ function Row({ item, course }: { item: ReviewItem; course: string }) {
   );
 }
 
-/** 2026-11-26: the page says what is due, and per course starts the review itself with the learner's assistant. */
-function ReviewNow({ items, titles }: { items: ReviewItem[]; titles: Record<string, string> }) {
-  const due = new Map<string, number>();
-  for (const i of items) if (i.is_due) due.set(i.course_id, (due.get(i.course_id) ?? 0) + 1);
-  if (due.size === 0) return null;
-  const total = [...due.values()].reduce((a, b) => a + b, 0);
+/** Reviews per day for the next 14 days (today = what is due now), as quiet bars. */
+function NextDays({ items }: { items: ReviewItem[] }) {
+  const counts = Array.from({ length: 14 }, () => 0);
+  for (const i of items) counts[i.is_due ? 0 : Math.min(13, Math.max(0, daysFromToday(i.due_at)))]! += 1;
+  const max = Math.max(1, ...counts);
+  const said = counts
+    .map((n, d) => (n ? `${d === 0 ? "today" : d === 1 ? "tomorrow" : `in ${d} days`} ${n}` : ""))
+    .filter(Boolean)
+    .join(", ");
   return (
-    <Card title="Review now" meta={`${plural(total, "concept")} due`}>
-      <p className="small muted" style={{ marginTop: 0 }}>
-        Your assistant asks one question from memory per concept and grades it; RecallSpring then sets the next date.
-      </p>
-      <ul className="list review-now">
-        {[...due.entries()].map(([courseId, n]) => (
-          <li key={courseId} className="row" style={{ justifyContent: "space-between" }}>
-            <span>
-              <span style={{ fontWeight: 600 }}>{titles[courseId] ?? "Course"}</span>
-              <span className="muted small"> · {plural(n, "concept")} due</span>
-            </span>
-            <StudyIn course={{ id: courseId, title: titles[courseId] ?? "this course" }} review={{}} />
-          </li>
-        ))}
-      </ul>
-    </Card>
+    <svg className="review-days" viewBox="0 0 280 56" width="280" height="56" role="img" aria-label={`Reviews in the next 14 days: ${said || "none"}`}>
+      {counts.map((n, d) => {
+        const h = n ? Math.max(4, Math.round((n / max) * 44)) : 2;
+        return <rect key={d} x={d * 20 + 3} y={48 - h} width="14" height={h} rx="2" className={d === 0 ? "today" : n ? "on" : "off"} />;
+      })}
+      <line x1="0" y1="48.5" x2="280" y2="48.5" className="base" />
+    </svg>
+  );
+}
+
+/** "2 overdue · 4 today" for one course's due concepts. */
+export function dueWords(list: ReviewItem[]): string {
+  const overdue = list.filter((i) => daysFromToday(i.due_at) < 0).length;
+  const today = list.length - overdue;
+  return [overdue ? `${overdue} overdue` : "", today ? `${today} today` : ""].filter(Boolean).join(" · ");
+}
+
+/**
+ * 2026-11-26: the page says what is due, and per course starts the review itself with the learner's assistant.
+ * 2026-11-27 (UI direction): one group per course (its colour, "2 overdue · 4 today", Review in…), its concepts folded
+ * below with Snooze; the next 14 days sit beside them.
+ */
+function DueNow({ due, titles, colors }: { due: Map<string, ReviewItem[]>; titles: Record<string, string>; colors: Map<string, CourseColor | null> }) {
+  return (
+    <section className="review-now" aria-labelledby="review-now-title">
+      <h2 id="review-now-title" className="sr-only">
+        Due now
+      </h2>
+      {due.size === 0 ? (
+        <p className="muted">Nothing is due now. The next reviews are listed beside this.</p>
+      ) : (
+        <ul className="review-courses">
+          {[...due.entries()].map(([courseId, list]) => {
+            const title = titles[courseId] ?? "Course";
+            return (
+              <li key={courseId} className="review-course">
+                <div className="review-course-head">
+                  <CourseDot color={colors.get(courseId)} />
+                  <span className="review-course-name">{title}</span>
+                  <span className="muted small review-course-count">{dueWords(list)}</span>
+                </div>
+                <StudyIn course={{ id: courseId, title }} review={{}} />
+                <details className="review-fold">
+                  <summary className="small muted">{plural(list.length, "concept")}</summary>
+                  <ul className="list review-concepts">
+                    {list.map((i) => (
+                      <Row key={i.concept_id} item={i} course="" />
+                    ))}
+                  </ul>
+                </details>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="tiny muted">Your assistant asks one question from memory per concept and grades it; RecallSpring then sets the next date.</p>
+    </section>
   );
 }
 
 export function ReviewPage() {
-  const q = useQuery({ queryKey: keys.reviews, queryFn: () => get<{ items: ReviewItem[]; note: string }>("/reviews/due", { horizon_days: 14 }) });
+  const q = useReviews();
   const courses = useCourses();
   const titles = courseTitles(courses.data);
+  const colors = new Map((courses.data ?? []).map((c) => [c.id, c.color]));
   return (
     <div className="page">
-      <PageHead
-        title="Review"
-        sub="RecallSpring schedules reviews from your graded answers. Review in… starts a review with your assistant: questions from memory, graded."
-      />
       <Async q={q} lines={6}>
         {(data) => {
-          const overdue = data.items.filter((i) => i.is_due && daysFromToday(i.due_at) < 0);
-          const today = data.items.filter((i) => i.is_due && daysFromToday(i.due_at) >= 0);
           const upcoming = data.items.filter((i) => !i.is_due);
-          if (data.items.length === 0) {
-            return <Empty title="You're caught up.">Continue a topic or browse your library.</Empty>;
+          const due = new Map<string, ReviewItem[]>();
+          for (const i of [...data.items].sort((a, b) => a.due_at.localeCompare(b.due_at))) {
+            if (i.is_due) due.set(i.course_id, [...(due.get(i.course_id) ?? []), i]);
           }
+          const total = data.items.length - upcoming.length;
           return (
-            <div className="stack" style={{ gap: 20 }}>
-              <ReviewNow items={data.items} titles={titles} />
-              {[
-                { title: "Overdue", items: overdue },
-                { title: "Today", items: today },
-                { title: "Next 14 days", items: upcoming },
-              ].map((g) => (
-                <Card key={g.title} title={g.title} meta={plural(g.items.length, "concept")}>
-                  {g.items.length === 0 ? (
-                    <p className="small muted">{g.title === "Overdue" ? "Nothing overdue." : "Nothing here."}</p>
-                  ) : (
-                    <ul className="list">
-                      {g.items.map((i) => (
-                        <Row key={i.concept_id} item={i} course={titles[i.course_id] ?? ""} />
-                      ))}
-                    </ul>
-                  )}
-                </Card>
-              ))}
-              <p className="tiny muted">{data.note}</p>
-            </div>
+            <>
+              <PageHead title="Review" sub={total ? `${total} due` : "Nothing due now"} />
+              {data.items.length === 0 ? (
+                <Empty title="You're caught up.">Continue a topic or browse your library.</Empty>
+              ) : (
+                <div className="review-layout">
+                  <DueNow due={due} titles={titles} colors={colors} />
+                  <section className="review-next" aria-labelledby="review-next-title">
+                    <h2 id="review-next-title" className="review-h">
+                      Next 14 days
+                    </h2>
+                    <NextDays items={data.items} />
+                    <p className="tiny muted review-days-note">Today highlighted · the dates follow your grades</p>
+                    {upcoming.length === 0 ? (
+                      <p className="small muted">Nothing else in the next 14 days.</p>
+                    ) : (
+                      <ul className="list">
+                        {upcoming.map((i) => (
+                          <Row key={i.concept_id} item={i} course={titles[i.course_id] ?? ""} />
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                </div>
+              )}
+              {data.note && <p className="tiny muted">{data.note}</p>}
+            </>
           );
         }}
       </Async>

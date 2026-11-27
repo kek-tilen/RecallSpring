@@ -5457,3 +5457,113 @@ details.c2c-version > summary {
     display: none;
   }
 }
+
+/* ------------------------------------------------------------------ Review (UI direction, 2026-11-27) */
+
+.review-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.review-courses {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.review-course {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.review-course:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.review-course-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.review-course-name {
+  font-weight: 600;
+}
+
+.review-course-count {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.review-fold > summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.review-h {
+  margin: 0 0 6px;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.3rem;
+}
+
+.review-days-note {
+  margin: 2px 0 10px;
+}
+
+.review-now .study-in {
+  max-width: none;
+  text-align: left;
+}
+
+.review-now .study-in-menu {
+  left: 0;
+  right: auto;
+}
+
+.review-course .course-dot {
+  width: 9px;
+  height: 9px;
+  vertical-align: 1px;
+}
+
+.review-concepts {
+  margin: 6px 0 0 17px;
+}
+
+.review-days {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.review-days rect.on {
+  fill: var(--ramp-1);
+}
+
+.review-days rect.today {
+  fill: var(--primary);
+}
+
+.review-days rect.off {
+  fill: var(--border);
+}
+
+.review-days line.base {
+  stroke: var(--border);
+}
+
+@media (max-width: 860px) {
+  .review-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .review-concepts {
+    margin-left: 0;
+  }
+}

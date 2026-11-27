@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PomodoroProvider } from "./components/Pomodoro";
@@ -74,6 +74,9 @@ function renderHome(d: Dashboard) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes("/dashboard")) return json(d);
+    // the due count follows the Review page; here the plan's reviews are the ones due
+    if (url.includes("/reviews/due"))
+      return json({ items: d.plan.items.filter((i) => i.category === "Review due" || i.category === "Relearn").map((i) => ({ ...i, is_due: true })), note: "" });
     if (url.includes("/focus/summary"))
       return json({ today: { date: "2026-11-23", minutes: 0, sessions: 0 }, days: [], week_minutes: 50, by_course: [], recent: [], removed: [], restore_days: 30 });
     if (url.includes("/auth/session")) return json({ user: { id: "u", username: "u", timezone: "UTC", assistant: "chatgpt", greeting_name: "Tina" }, expires_at: "x" });
@@ -124,7 +127,7 @@ describe("calm home (ADR-012, variant A)", () => {
     expect(week.textContent).toContain("1st midterm · Fri 27 Nov"); // short date, no year
     expect(week.textContent).toContain("Computer Architecture");
     expect(within(week).getByRole("link", { name: "Weekly review" }).getAttribute("href")).toBe("/week");
-    expect(week.textContent).toContain("Reviews today1");
+    await waitFor(() => expect(week.textContent).toContain("Reviews today1"));
     expect(week.querySelectorAll(".home-strip li")).toHaveLength(7);
     expect(await screen.findByText("50 min")).toBeTruthy();
     expect(screen.queryByText(/streak/i)).toBeNull();
@@ -162,7 +165,7 @@ describe("calm home (ADR-012, variant A)", () => {
     const next = await screen.findByRole("region", { name: "Next step" });
     expect(next.querySelector("a.btn")?.textContent).toBe("Start reviews");
     expect(screen.getByRole("region", { name: "Today's plan" }).textContent).toContain("Bias · Computer Architecture · try again");
-    expect(screen.getByRole("region", { name: "This week" }).textContent).toContain("Reviews today2");
+    await waitFor(() => expect(screen.getByRole("region", { name: "This week" }).textContent).toContain("Reviews today2"));
     expect(screen.getByText("3 min · quick check")).toBeTruthy();
   });
 });

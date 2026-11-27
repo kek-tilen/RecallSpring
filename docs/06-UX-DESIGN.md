@@ -57,6 +57,14 @@ On phones Today keeps only the essentials: the greeting, the buttons, today's pl
 "Today in detail" (full plan, recent activity, upload, what RecallSpring holds) stays on larger screens, except
 "Needs attention" when something does.
 
+### Review (2026-11-27)
+Review says how many concepts are due ("8 due"; the Review tab and Today show the same number) and groups them per
+course: its colour, "2 overdue · 4 today", `Review in…`, and its concepts folded below with `Snooze`. Beside them,
+**Next 14 days** shows reviews per day as quiet bars (today highlighted) and lists what comes next. When answering on a
+phone, `Unsure` and `I don't know` stay side by side; choosing `I don't know` after writing asks before the text is
+dropped. Answering in the app (`Review now`) and grading the saved answers in one go (`Grade my answers in…`, "N
+answers waiting for a grade") follow once the server lists saved answers that wait for a grade.
+
 ### Exams that are behind the learner (owner 2026-11-23)
 
 - Marking an exam **Passed** or **Cancelled** when its course is in focus and has no other exam coming up asks: "<course> is in focus until <date>. … End the focus now?" with `Keep until <date>` and `End focus`. Failed does not ask (a retake usually follows). Ending it is the same audited change as `End focus` on the course.

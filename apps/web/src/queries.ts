@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { get } from "./api";
-import type { ArchivedView, AssistantsStatus, BackupStatus, ChatImport, ChatImportSummary, ConceptDetail, ConnectorSettings, Course, CourseOverview, CourseSummary, Dashboard, DeletedTarget, ExamReadiness, FocusSummary, Folder, Group, HistoryRow, Note, PlanRationale, QuizSummary, QuizView, SessionInfo, Source, StudyPreferences, StudySettings, TimelineTarget, UploadLimits, WeekReview } from "./types";
+import type { ArchivedView, AssistantsStatus, BackupStatus, ChatImport, ChatImportSummary, ConceptDetail, ConnectorSettings, Course, CourseOverview, CourseSummary, Dashboard, DeletedTarget, ExamReadiness, FocusSummary, Folder, Group, HistoryRow, Note, PlanRationale, QuizSummary, ReviewItem, QuizView, SessionInfo, Source, StudyPreferences, StudySettings, TimelineTarget, UploadLimits, WeekReview } from "./types";
 
 export const keys = {
   session: ["session"] as const,
@@ -46,6 +46,11 @@ export const useFocusSummary = () =>
 export const useSession = () =>
   useQuery({ queryKey: keys.session, queryFn: () => get<SessionInfo>("/auth/session"), retry: false, staleTime: 60_000 });
 export const useDashboard = () => useQuery({ queryKey: keys.dashboard, queryFn: () => get<Dashboard>("/dashboard") });
+/** Due and upcoming reviews (14 days): the Review page, and the due count on the Review tab and on Today. */
+export const useReviews = () =>
+  useQuery({ queryKey: keys.reviews, queryFn: () => get<{ items: ReviewItem[]; note: string }>("/reviews/due", { horizon_days: 14 }) });
+/** How many reviews are due now: the same number the Review page shows (today's plan may hold fewer). */
+export const useDueCount = () => useReviews().data?.items.filter((i) => i.is_due).length ?? 0;
 export const useCourses = () => useQuery({ queryKey: keys.courses, queryFn: () => get<Course[]>("/courses"), staleTime: 60_000 });
 export const useCourseSummary = () =>
   useQuery({ queryKey: keys.courseSummary, queryFn: () => get<CourseSummary[]>("/overview/courses") });

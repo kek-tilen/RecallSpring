@@ -106,10 +106,12 @@ describe("Review in… (2026-11-26)", () => {
     serve();
     const open = vi.spyOn(launcher, "open").mockImplementation(() => {});
     show("/review");
-    const card = (await screen.findByRole("heading", { name: "Review now" })).closest("section")!;
-    expect(within(card).getByText("3 concepts due")).toBeTruthy();
+    // one group per course with its due counts (UI direction, 2026-11-27); the concepts are folded below
+    const card = (await screen.findByRole("heading", { name: "Due now" })).closest("section")!;
+    expect(screen.getByText("3 due")).toBeTruthy();
     expect(within(card).getByText("Security")).toBeTruthy();
-    expect(within(card).getAllByText(/due$/).map((n) => n.textContent)).toEqual(["3 concepts due", " · 2 concepts due", " · 1 concept due"]);
+    expect([...card.querySelectorAll(".review-course-count")].map((n) => n.textContent)).toEqual(["2 overdue", "1 overdue"]);
+    expect([...card.querySelectorAll(".review-fold > summary")].map((n) => n.textContent)).toEqual(["2 concepts", "1 concept"]);
     fireEvent.click(await within(card).findByRole("button", { name: "Review Security in" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /Codex/ }));
     await screen.findByRole("status");

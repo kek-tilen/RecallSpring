@@ -6,7 +6,7 @@ import { StudyIn } from "../components/StudyIn";
 import { Upload } from "../components/Upload";
 import { Async, Card, Empty, StudyChip } from "../components/ui";
 import { longToday, nextDays, plural, shortDay } from "../format";
-import { useCourses, useDashboard, useFocusSummary, useSession } from "../queries";
+import { useCourses, useDashboard, useDueCount, useFocusSummary, useSession } from "../queries";
 import { CourseDot, cc } from "../components/organise";
 import { usePomodoro } from "../components/Pomodoro";
 import type { AttentionItem, Dashboard, FocusSummary, PlanItem, TargetCapacity } from "../types";
@@ -215,7 +215,7 @@ function WeekPanel({ d, focus }: { d: Dashboard; focus: FocusSummary | undefined
   const colors = new Map((useCourses().data ?? []).map((c) => [c.id, c.color]));
   const days = nextDays(7);
   const ahead = d.plan.targets.filter((t) => t.days_left >= 0).sort((x, y) => x.days_left - y.days_left);
-  const due = d.plan.items.filter(isReview).length;
+  const due = useDueCount();
   return (
     <section className="home-week" aria-labelledby="home-week-title">
       <h2 id="home-week-title" className="home-h">

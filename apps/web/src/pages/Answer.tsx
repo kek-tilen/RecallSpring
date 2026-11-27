@@ -9,6 +9,7 @@ import { MathText } from "../components/Markdown";
 import { Async, Card, ErrorNote, GradeChip, PageHead } from "../components/ui";
 import { UNSURE_HINT, dateTime } from "../format";
 import { keys } from "../queries";
+import { usePhone } from "../media";
 import type { AttemptDetail, ConceptRow } from "../types";
 
 /**
@@ -235,6 +236,9 @@ function AnswerForm({ q, sessionId, onSaved }: {
   const [openNotes, setOpenNotes] = useState(false);
   // 2026-11-26: "I don't know" while the box is empty; once there is an answer, "Unsure" marks it instead.
   const [unsure, setUnsure] = useState(false);
+  // 2026-11-27: on phones Unsure and I don't know are both always visible; with text, I don't know asks first.
+  const phone = usePhone();
+  const [dropAnswer, setDropAnswer] = useState(false);
   const [saved, setSaved] = useState<Saved | null>(null);
   const [savedPhotos, setSavedPhotos] = useState<string[]>([]);
   // In Chat the saved answer stays in the conversation, so the learner still sees what they sent.
@@ -350,23 +354,41 @@ function AnswerForm({ q, sessionId, onSaved }: {
           <button type="submit" className="btn primary" disabled={!hasAnswer || photos.saving || save.isPending}>
             {onSaved ? "Save and send to ChatGPT" : "Save answer"}
           </button>
-          {hasAnswer ? (
+          {(hasAnswer || phone) && (
             <button
               type="button"
               className="guess-toggle"
-              aria-pressed={unsure}
-              title={UNSURE_HINT}
-              disabled={save.isPending}
+              aria-pressed={markedUnsure}
+              title={hasAnswer ? UNSURE_HINT : "Write an answer first, then mark it as unsure."}
+              disabled={save.isPending || !hasAnswer}
               onClick={() => setUnsure(!unsure)}
             >
               Unsure
             </button>
-          ) : (
-            <button type="button" className="btn ghost" disabled={save.isPending} onClick={() => save.mutate("dont_know")}>
+          )}
+          {(!hasAnswer || phone) && (
+            <button
+              type="button"
+              className="btn ghost"
+              aria-expanded={hasAnswer ? dropAnswer : undefined}
+              disabled={save.isPending}
+              onClick={() => (hasAnswer ? setDropAnswer(true) : save.mutate("dont_know"))}
+            >
               I don't know
             </button>
           )}
         </div>
+        {hasAnswer && dropAnswer && (
+          <div className="notice small row" role="group" aria-label="Replace your answer with I don't know">
+            <span>Save “I don't know” instead of what you wrote? Your text is not kept.</span>
+            <button type="button" className="btn small" disabled={save.isPending} onClick={() => save.mutate("dont_know")}>
+              Yes, I don't know
+            </button>
+            <button type="button" className="btn small ghost" onClick={() => setDropAnswer(false)}>
+              Keep my answer
+            </button>
+          </div>
+        )}
       </form>
     </Card>
   );

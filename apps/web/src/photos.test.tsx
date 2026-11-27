@@ -112,3 +112,36 @@ it("a pasted photo is saved in Answer photos and counts as the answer", async ()
   expect(screen.getByRole("link", { name: "Download photo 1" })).toBeTruthy();
   expect((sent[1]!.body as { photo_ids: string[]; answer_text: string }).photo_ids).toEqual(["p1"]);
 });
+
+it("on phones shows Unsure and I don't know together, and asks before dropping a written answer (2026-11-27)", async () => {
+  const sent: unknown[] = [];
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} }));
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const path = new URL(String(input), "http://localhost").pathname.replace("/api/v1", "");
+    if (path === "/questions/q1") return json(200, QUESTION);
+    if (path === "/attempts") {
+      sent.push(JSON.parse(String(init?.body)));
+      return json(201, { attempt_id: "a1", status: "saved_awaiting_evaluation", saved_at: "2026-11-27T11:00:00Z" });
+    }
+    return json(200, []);
+  });
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <ChatAnswerForm questionId="q1" onSaved={vi.fn()} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole("button", { name: "I don't know" })).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Unsure" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Something half-remembered" } });
+  expect((screen.getByRole("button", { name: "Unsure" }) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "I don't know" }));
+  expect(sent).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "Keep my answer" }));
+  expect(screen.queryByRole("button", { name: "Yes, I don't know" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "I don't know" }));
+  fireEvent.click(screen.getByRole("button", { name: "Yes, I don't know" }));
+  await waitFor(() => expect(sent[0]).toMatchObject({ kind: "dont_know", answer_text: "" }));
+  vi.unstubAllGlobals();
+});

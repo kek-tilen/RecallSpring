@@ -13,7 +13,7 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router";
-import { useAssistants, useDashboard, useSession } from "../queries";
+import { useAssistants, useDueCount, useSession } from "../queries";
 import { BrandMark } from "./BrandMark";
 import { FocusPill, PomodoroProvider } from "./Pomodoro";
 
@@ -87,14 +87,13 @@ function AreaLink({ a, path, due }: { a: Area; path: string; due?: number }) {
 }
 
 export function Layout() {
-  const dashboard = useDashboard();
   const path = useLocation().pathname;
   const chat = useChatShown();
   const [hidden, setHidden] = useState(railHidden);
   const showButton = useRef<HTMLButtonElement>(null);
   const hideButton = useRef<HTMLButtonElement>(null);
   const moved = useRef(false);
-  const due = dashboard.data?.plan.items.filter((i) => i.category === "Review due" || i.category === "Relearn").length ?? 0;
+  const due = useDueCount();
   const areas = [TODAY, COURSES, REVIEW, EXAMS, RESULTS, ...(chat ? [CHAT] : []), FOCUS];
 
   function toggle(next: boolean) {
