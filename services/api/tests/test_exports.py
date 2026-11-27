@@ -8,6 +8,7 @@ import json
 import uuid
 import zipfile
 from typing import Any
+from urllib.parse import unquote
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -25,7 +26,7 @@ def _zip(api: Api, export_id: str) -> zipfile.ZipFile:
     r = api.client.get(f"/api/v1/exports/{export_id}/download")
     assert r.status_code == 200, r.text
     assert r.headers["content-type"] == "application/zip"
-    assert "RecallSpring export" in r.headers["content-disposition"]
+    assert "RecallSpring export" in unquote(r.headers["content-disposition"])  # filename*=utf-8''... for spaces
     return zipfile.ZipFile(io.BytesIO(r.content))
 
 
