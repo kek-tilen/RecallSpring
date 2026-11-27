@@ -74,14 +74,17 @@ def test_choosing_how_often(owner_api: Api, backups: Path, frozen: Any) -> None:
 
     with new_session() as db:
         events = list(db.scalars(select(AuditEvent).where(AuditEvent.action == "backup.schedule_changed")))
-    assert [(e.details["from"], e.details["to"]) for e in events] == [
-        ("Daily at 03:00", "Every 2 weeks at 22:30"),
-        ("Every 2 weeks at 22:30", "Monthly on the 19th at 03:00"),
-        ("Monthly on the 19th at 03:00", "Every 10 days at 03:00"),
-    ]
-    row = next(h for h in owner_api.get("/history").json() if h["type"] == "backup.schedule_changed")
-    assert row["text"] == "Backup schedule changed"
-    assert row["detail"] == "Monthly on the 19th at 03:00 → Every 10 days at 03:00"
+    assert sorted((e.details["from"], e.details["to"]) for e in events) == sorted(
+        [
+            ("Daily at 03:00", "Every 2 weeks at 22:30"),
+            ("Every 2 weeks at 22:30", "Monthly on the 19th at 03:00"),
+            ("Monthly on the 19th at 03:00", "Every 10 days at 03:00"),
+        ]
+    )
+    # The frozen clock gives all three the same time, so History's order among them is not defined.
+    rows = [h for h in owner_api.get("/history").json() if h["type"] == "backup.schedule_changed"]
+    assert {r["text"] for r in rows} == {"Backup schedule changed"}
+    assert "Monthly on the 19th at 03:00 → Every 10 days at 03:00" in {r["detail"] for r in rows}
 
 
 @pytest.mark.parametrize(
