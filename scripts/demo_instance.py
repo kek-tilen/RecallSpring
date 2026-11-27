@@ -18,6 +18,9 @@ Isolation from the learner's own RecallSpring (127.0.0.1:4318):
 
 The demo data is made through the API itself with the clock moved back three weeks, so concepts are studied,
 answered and graded on different days and some reviews are due now. Every course is marked "(demo)".
+
+``setup --showcase`` seeds the same story for the README screenshots: plain names ("Cell Biology", "Midterm exam")
+and two more courses with a midterm exam each. The feedback stays simulated and says so.
 """
 
 from __future__ import annotations
@@ -42,6 +45,12 @@ HOST = "demo.localhost"  # its own cookies; see the module docstring
 PORT = 4328
 USERNAME = "demo"
 ZONE = ZoneInfo("Europe/Ljubljana")
+SHOWCASE = False  # setup --showcase: plain names for screenshots
+
+
+def demo(name: str, showcase: str | None = None) -> str:
+    """A demo name: marked "(demo)", or plain for the showcase."""
+    return (showcase or name) if SHOWCASE else f"{name} (demo)"
 
 
 def env_file() -> Path:
@@ -178,6 +187,42 @@ The preterite tells completed events ("ayer comí paella"); the imperfect descri
 the past ("de niño comía paella los domingos").
 """
 
+CHEMISTRY = """# Organic chemistry basics
+
+## Functional groups
+
+A functional group is the part of a molecule that decides how it reacts: hydroxyl (alcohols), carbonyl (aldehydes
+and ketones), carboxyl (acids) and amino groups (amines).
+
+## Isomers
+
+Structural isomers have the same formula but a different order of atoms; stereoisomers differ only in how the atoms
+are arranged in space (cis/trans, enantiomers).
+
+## Nucleophilic substitution
+
+In SN2 a nucleophile attacks as the leaving group goes, in one step with inversion; SN1 goes through a carbocation
+and is favoured by tertiary carbons and polar protic solvents.
+"""
+
+ECONOMICS = """# Microeconomics
+
+## Supply and demand
+
+The market price settles where the quantity demanded equals the quantity supplied; a shift of either curve moves the
+equilibrium.
+
+## Elasticity
+
+Price elasticity of demand is the percentage change in quantity divided by the percentage change in price; demand is
+elastic when it is above 1 in absolute value.
+
+## Market structures
+
+Perfect competition, monopolistic competition, oligopoly and monopoly differ in the number of firms, barriers to
+entry and how much a firm can set its price.
+"""
+
 
 class Client:
     """The web app's way of calling the API (CSRF and Idempotency-Key headers), on an in-process TestClient."""
@@ -207,6 +252,12 @@ class Client:
         r = self.http.put(self._url(path), json=body, headers=self._headers())
         if r.status_code not in (200, 201):
             raise SystemExit(f"PUT {path} failed ({r.status_code}): {r.text[:400]}")
+        return r.json()
+
+    def patch(self, path: str, body: Any = None) -> Any:
+        r = self.http.patch(self._url(path), json=body, headers=self._headers())
+        if r.status_code not in (200, 201):
+            raise SystemExit(f"PATCH {path} failed ({r.status_code}): {r.text[:400]}")
         return r.json()
 
     def get(self, path: str, **params: Any) -> Any:
@@ -296,7 +347,7 @@ def seed(api: Client, conn: Client, clock: Clock) -> dict[str, int]:
                         "bloom_level": bloom,
                         "prompt": prompt,
                         "expected_points": expected
-                        or ["(demo) the key idea of the concept"],
+                        or [("" if SHOWCASE else "(demo) ") + "the key idea of the concept"],
                     }
                 ],
                 "model_name": "demo",
@@ -322,7 +373,7 @@ def seed(api: Client, conn: Client, clock: Clock) -> dict[str, int]:
                 "feedback": feedback,
                 "gaps": gaps or [],
                 "strengths": strengths or [],
-                "model_name": "demo (simulated feedback)",
+                "model_name": "simulated feedback" if SHOWCASE else "demo (simulated feedback)",
             },
         )
         counts["answers"] += 1
@@ -341,20 +392,21 @@ def seed(api: Client, conn: Client, clock: Clock) -> dict[str, int]:
 
     # ---- three weeks ago: account settings, courses and material
     clock.day(-21, 18)
-    api.put("/settings/profile", {"assistant": "codex", "greeting_name": "Demo"})
+    api.put("/settings/profile", {"assistant": "codex", "greeting_name": "Sam" if SHOWCASE else "Demo"})
+    about = "Lectures, labs and the midterm exam." if SHOWCASE else "Labelled demo data."
     api.post("/settings/connector/tokens", {"client": "codex"})
     bio = api.post(
         "/courses",
-        {"title": "Cell Biology (demo)", "description": "Labelled demo data."},
+        {"title": demo("Cell Biology"), "description": about},
     )["id"]
     alg = api.post(
         "/courses",
-        {"title": "Linear Algebra (demo)", "description": "Labelled demo data."},
+        {"title": demo("Linear Algebra"), "description": about},
     )["id"]
     spa = api.post(
         "/courses",
         {
-            "title": "Spanish A2 (demo)",
+            "title": demo("Spanish A2"),
             "kind": "interest",
             "description": "Order food and talk about my week.",
         },
@@ -400,7 +452,7 @@ def seed(api: Client, conn: Client, clock: Clock) -> dict[str, int]:
         {
             "course_id": bio,
             "kind": "kolokvij",
-            "name": "Midterm 1 (demo)",
+            "name": demo("Midterm 1", "Midterm exam"),
             "due_date": iso(10),
             "scope_description": "Lectures 1-3: membranes, respiration and photosynthesis.",
             "goal": "long_term",
@@ -411,7 +463,7 @@ def seed(api: Client, conn: Client, clock: Clock) -> dict[str, int]:
         {
             "course_id": bio,
             "kind": "other",
-            "name": "Lab quiz (demo)",
+            "name": demo("Lab quiz"),
             "due_date": iso(-8),
             "scope_description": "Lecture 1: membranes.",
             "goal": "exam_only",
@@ -422,7 +474,7 @@ def seed(api: Client, conn: Client, clock: Clock) -> dict[str, int]:
         {
             "course_id": alg,
             "kind": "izpit",
-            "name": "Exam (demo)",
+            "name": demo("Exam", "Final exam"),
             "due_date": iso(24),
             "scope_description": "The whole course.",
         },
@@ -579,6 +631,78 @@ def seed(api: Client, conn: Client, clock: Clock) -> dict[str, int]:
         bloom=4,
     )
 
+    # ---- showcase only: two more courses, each with a midterm exam soon
+    if SHOWCASE:
+        clock.day(-5, 16)
+        chem = api.post("/courses", {"title": "Organic Chemistry", "description": about})["id"]
+        eco = api.post("/courses", {"title": "Microeconomics", "description": about})["id"]
+        chem_ids = concepts(
+            chem,
+            material(chem, "Lecture 1 · Organic chemistry basics", CHEMISTRY),
+            {t: t for t in ("Functional groups", "Isomers", "Nucleophilic substitution")},
+        )
+        eco_ids = concepts(
+            eco,
+            material(eco, "Lecture 1 · Markets", ECONOMICS),
+            {t: t for t in ("Supply and demand", "Elasticity", "Market structures")},
+        )
+        for course, days in ((chem, 6), (eco, 8)):
+            conn.post(
+                "/targets",
+                {
+                    "course_id": course,
+                    "kind": "kolokvij",
+                    "name": "Midterm exam",
+                    "due_date": iso(days),
+                    "scope_description": "Lecture 1.",
+                    "goal": "exam_only",
+                },
+            )
+        clock.day(-4, 17)
+        study(
+            chem,
+            [chem_ids["Functional groups"], chem_ids["Isomers"]],
+            "Functional groups and isomers",
+            "The functional group decides the reactions. Same formula, different structure = structural isomers; "
+            "same structure, different 3D arrangement = stereoisomers.",
+        )
+        answer(
+            chem,
+            chem_ids["Isomers"],
+            "Butan-1-ol and diethyl ether have the same formula. What kind of isomers are they, and why?",
+            "Structural isomers: same formula C4H10O, but one is an alcohol and the other an ether.",
+            3,
+            "Correct, and you named the functional groups that differ.",
+            strengths=["Correct type of isomer", "Names both functional groups"],
+            bloom=4,
+        )
+        study(
+            eco,
+            [eco_ids["Supply and demand"], eco_ids["Elasticity"]],
+            "Supply, demand and elasticity",
+            "Price settles where demand meets supply. Elastic demand: quantity reacts strongly to price.",
+        )
+        answer(
+            eco,
+            eco_ids["Elasticity"],
+            "A café raises the price of coffee by 10% and sells 25% fewer cups. Is demand elastic? What happens to "
+            "revenue?",
+            "Elasticity is 2.5, so demand is elastic.",
+            2,
+            "The elasticity is right; the effect on revenue is missing.",
+            gaps=["With elastic demand a price rise lowers total revenue"],
+            bloom=3,
+        )
+
+    if SHOWCASE:  # colours and several assistants, as a learner would set them
+        for course, color in ((bio, "green"), (alg, "blue"), (spa, "yellow"), (chem, "violet"), (eco, "orange")):
+            api.patch(f"/courses/{course}", {"color": color})
+        api.post("/settings/connector/tokens", {"client": "antigravity"})
+        api.put(
+            "/settings/profile",
+            {"assistant": "mix", "assistant_mix": ["claude", "codex", "antigravity"], "greeting_name": "Sam"},
+        )
+
     # ---- focus blocks in the last week
     for offset, course, minutes in (
         (-5, bio, 45),
@@ -638,7 +762,7 @@ def seed(api: Client, conn: Client, clock: Clock) -> dict[str, int]:
         "/quizzes",
         {
             "course_id": bio,
-            "title": "Midterm 1 practice (demo)",
+            "title": demo("Midterm 1 practice", "Midterm practice"),
             "time_limit_minutes": 20,
             "items": items,
         },
@@ -754,14 +878,15 @@ def setup() -> int:
             revoke = [
                 t
                 for t in api.get("/settings/connector")["tokens"]
-                if t["label"] == "Demo seeding"
+                if t["label"] == "Demo seeding" and not SHOWCASE  # the showcase keeps Claude connected
             ]
             for t in revoke:
                 api.post(f"/settings/connector/tokens/{t['id']}/revoke")
     finally:
         rs_clock.now = real_now  # type: ignore[assignment]
     print(
-        f"Demo database {DEMO_DB} ready: 3 courses, {counts['summaries']} summaries, {counts['answers']} answers."
+        f"Demo database {DEMO_DB} ready: {5 if SHOWCASE else 3} courses, {counts['summaries']} summaries, "
+        f"{counts['answers']} answers."
     )
     print(f"Account: username {USERNAME!r}; the password is in {DEMO / 'account.txt'}")
     print(
@@ -807,7 +932,8 @@ def main(argv: list[str] | None = None) -> int:
         prog="demo_instance", description=__doc__.split("\n\n")[0]
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("setup", help="drop and recreate the demo database, then seed it")
+    st = sub.add_parser("setup", help="drop and recreate the demo database, then seed it")
+    st.add_argument("--showcase", action="store_true", help="plain names and more courses, for screenshots")
     s = sub.add_parser(
         "serve", help=f"run the demo on http://{HOST}:{PORT}/ (API, web app and worker)"
     )
@@ -819,6 +945,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status", help="is the demo running")
     args = parser.parse_args(argv)
     if args.command == "setup":
+        global SHOWCASE
+        SHOWCASE = args.showcase
         return setup()
     if args.command == "serve":
         return serve(args.web_dist)
