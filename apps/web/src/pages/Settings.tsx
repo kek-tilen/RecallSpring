@@ -320,7 +320,7 @@ function BackupPanel({ b }: { b: BackupStatus }) {
       <p className="small">
         A copy of your study records and uploaded files.{" "}
         {b.enabled
-          ? `RecallSpring makes one every ${b.interval_hours} hours while it runs and keeps the newest of each of the last ${b.keep_daily} days and ${b.keep_weekly} weeks.`
+          ? `RecallSpring makes one ${b.schedule_label.toLowerCase()} (${b.timezone}) while it runs and keeps ${keepsText(b, b.keeps === "daily_weekly")}.`
           : "Automatic backups are turned off in the server settings; you can still back up here."}
       </p>
       <dl className="kv">
@@ -375,6 +375,128 @@ function BackupPanel({ b }: { b: BackupStatus }) {
       </div>
       </details>
     </div>
+  );
+}
+
+const EVERY_CHOICES: [string, string][] = [
+  ["1", "Daily"],
+  ["3", "Every 3 days"],
+  ["7", "Weekly"],
+  ["14", "Every 2 weeks"],
+  ["monthly", "Monthly"],
+  ["custom", "Every … days"],
+];
+
+function choiceOf(s: BackupStatus["schedule"]): string {
+  if (s.every === "monthly") return "monthly";
+  return ["1", "3", "7", "14"].includes(String(s.days)) ? String(s.days) : "custom";
+}
+
+function keepsText(b: BackupStatus, daily: boolean): string {
+  return daily ? `the newest of each of the last ${b.keep_daily} days and ${b.keep_weekly} weeks` : `the last ${b.keep_last} backups`;
+}
+
+/** How often backups run and at what time, in the first account's time zone (2026-11-27). */
+function BackupSchedule({ b }: { b: BackupStatus }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [choice, setChoice] = useState("1");
+  const [days, setDays] = useState("10");
+  const [at, setAt] = useState("03:00");
+  const save = useMutation({
+    mutationFn: (body: { every: "days" | "monthly"; days?: number; at: string }) =>
+      request<BackupStatus>("/settings/backup/schedule", { method: "PUT", json: body }),
+    onSuccess: (v) => {
+      qc.setQueryData(keys.backup, v);
+      void qc.invalidateQueries({ queryKey: keys.dashboard });
+      setOpen(false);
+    },
+  });
+  const n = choice === "custom" ? Number(days) : Number(choice);
+  const daysOk = choice === "monthly" || (Number.isInteger(n) && n >= 1 && n <= 90);
+  const timeOk = /^([01]\d|2[0-3]):[0-5]\d$/.test(at);
+  const lose = choice === "monthly" ? "a month" : n > 1 ? `${n} days` : null;
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!daysOk || !timeOk) return;
+    save.mutate(choice === "monthly" ? { every: "monthly", at } : { every: "days", days: n, at });
+  }
+  return (
+    <>
+      <div className="settings-row">
+        <span>
+          <span className="settings-row-title">How often</span>
+          <span className="small muted">
+            {b.schedule_label} · keeps {keepsText(b, b.keeps === "daily_weekly")}
+            {!b.folder_from_web && " · set in the server settings"}
+          </span>
+        </span>
+        {b.can_change && !open && (
+          <button
+            type="button"
+            className="btn small"
+            aria-label="Change how often backups run"
+            onClick={() => {
+              setChoice(choiceOf(b.schedule));
+              if (b.schedule.days) setDays(String(b.schedule.days));
+              setAt(b.schedule.at);
+              save.reset();
+              setOpen(true);
+            }}
+          >
+            Change
+          </button>
+        )}
+      </div>
+      {open && (
+        <form className="backup-folder stack" aria-label="How often backups run" onSubmit={submit}>
+          <div className="backup-schedule-fields">
+            <label className="field">
+              <span className="small">Back up</span>
+              <select value={choice} onChange={(e) => setChoice(e.target.value)}>
+                {EVERY_CHOICES.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {choice === "custom" && (
+              <label className="field">
+                <span className="small">Days between backups</span>
+                <input type="number" min={1} max={90} step={1} inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} />
+              </label>
+            )}
+            <label className="field">
+              <span className="small">At</span>
+              <input type="time" value={at} required onChange={(e) => setAt(e.target.value)} />
+            </label>
+          </div>
+          <p className="tiny muted" style={{ margin: 0 }}>
+            {choice === "monthly" && "On today's day of the month, or the last day of a shorter month. "}
+            Time in {b.timezone}. A backup missed while RecallSpring was off runs as soon as it runs again. Keeps{" "}
+            {keepsText(b, choice === "1")}.
+          </p>
+          {!daysOk && (
+            <p className="small" role="alert" style={{ margin: 0 }}>
+              Choose 1 to 90 days.
+            </p>
+          )}
+          {daysOk && lose && (
+            <div className="notice warn small">If the disk or the database fails, up to {lose} of study records could be lost.</div>
+          )}
+          {save.error && <ErrorNote error={save.error} />}
+          <div className="row">
+            <button type="submit" className="btn primary small" disabled={!daysOk || !timeOk || save.isPending}>
+              Save
+            </button>
+            <button type="button" className="btn small" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </>
   );
 }
 
@@ -1065,6 +1187,11 @@ export function SettingsPage() {
                   <h3 className="sr-only">Backups</h3>
                   <Async q={backup}>{(b) => <BackupPanel b={b} />}</Async>
                 </div>
+                {backup.data && (
+                  <div id="backup-schedule">
+                    <BackupSchedule b={backup.data} />
+                  </div>
+                )}
                 {backup.data && (
                   <div id="backup-folder">
                     <BackupFolder b={backup.data} />

@@ -764,7 +764,15 @@ export interface BackupStatus {
   /** Only the first account may change backups (they hold the whole installation). */
   can_change: boolean;
   same_disk_as_storage: boolean;
-  interval_hours: number;
+  /** How often backups run (2026-11-27): chosen in Settings, else the server settings. */
+  schedule: { every: "days" | "monthly"; days: number | null; day_of_month: number | null; at: string; source: "settings" | "server" };
+  /** For example "Every 2 weeks at 03:00". */
+  schedule_label: string;
+  /** The first account's time zone, in which the time is meant. */
+  timezone: string;
+  keep_last: number;
+  /** Daily backups keep daily and weekly ones; less frequent ones keep the last keep_last. */
+  keeps: "daily_weekly" | "last";
   keep_daily: number;
   keep_weekly: number;
   last_attempt_at: string | null;

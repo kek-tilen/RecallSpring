@@ -73,7 +73,11 @@ describe("Settings", () => {
       sync: null,
       can_change: true,
       same_disk_as_storage: true,
-      interval_hours: 24,
+      schedule: { every: "days", days: 1, day_of_month: null, at: "03:00", source: "server" },
+      schedule_label: "Daily at 03:00",
+      timezone: "Europe/Ljubljana",
+      keep_last: 7,
+      keeps: "daily_weekly",
       keep_daily: 7,
       keep_weekly: 4,
       last_attempt_at: null,
@@ -136,6 +140,80 @@ describe("Settings", () => {
     expect(screen.getByText(/in your Dropbox folder/)).toBeTruthy();
   });
 
+  it("chooses how often backups run, with a custom number of days", async () => {
+    const status = {
+      enabled: true,
+      location: "D:\Backups",
+      location_source: "settings",
+      server_location: "C:\RS\backups",
+      folder_from_web: true,
+      sync: null,
+      can_change: true,
+      same_disk_as_storage: false,
+      schedule: { every: "days", days: 1, day_of_month: null, at: "03:00", source: "server" },
+      schedule_label: "Daily at 03:00",
+      timezone: "Europe/Ljubljana",
+      keep_daily: 7,
+      keep_weekly: 4,
+      keep_last: 7,
+      keeps: "daily_weekly",
+      last_attempt_at: null,
+      last_success_at: null,
+      last_error: null,
+      last: null,
+      next_due: "now",
+      snapshots: [],
+      disk_bytes: 0,
+      tools: "pg_dump",
+      encryption: { on: true, key_id: "6954F17A", key_created_at: "2026-11-27T09:00:00+00:00" },
+      unencrypted_snapshots: 0,
+      remove_unencrypted_pending: false,
+    };
+    const saved = {
+      ...status,
+      schedule: { every: "days", days: 10, day_of_month: null, at: "22:30", source: "settings" },
+      schedule_label: "Every 10 days at 22:30",
+      keeps: "last",
+    };
+    const calls: { method: string; url: string; body: unknown }[] = [];
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      calls.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (url.includes("/settings/backup/schedule")) return json(saved);
+      if (url.includes("/settings/backup")) return json(status);
+      return new Response(JSON.stringify({ code: "not_found", message: "Not found." }), { status: 404, headers: { "Content-Type": "application/json" } });
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/settings#data"]}>
+          <SettingsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText(/Daily at 03:00 · keeps the newest of each of the last 7 days and 4 weeks/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Change how often backups run" }));
+    const form = screen.getByRole("form", { name: "How often backups run" });
+    expect(within(form).queryByText(/could be lost/)).toBeNull(); // daily
+    fireEvent.change(within(form).getByRole("combobox"), { target: { value: "custom" } });
+    const daysInput = within(form).getByRole("spinbutton");
+    fireEvent.change(daysInput, { target: { value: "120" } });
+    expect(within(form).getByRole("alert").textContent).toBe("Choose 1 to 90 days.");
+    expect((within(form).getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(daysInput, { target: { value: "10" } });
+    fireEvent.change(within(form).getByLabelText("At"), { target: { value: "22:30" } });
+    expect(within(form).getByText(/up to 10 days of study records could be lost/)).toBeTruthy();
+    expect(within(form).getByText(/Keeps the last 7 backups/)).toBeTruthy();
+    fireEvent.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("form", { name: "How often backups run" })).toBeNull());
+    const put = calls.find((c) => c.method === "PUT");
+    expect(put?.url).toContain("/settings/backup/schedule");
+    expect(put?.body).toEqual({ every: "days", days: 10, at: "22:30" });
+    expect(screen.getByText(/Every 10 days at 22:30 · keeps the last 7 backups/)).toBeTruthy();
+  });
+
   it("turns on encryption only after the recovery key is saved and proved", async () => {
     const identity = "AGE-SECRET-KEY-1EXAMPLEONLYNOTAREALKEYEXAMPLEONLYNOTAREALKEY7XK2";
     const status = {
@@ -147,7 +225,11 @@ describe("Settings", () => {
       sync: "Dropbox",
       can_change: true,
       same_disk_as_storage: false,
-      interval_hours: 24,
+      schedule: { every: "days", days: 1, day_of_month: null, at: "03:00", source: "server" },
+      schedule_label: "Daily at 03:00",
+      timezone: "Europe/Ljubljana",
+      keep_last: 7,
+      keeps: "daily_weekly",
       keep_daily: 7,
       keep_weekly: 4,
       last_attempt_at: null,

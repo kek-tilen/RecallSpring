@@ -6892,6 +6892,22 @@ input.switch:focus-visible {
   word-break: break-all;
 }
 
+.backup-schedule-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.backup-schedule-fields select,
+.backup-schedule-fields input {
+  min-height: 40px;
+}
+
+.backup-schedule-fields input[type="number"] {
+  width: 7em;
+}
+
 .backup-folder {
   gap: 10px;
   padding: 4px 0 12px;

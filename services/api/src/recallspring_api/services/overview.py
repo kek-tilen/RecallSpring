@@ -392,6 +392,7 @@ _EVENT_TEXT = {
     "backup.created": "Backup made",
     "backup.failed": "Backup failed",
     "backup.folder_changed": "Backup folder changed",
+    "backup.schedule_changed": "Backup schedule changed",
     "backup.encryption_on": "Backup encryption turned on",
     "backup.key_replaced": "New recovery key for backups",
     "backup.unencrypted_removed": "Unencrypted backups removed",
@@ -445,7 +446,7 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         return f"{payload.get('rows')} rows, {payload.get('files')} files, {check}"
     if event_type == "backup.failed":
         return str(payload.get("message") or payload.get("code"))
-    if event_type == "backup.folder_changed":
+    if event_type in ("backup.folder_changed", "backup.schedule_changed"):
         return f"{payload.get('from')} → {payload.get('to')}"
     if event_type in ("backup.encryption_on", "backup.key_replaced"):
         return f"key {payload.get('key_id')}"

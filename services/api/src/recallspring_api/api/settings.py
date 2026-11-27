@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -77,6 +77,13 @@ class BackupFolderIn(BaseModel):
     path: str | None = Field(default=None, max_length=1000)
 
 
+class BackupScheduleIn(BaseModel):
+    every: Literal["days", "monthly"]
+    days: int | None = Field(default=None, ge=1, le=backup.EVERY_MAX_DAYS)
+    day_of_month: int | None = Field(default=None, ge=1, le=31)
+    at: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
 class BackupEncryptionIn(BaseModel):
     recipient: str = Field(min_length=10, max_length=200)
     remove_unencrypted: bool = False
@@ -133,6 +140,30 @@ def backup_folder_set(
         if exc.code == "busy":
             raise ApiError(409, "backup_busy", exc.message) from exc
         raise ApiError(422 if exc.code == "folder_refused" else 409, exc.code, exc.message) from exc
+    return commit_with_response(db, ctx, payload, 200, _backup_view(db, ctx.user))
+
+
+@router.put("/settings/backup/schedule")
+def backup_schedule_set(
+    payload: BackupScheduleIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """How often backups run and at what time (2026-11-27). Audited as ``backup.schedule_changed``."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    _require_backup_owner(db, ctx.user)
+    db.rollback()
+    try:
+        backup.set_schedule(
+            payload.every,
+            payload.days,
+            payload.at,
+            day_of_month=payload.day_of_month,
+            actor_id=ctx.user.id,
+            request_id=ctx.request_id,
+        )
+    except backup.BackupError as exc:
+        status = {"busy": 409, "invalid_schedule": 422, "folder_locked": 403}.get(exc.code, 409)
+        raise ApiError(status, "backup_busy" if exc.code == "busy" else exc.code, exc.message) from exc
     return commit_with_response(db, ctx, payload, 200, _backup_view(db, ctx.user))
 
 

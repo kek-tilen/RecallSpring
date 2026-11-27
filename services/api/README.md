@@ -62,8 +62,10 @@ Every mutating request needs the session cookie, an `X-CSRF-Token` header equal 
 | `RS_FIRST_RUN_ENABLED` | `true` | The first-run page may create the first account (only from this computer, only while none exists; always off in production) |
 | `RS_BACKUP_DIR` | `local-data/backups` | Same disk as the uploads by default: point it at another disk or a synced folder. A folder chosen in Settings replaces it |
 | `RS_BACKUP_SETTINGS_FILE`, `RS_BACKUP_SETTINGS_FROM_WEB` | `local-data/backup-settings.json`, `true` | Where the folder chosen in Settings is kept; `false` keeps the folder to the server settings |
-| `RS_BACKUP_ENABLED`, `RS_BACKUP_INTERVAL_HOURS` | `true`, `24` | Automatic backups by the worker |
-| `RS_BACKUP_KEEP_DAILY`, `RS_BACKUP_KEEP_WEEKLY` | `7`, `4` | Newest backup per day / per week kept |
+| `RS_BACKUP_ENABLED` | `true` | Automatic backups by the worker |
+| `RS_BACKUP_EVERY_DAYS`, `RS_BACKUP_TIME` | `1`, `03:00` | Schedule in the first account's time zone (Settings → How often replaces it) |
+| `RS_BACKUP_KEEP_DAILY`, `RS_BACKUP_KEEP_WEEKLY` | `7`, `4` | Daily backups: newest per day / per week kept |
+| `RS_BACKUP_KEEP_LAST` | `7` | Less frequent backups: how many are kept |
 | `RS_BACKUP_PG_BIN` | unset | Folder with `pg_dump`/`pg_restore` (else `PATH`, else the dev container in development) |
 
 ## Rollback notes

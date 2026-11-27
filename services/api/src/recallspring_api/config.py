@@ -71,8 +71,8 @@ class Settings(BaseSettings):
     job_lease_seconds: int = 300
     job_max_attempts: int = 3
 
-    # Backups (backup.py, docs/08 -> Backups): the worker makes one when the last good one is older than the
-    # interval: a database dump plus the uploaded files, checked by restoring it into a throwaway database.
+    # Backups (backup.py, docs/08 -> Backups): the worker makes one on schedule: a database dump plus the uploaded
+    # files, checked by restoring it into a throwaway database.
     # backup_dir defaults to "backups" next to storage_dir, i.e. the same disk: point it at another disk or a
     # synced folder to survive a broken disk.
     backup_enabled: bool = True
@@ -81,9 +81,14 @@ class Settings(BaseSettings):
     # data). backup_settings_from_web = false keeps the folder to the server settings (e.g. a hosted operator).
     backup_settings_file: Path = _REPO_ROOT / "local-data" / "backup-settings.json"
     backup_settings_from_web: bool = True
-    backup_interval_hours: int = Field(default=24, ge=1, le=24 * 7)
+    # Schedule: every backup_every_days days at backup_time in the first account's time zone; Settings can choose
+    # another (daily ... monthly, 2026-11-27). Daily backups keep the newest of each of backup_keep_daily days and
+    # backup_keep_weekly weeks; less frequent ones keep the last backup_keep_last.
+    backup_every_days: int = Field(default=1, ge=1, le=90)
+    backup_time: str = Field(default="03:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     backup_keep_daily: int = Field(default=7, ge=1, le=90)
     backup_keep_weekly: int = Field(default=4, ge=0, le=52)
+    backup_keep_last: int = Field(default=7, ge=1, le=90)
     backup_verify: bool = True
     backup_timeout_seconds: int = 600
     # pg_dump / pg_restore: in backup_pg_bin, else on PATH, else (development and test only) inside this container.

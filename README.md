@@ -141,7 +141,7 @@ The API and the worker run in the background without a window:
 | `scripts\logs.ps1` | follow the API log (`-Worker` for the worker) |
 
 The full guide, including updates and troubleshooting, is in [docs/install-windows.md](docs/install-windows.md).
-Backups go to `local-data/backups` once a day; choose another disk or a synced folder in Settings → Data & backups for real protection, and turn on encryption there before they go to a cloud folder.
+Backups go to `local-data/backups` every night (how often is up to you, daily to monthly); choose another disk or a synced folder in Settings → Data & backups for real protection, and turn on encryption there before they go to a cloud folder.
 
 ## Contributing
 

@@ -24,6 +24,7 @@ folder); switching RecallSpring to it is a deliberate step by the owner (docs/08
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 import hmac
 import json
@@ -38,13 +39,14 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pyrage
 from pyrage import x25519
-from sqlalchemy import create_engine, make_url, text
+from sqlalchemy import create_engine, make_url, select, text
 from sqlalchemy.engine import URL, Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -64,6 +66,9 @@ SECRET_MANIFEST = "secret.json.age"
 CHECK_SUFFIX = "_restore_check"
 STAMP = "%Y%m%d-%H%M%S"
 RETRY_AFTER_FAILURE = timedelta(hours=1)
+OVERDUE_AFTER = timedelta(days=1)  # past the scheduled time before Today says backups are missing
+EVERY_MAX_DAYS = 90
+TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 class BackupError(Exception):
@@ -170,9 +175,11 @@ def status_view() -> dict[str, Any]:
     enc = encryption()
     plain = sum(1 for p in kept if not _manifest(p).get("encrypted"))
     last_success = _parse(st.get("last_success_at"))
+    sch = schedule()
     next_due = None
     if s.backup_enabled:
-        next_due = (last_success + timedelta(hours=s.backup_interval_hours)).isoformat() if last_success else "now"
+        nxt = next_due_at(last_success, sch)
+        next_due = nxt.isoformat() if nxt else "now"
     return {
         "enabled": s.backup_enabled,
         "location": str(backup_root()),
@@ -181,9 +188,13 @@ def status_view() -> dict[str, Any]:
         "folder_from_web": s.backup_settings_from_web,
         "sync": sync_provider(backup_root()),
         "same_disk_as_storage": _same_disk(backup_root(), s.storage_dir),
-        "interval_hours": s.backup_interval_hours,
+        "schedule": sch,
+        "schedule_label": schedule_label(sch),
+        "timezone": zone().key,
         "keep_daily": s.backup_keep_daily,
         "keep_weekly": s.backup_keep_weekly,
+        "keep_last": s.backup_keep_last,
+        "keeps": "daily_weekly" if _is_daily(sch) else "last",
         "last_attempt_at": st.get("last_attempt_at"),
         "last_success_at": st.get("last_success_at"),
         "last_error": st.get("last_error") if _failed_last(st) else None,
@@ -209,7 +220,7 @@ def _failed_last(st: dict[str, Any]) -> bool:
 
 
 def attention_item() -> dict[str, Any] | None:
-    """A "Needs attention" entry when backups fail or are overdue (two intervals without a good one)."""
+    """A "Needs attention" entry when backups fail or are overdue (a day past the scheduled time)."""
     s = get_settings()
     if not s.backup_enabled:
         return None
@@ -227,9 +238,10 @@ def attention_item() -> dict[str, Any] | None:
             "title": "No backup yet",
             "text": "The first one runs by itself while RecallSpring runs, or use Back up now in Settings → Backups.",
         }
-    age = clock.now() - last_success
-    if age > timedelta(hours=2 * s.backup_interval_hours):
-        days = age.days
+    now = clock.now()
+    nxt = next_due_at(last_success)
+    if nxt is not None and now > nxt + OVERDUE_AFTER:
+        days = (now - last_success).days
         return item | {
             "title": f"No backup for {days} day{'s' if days != 1 else ''}",
             "text": "Backups run while the RecallSpring worker runs. Use Back up now in Settings → Backups.",
@@ -974,11 +986,13 @@ def set_folder(raw: str | None, *, actor_id: uuid.UUID | None = None, request_id
 
 
 def keep_names(names: list[str], now: datetime) -> set[str]:
-    """The newest snapshot of each of the last ``keep_daily`` days and of the newest ``keep_weekly`` ISO weeks
-    that have one; the newest snapshot is always kept."""
+    """Daily backups: the newest snapshot of each of the last ``keep_daily`` days and of the newest ``keep_weekly``
+    ISO weeks that have one. Less frequent ones: the last ``keep_last`` (2026-11-27). The newest is always kept."""
     s = get_settings()
     if not names:
         return set()
+    if not _is_daily(schedule()):
+        return set(sorted(names)[-s.backup_keep_last :])
     stamps = {n: datetime.strptime(n, STAMP) for n in names}
     keep = {max(names)}
     by_day: dict[Any, str] = {}
@@ -1035,14 +1049,126 @@ def prune() -> int:
 # ---------------------------------------------------------------- schedule
 
 
+def schedule() -> dict[str, Any]:
+    """How often backups run (2026-11-27): every ``days`` days, or monthly on ``day_of_month`` (the last day of a
+    shorter month), at ``at`` in the first account's time zone. Chosen in Settings, else the server settings."""
+    s = get_settings()
+    out: dict[str, Any] = {"every": "days", "days": s.backup_every_days, "day_of_month": None, "at": s.backup_time}
+    out["source"] = "server"
+    chosen = read_config().get("schedule") if s.backup_settings_from_web else None
+    if not isinstance(chosen, dict):
+        return out
+    days, dom, at = chosen.get("days"), chosen.get("day_of_month"), chosen.get("at")
+    if chosen.get("every") == "monthly" and isinstance(dom, int) and 1 <= dom <= 31:
+        out.update(every="monthly", days=None, day_of_month=dom)
+    elif chosen.get("every") == "days" and isinstance(days, int) and 1 <= days <= EVERY_MAX_DAYS:
+        out["days"] = days
+    else:
+        return out  # unreadable: the server's
+    if isinstance(at, str) and TIME_RE.match(at):
+        out["at"] = at
+    out["source"] = "settings"
+    return out
+
+
+def _is_daily(sch: dict[str, Any]) -> bool:
+    return sch["every"] == "days" and sch["days"] == 1
+
+
+def _ordinal(n: int) -> str:
+    return f"{n}{'th' if 11 <= n % 100 <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def schedule_label(sch: dict[str, Any]) -> str:
+    """For example "Daily at 03:00", "Every 2 weeks at 03:00", "Monthly on the 27th at 03:00"."""
+    if sch["every"] == "monthly":
+        return f"Monthly on the {_ordinal(sch['day_of_month'])} at {sch['at']}"
+    days = sch["days"]
+    named = {1: "Daily", 7: "Weekly", 14: "Every 2 weeks"}
+    return f"{named.get(days, f'Every {days} days')} at {sch['at']}"
+
+
+def zone() -> ZoneInfo:
+    """The first account's time zone: a backup belongs to the whole installation. UTC before there is one."""
+    from .db import new_session
+    from .models import User
+
+    try:
+        with new_session() as db:
+            name = db.scalar(select(User.timezone).order_by(User.created_at, User.id).limit(1))
+        return ZoneInfo(name or "UTC")
+    except (SQLAlchemyError, ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo("UTC")
+
+
+def _month_day(year: int, month: int, day: int) -> date:
+    return date(year, month, min(day, calendar.monthrange(year, month)[1]))
+
+
+def next_due_at(last_success: datetime | None, sch: dict[str, Any] | None = None) -> datetime | None:
+    """When the next scheduled backup is due; None: now (no good backup yet). Every N days: N days after the day of
+    the last good one. Monthly: the first scheduled day after it. A backup missed while RecallSpring was off runs
+    as soon as the worker runs again."""
+    if last_success is None:
+        return None
+    sch = sch or schedule()
+    tz = zone()
+    hh, mm = (int(x) for x in sch["at"].split(":"))
+    last = last_success.astimezone(tz).date()
+    if sch["every"] == "monthly":
+        day = _month_day(last.year, last.month, sch["day_of_month"])
+        if day <= last:
+            year, month = (last.year + 1, 1) if last.month == 12 else (last.year, last.month + 1)
+            day = _month_day(year, month, sch["day_of_month"])
+    else:
+        day = last + timedelta(days=sch["days"])
+    return datetime.combine(day, time(hh, mm), tzinfo=tz).astimezone(last_success.tzinfo)
+
+
+def set_schedule(
+    every: str,
+    days: int | None,
+    at: str,
+    *,
+    day_of_month: int | None = None,
+    actor_id: uuid.UUID | None = None,
+    request_id: str | None = None,
+) -> dict[str, Any]:
+    """Choose how often backups run. Monthly without a day: today's day of the month. Audited as
+    ``backup.schedule_changed`` with both labels."""
+    s = get_settings()
+    if not s.backup_settings_from_web:
+        raise BackupError("folder_locked", "Backups are set in the server settings here.")
+    if not TIME_RE.match(at):
+        raise BackupError("invalid_schedule", "The time must be HH:MM, for example 03:00.")
+    if every == "monthly":
+        dom = day_of_month or clock.now().astimezone(zone()).day
+        if not 1 <= dom <= 31:
+            raise BackupError("invalid_schedule", "The day of the month must be 1 to 31.")
+        chosen: dict[str, Any] = {"every": "monthly", "day_of_month": dom, "at": at}
+    elif every == "days" and days is not None and 1 <= days <= EVERY_MAX_DAYS:
+        chosen = {"every": "days", "days": days, "at": at}
+    else:
+        raise BackupError("invalid_schedule", f"Backups can run every 1 to {EVERY_MAX_DAYS} days, or monthly.")
+    before = schedule_label(schedule())
+    with _locked():
+        config = read_config()
+        config["schedule"] = chosen
+        config["schedule_changed_at"] = clock.now().isoformat()
+        _write_json(s.backup_settings_file, config)
+    after = schedule_label(schedule())
+    _audit(actor_id, "backup.schedule_changed", {"from": before, "to": after}, request_id)
+    return status_view()
+
+
 def due(now: datetime | None = None) -> bool:
     s = get_settings()
     if not s.backup_enabled:
         return False
     now = now or clock.now()
     st = read_status()
-    last_success = _parse(st.get("last_success_at"))
-    if last_success and now - last_success < timedelta(hours=s.backup_interval_hours):
+    nxt = next_due_at(_parse(st.get("last_success_at")))
+    if nxt is not None and now < nxt:
         return False
     if _failed_last(st):
         failed_at = _parse(st["last_error"].get("at"))

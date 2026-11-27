@@ -186,7 +186,7 @@ def backup_status() -> int:
     from . import backup
 
     view = backup.status_view()
-    print(f"Backups {'on' if view['enabled'] else 'OFF'}, every {view['interval_hours']} h, in {view['location']}")
+    print(f"Backups {'on' if view['enabled'] else 'OFF'}, {view['schedule_label'].lower()}, in {view['location']}")
     if view["same_disk_as_storage"]:
         print("  Same disk as the uploaded files: choose another disk or a synced folder in Settings.")
     enc = view["encryption"]
@@ -350,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--port", type=int, default=4318)
     serve.add_argument("--log-file", type=Path, help="log to this rotating file instead of the console")
     bk = sub.add_parser("backup", help="back up the database and uploaded files now")
-    bk.add_argument("--if-due", action="store_true", help="only when the last good backup is older than the interval")
+    bk.add_argument("--if-due", action="store_true", help="only when a backup is due by the schedule")
     sub.add_parser("backup-status", help="show the last backup and the kept snapshots")
     rs = sub.add_parser("backup-restore", help="restore a backup into a NEW database (never overwrites)")
     rs.add_argument("--snapshot", default="latest", help="snapshot name (see backup-status) or 'latest'")

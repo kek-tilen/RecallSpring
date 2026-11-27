@@ -84,8 +84,13 @@ What a backup holds: a `pg_dump` (custom format) of the whole RecallSpring datab
 original (including soft-deleted sources, which can still be restored). Connector tokens are in the database only as
 hashes; no OAuth credential, `.env` file or password is copied. The page-render cache is left out (it is rebuilt).
 
-- **When:** the worker checks every 10 minutes and backs up when the last good backup is older than
-  `RS_BACKUP_INTERVAL_HOURS` (24); after a failure it waits an hour. *Back up now* in Settings → Backups and
+- **When (2026-11-27):** on a schedule: every `RS_BACKUP_EVERY_DAYS` (1) days at `RS_BACKUP_TIME` (03:00) in the
+  first account's time zone (UTC before there is one). Settings → Data & backups → *How often* chooses daily, every
+  3 days, weekly, every 2 weeks, monthly (on that day of the month; the last day of a shorter month) or every 1-90
+  days, and the time; kept in `RS_BACKUP_SETTINGS_FILE` like the folder, first account only, locked by
+  `RS_BACKUP_SETTINGS_FROM_WEB=false`, audited as `backup.schedule_changed`. Every N days counts from the day of
+  the last good backup. The worker checks every 10 minutes, so a backup missed while RecallSpring was off runs as
+  soon as it runs again; after a failure it waits an hour. *Back up now* in Settings → Backups and
   `recallspring backup` make one at once. One backup at a time (PostgreSQL advisory lock). No model calls.
 - **Consistent:** row counts and the file list are read in the same REPEATABLE READ transaction whose snapshot
   `pg_dump --snapshot` uses, so the backup describes one moment.
@@ -109,11 +114,12 @@ hashes; no OAuth credential, `.env` file or password is copied. The page-render 
   `snapshots/<YYYYMMDD-HHMMSS UTC>/{db.dump, manifest.json}`, `files/<user>/<ab>/<sha256>` (shared by all snapshots,
   copied once) and `status.json`. Other files in that folder (e.g. hand-made `recallspring-pre-*.dump`) are never
   touched.
-- **Kept:** the newest backup of each of the last `RS_BACKUP_KEEP_DAILY` (7) days and of the newest
-  `RS_BACKUP_KEEP_WEEKLY` (4) weeks; the newest is always kept. Files no kept backup needs are removed; if any
+- **Kept:** daily backups: the newest of each of the last `RS_BACKUP_KEEP_DAILY` (7) days and of the newest
+  `RS_BACKUP_KEEP_WEEKLY` (4) weeks. Less frequent ones: the last `RS_BACKUP_KEEP_LAST` (7), so monthly backups
+  reach 7 months back (2026-11-27). The newest is always kept. Files no kept backup needs are removed; if any
   manifest cannot be read, every file is kept.
 - **Seen:** Settings → Backups (last backup, what it holds, check, next, folder, size); Today → Needs attention when
-  the last attempt failed, there is none yet, or none for two intervals; History lists backups started from the web
+  the last attempt failed, there is none yet, or none a day after the scheduled time; History lists backups started from the web
   app; every attempt is audited (`backup.created`, `backup.failed`). Error messages never contain the database
   password (redacted, 300 characters at most).
 - **Tools:** `pg_dump`/`pg_restore` from `RS_BACKUP_PG_BIN`, else `PATH`, else, in development and tests only,

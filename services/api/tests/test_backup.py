@@ -191,13 +191,13 @@ def test_no_pg_dump_is_explained(backups: Path, frozen: Any, settings: Any, monk
     assert backup.status_view()["tools"] is None
 
 
-def test_due_follows_the_interval(backups: Path, frozen: Any, settings: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_due_follows_the_schedule(backups: Path, frozen: Any, settings: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     assert backup.due()
-    backup._write_json(backup._status_path(), {"last_success_at": frozen().isoformat()})
+    backup._write_json(backup._status_path(), {"last_success_at": frozen().isoformat()})  # 16:00 UTC, no account yet
     assert not backup.due() and backup.attention_item() is None
-    frozen.advance(hours=24)
+    frozen.set(datetime(2026, 11, 20, 3, 0, tzinfo=UTC))  # daily at 03:00, in UTC before there is an account
     assert backup.due() and backup.attention_item() is None
-    frozen.advance(hours=25)
+    frozen.set(datetime(2026, 11, 21, 16, 0, tzinfo=UTC))
     item = backup.attention_item()
     assert item is not None and item["title"] == "No backup for 2 days"
     monkeypatch.setattr(settings, "backup_enabled", False)
