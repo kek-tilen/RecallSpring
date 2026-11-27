@@ -120,9 +120,12 @@ describe("Results (2026-11-27)", () => {
     const detail = screen.getByRole("region", { name: "Midterm 1 practice" });
     const rows = await within(detail).findAllByRole("row");
     expect(rows[1]!.textContent).toContain("Sodium-potassium pump");
-    expect(rows[1]!.textContent).toContain("Partial (2/4)");
-    expect(rows[1]!.textContent).toContain("Solid (3/4)");
+    // small chips as in the drawing ("Partial 2"), the full label as their name
+    expect(rows[1]!.textContent).toContain("Partial 2");
+    expect(within(rows[1]!).getByLabelText("Solid (3/4)").textContent).toBe("Solid 3");
     expect(rows[2]!.textContent).toContain("–");
+    expect(detail.textContent).toContain("Version 2 has only the questions without full points; practice only, not counted in readiness.");
+    expect(within(detail).getByRole("button", { name: "Retake without full points" })).toBeTruthy();
     expect(within(detail).getByRole("link", { name: "Open answers" }).getAttribute("href")).toBe("/simulations/v2");
   });
 

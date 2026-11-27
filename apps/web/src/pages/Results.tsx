@@ -1,10 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router";
-import { get } from "../api";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import { get, request } from "../api";
 import { CourseDot } from "../components/organise";
-import { Async, Empty, GradeChip, PageHead } from "../components/ui";
-import { dateLabel, plural } from "../format";
+import { Async, Empty, ErrorNote, GradeChip, PageHead } from "../components/ui";
+import { GRADE_LABEL, dateLabel, gradeLabel, plural } from "../format";
 import { courseTitles, useCourses, useQuiz, useQuizzes } from "../queries";
 import type { AttemptRow, CourseColor, QuizComparison, QuizSummary } from "../types";
 import { AnswerDetail } from "./Course";
@@ -147,6 +147,19 @@ function FamilyRow({ f, color, course, on, pick }: { f: Family; color: CourseCol
   );
 }
 
+/** What the newest version is, in one line (UI direction, 2026-11-27). */
+function versionNote(f: Family, c: QuizComparison | null): string {
+  const last = f.versions.at(-1)!;
+  if (f.first.status === "open") return "Not submitted yet: answer it here or in your assistant's form.";
+  if (f.versions.length === 1) {
+    return f.first.pending_items ? `${plural(f.first.pending_items, "answer")} still waiting for a grade.` : "One version so far.";
+  }
+  const scope = c?.versions.at(-1)?.scope;
+  const what =
+    scope === "not_full" ? `Version ${last.version} has only the questions without full points` : `Version ${last.version} repeats every question`;
+  return `${what}; ${last.same_day_practice ? "practice only, not counted in readiness" : "version 1 stays the benchmark"}.`;
+}
+
 function FamilyDetail({ f }: { f: Family }) {
   const last = f.versions.at(-1)!;
   const q = useQuiz(f.first.id);
@@ -155,28 +168,51 @@ function FamilyDetail({ f }: { f: Family }) {
       <h2 id="results-detail-title" className="results-h">
         {f.first.title}
       </h2>
-      <p className="muted small results-detail-note">
-        {f.versions.length > 1
-          ? `Version 1 is the benchmark; later versions answer seen questions${last.same_day_practice ? ", and one taken the same day is practice only, not counted in readiness" : ""}.`
-          : f.first.status === "open"
-            ? "Not submitted yet: answer it here or in your assistant's form."
-            : f.first.pending_items
-              ? `${plural(f.first.pending_items, "answer")} still waiting for a grade.`
-              : "One version so far."}
-      </p>
       <Async q={q} lines={4}>
-        {(quiz) => (quiz.comparison ? <Versions c={quiz.comparison} /> : <OneVersion items={quiz.items} />)}
-      </Async>
-      <div className="results-actions">
-        <Link to={`/simulations/${last.id}`} className="btn small primary">
-          {last.status === "open" ? "Answer it" : "Open answers"}
-        </Link>
-        {last.status === "submitted" && last.mode === "practice" && (
-          <Link to={`/simulations/${last.id}#retake`} className="btn small">
-            Take it again
-          </Link>
+        {(quiz) => (
+          <>
+            <p className="muted small results-detail-note">{versionNote(f, quiz.comparison ?? null)}</p>
+            {quiz.comparison ? <Versions c={quiz.comparison} /> : <OneVersion items={quiz.items} />}
+            <div className="results-actions">
+              {last.status === "submitted" && last.mode === "practice" && <RetakeMissed f={f} c={quiz.comparison ?? null} />}
+              <Link to={`/simulations/${last.id}`} className={last.status === "open" ? "btn small primary" : "btn small"}>
+                {last.status === "open" ? "Answer it" : "Open answers"}
+              </Link>
+            </div>
+          </>
         )}
-      </div>
+      </Async>
+    </>
+  );
+}
+
+/** Retake without full points: a new version with only the questions the newest version did not get fully. */
+function RetakeMissed({ f, c }: { f: Family; c: QuizComparison | null }) {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const last = f.versions.at(-1)!;
+  const at = c ? c.versions.findIndex((v) => v.quiz_id === last.id) : -1;
+  const missed = c && at >= 0 ? c.questions.filter((q) => q.versions[at] && (q.versions[at]!.earned ?? 0) < q.points).length : null;
+  const waiting = !!last.pending_items;
+  const go = useMutation({
+    mutationFn: () => request<{ quiz_id: string }>(`/quizzes/${last.id}/retake`, { method: "POST", json: { scope: "not_full" } }),
+    onSuccess: (made) => {
+      void qc.invalidateQueries({ queryKey: ["quizzes"] });
+      navigate(`/simulations/${made.quiz_id}`);
+    },
+  });
+  return (
+    <>
+      <button
+        type="button"
+        className="btn small primary"
+        disabled={go.isPending || waiting || missed === 0}
+        title={waiting ? "Waits until every answer is graded." : missed === 0 ? "Every question has full points." : undefined}
+        onClick={() => go.mutate()}
+      >
+        Retake without full points
+      </button>
+      {go.error && <ErrorNote error={go.error} />}
     </>
   );
 }
@@ -185,34 +221,48 @@ function short(text: string, n = 70): string {
   return text.length > n ? `${text.slice(0, n)}…` : text;
 }
 
+/** A small grade chip as in the drawing ("Partial 2"); the full label is its accessible name. */
+function Grade({ grade }: { grade: number }) {
+  const tone = grade >= 3 ? "grade-mini good" : grade >= 1 ? "grade-mini warn" : "grade-mini bad";
+  return (
+    <span className={tone} title={gradeLabel(grade)} aria-label={gradeLabel(grade)}>
+      {GRADE_LABEL[grade] ?? "Grade"} {grade}
+    </span>
+  );
+}
+
 function Versions({ c }: { c: QuizComparison }) {
   return (
-    <div className="table-wrap results-table">
-      <table>
-        <thead>
-          <tr>
-            <th>Question</th>
-            {c.versions.map((v) => (
-              <th key={v.quiz_id} className="nowrap">
-                Version {v.version}
-              </th>
+    <table className="results-versions">
+      <thead>
+        <tr>
+          <th scope="col">Question</th>
+          {c.versions.map((v) => (
+            <th key={v.quiz_id} scope="col">
+              Version {v.version}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {c.questions.map((q) => (
+          <tr key={q.question_id}>
+            <td>{short(q.prompt)}</td>
+            {q.versions.map((v, i) => (
+              <td key={c.versions[i]!.quiz_id}>
+                {!v ? (
+                  <span className="muted">–</span>
+                ) : v.grade === null ? (
+                  <span className="muted small">{v.earned === null ? "waiting" : `${v.earned}/${q.points}`}</span>
+                ) : (
+                  <Grade grade={v.grade} />
+                )}
+              </td>
             ))}
           </tr>
-        </thead>
-        <tbody>
-          {c.questions.map((q) => (
-            <tr key={q.question_id}>
-              <td>{short(q.prompt)}</td>
-              {q.versions.map((v, i) => (
-                <td key={c.versions[i]!.quiz_id} className="nowrap">
-                  {!v ? <span className="muted">–</span> : v.grade === null ? <span className="muted small">{v.earned === null ? "waiting" : `${v.earned}/${q.points}`}</span> : <GradeChip grade={v.grade} />}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -222,7 +272,7 @@ function OneVersion({ items }: { items: { question_id: string; prompt: string; p
       {items.map((i) => (
         <li key={i.question_id}>
           <span>{short(i.prompt)}</span>
-          {i.grade !== null && i.grade !== undefined ? <GradeChip grade={i.grade} /> : <span className="muted small">{i.earned === null || i.earned === undefined ? "–" : `${i.earned}/${i.points}`}</span>}
+          {i.grade !== null && i.grade !== undefined ? <Grade grade={i.grade} /> : <span className="muted small">{i.earned === null || i.earned === undefined ? "–" : `${i.earned}/${i.points}`}</span>}
         </li>
       ))}
     </ul>

@@ -5842,3 +5842,63 @@ details.c2c-version > summary {
     gap: 12px;
   }
 }
+
+/* Results detail as drawn: a plain comparison with hairlines and small grade chips (2026-11-27). */
+.results-versions {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.results-versions th {
+  padding: 0 8px 6px 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+}
+
+.results-versions td {
+  padding: 9px 8px 9px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.results-versions th:not(:first-child),
+.results-versions td:not(:first-child) {
+  width: 7.5rem;
+  white-space: nowrap;
+}
+
+.grade-mini {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.grade-mini.good {
+  background: var(--tint, var(--surface));
+  color: var(--tint-ink, var(--primary));
+}
+
+.grade-mini.warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.grade-mini.bad {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.results-detail .results-h {
+  font-size: 1.4rem;
+}

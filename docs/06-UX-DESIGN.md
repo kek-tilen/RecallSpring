@@ -74,7 +74,8 @@ date stays open.
 Results answers "How did I answer?" in two views (`Simulations · Answers`). **Simulations** lists each simulation once,
 with its retakes folded in (course colour, date, "2 versions", "check first" for a diagnostic, and the first version's
 points as the benchmark). The picked one shows beside the list: its versions side by side per question with their
-grades, `Open answers` (the newest version) and `Take it again`. On phones the list opens a simulation directly, each
+grades as small chips ("Partial 2"), one line on what the newest version is, `Retake without full points` and
+`Open answers` (the newest version). On phones the list opens a simulation directly, each
 retake has its own row, and the latest graded answers follow. **Answers** lists every answer (newest first, up to 200)
 as "concept · first sentence of the feedback" with its grade or "Waiting for a grade", filtered by course and grade;
 a row opens the answer and the full explanation of its grade in place. "AI grades are study feedback, not a score."
