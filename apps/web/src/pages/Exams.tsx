@@ -26,6 +26,11 @@ const CAPACITY = {
   at_risk: { tone: "chip bad", label: "At risk" },
 } as const;
 
+/** A long course name is cut on the timeline (the whole name is in the tooltip, the list and the label). */
+function shorten(s: string, max: number): string {
+  return s.length <= max ? s : `${s.slice(0, max - 1).trimEnd()}…`;
+}
+
 function daysWord(n: number): string {
   if (n < 0) return "passed";
   if (n === 0) return "today";
@@ -65,19 +70,30 @@ export function Timeline({ targets }: { targets: TimelineTarget[] }) {
   const x = (iso: string) => pad + (daysBetween(start, iso) / span) * (W - 2 * pad);
   const shown = targets.filter((t) => t.due_date >= start && t.due_date <= end).sort((a, b) => a.due_date.localeCompare(b.due_date));
 
-  // Labels sit above their dot; one that would cover the previous one moves up a line.
-  const right = [-Infinity, -Infinity];
+  // Labels sit above their dot; one that would touch another moves up a line (as many lines as it takes), with a
+  // thin line down to its dot. Widths are measured once the text is drawn (an estimate before that, and in tests).
+  const texts = useRef(new Map<string, SVGTextElement>());
+  const [measured, setMeasured] = useState<Record<string, number>>({});
+  const right: number[] = [];
   const placed = shown.map((t) => {
-    const text = isBehind(t) ? `${t.name} · ${STATUS_WORD[t.status]}` : `${t.name} · ${t.course_title}`;
-    const width = text.length * 5.6;
+    const full = isBehind(t) ? `${t.name} · ${STATUS_WORD[t.status]}` : `${t.name} · ${t.course_title}`;
+    const text = isBehind(t) ? full : `${t.name} · ${shorten(t.course_title, 32)}`;
+    const width = measured[t.id] ?? text.length * 6.2;
     const cx = x(t.due_date);
     const lx = Math.min(Math.max(cx, width / 2 + 2), W - width / 2 - 2);
-    let lane = right.findIndex((r) => lx - width / 2 > r + 8);
-    if (lane === -1) lane = right[0]! <= right[1]! ? 0 : 1;
+    let lane = right.findIndex((r) => lx - width / 2 > r + 10);
+    if (lane === -1) lane = right.length;
     right[lane] = lx + width / 2;
-    return { t, text, cx, lx, lane };
+    return { t, text, full, cx, lx, lane };
   });
-  const top = placed.some((p) => p.lane === 1) ? 16 : 0;
+  useLayoutEffect(() => {
+    const next: Record<string, number> = {};
+    for (const [id, el] of texts.current) {
+      if (typeof el.getComputedTextLength === "function") next[id] = Math.ceil(el.getComputedTextLength());
+    }
+    if (Object.keys(next).some((id) => next[id] !== measured[id])) setMeasured(next);
+  });
+  const top = Math.max(0, ...placed.map((p) => p.lane)) * 16;
   const axis = 50 + top;
   const ticks: string[] = [];
   const step = W < 480 ? 14 : 7;
@@ -107,14 +123,32 @@ export function Timeline({ targets }: { targets: TimelineTarget[] }) {
         <text x={x(today)} y={axis + 20} className="tl-today-label" textAnchor="middle">
           Today
         </text>
-        {placed.map(({ t, text, cx, lx, lane }) => (
+        {/* Lines first, then dots, then labels: a label is never crossed by another exam's line. */}
+        {placed.map(({ t, cx, lane }) =>
+          lane > 0 ? <line key={t.id} x1={cx} y1={axis - 9} x2={cx} y2={axis - 13 - lane * 16} className={`tl-leader ${cc(t.course_color)}`} /> : null,
+        )}
+        {placed.map(({ t, full, cx }) => (
           <g key={t.id} className={cc(t.course_color)}>
+            <title>{`${full}, ${dateLabel(t.due_date)}`}</title>
             {isBehind(t) ? (
               <circle cx={cx} cy={axis} r={6} className="tl-dot hollow" />
             ) : (
               <circle cx={cx} cy={axis} r={7} className="tl-dot" />
             )}
-            <text x={lx} y={axis - 16 - lane * 16} textAnchor="middle" className={isBehind(t) ? "tl-name past" : "tl-name"}>
+          </g>
+        ))}
+        {placed.map(({ t, text, lx, lane }) => (
+          <g key={t.id}>
+            <text
+              ref={(el) => {
+                if (el) texts.current.set(t.id, el);
+                else texts.current.delete(t.id);
+              }}
+              x={lx}
+              y={axis - 16 - lane * 16}
+              textAnchor="middle"
+              className={isBehind(t) ? "tl-name past" : "tl-name"}
+            >
               {text}
             </text>
           </g>

@@ -6482,6 +6482,19 @@ details.c2c-version > summary {
   fill: var(--muted);
 }
 
+.tl-name {
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.tl-leader {
+  stroke: var(--cc, var(--muted));
+  stroke-opacity: 0.55;
+  stroke-width: 1;
+}
+
 .exams-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);

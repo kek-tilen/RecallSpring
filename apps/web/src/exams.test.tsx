@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { addDays, todayIso } from "./format";
-import { ExamsPage } from "./pages/Exams";
+import { ExamsPage, Timeline } from "./pages/Exams";
+import type { TimelineTarget } from "./types";
 
 // Exams as drawn (UI direction, 2026-11-27): the timeline, the list and the selected exam's readiness.
 
@@ -109,5 +110,33 @@ describe("Exams as drawn (2026-11-27)", () => {
     expect(screen.queryByRole("list", { name: "Behind you" })).toBeNull();
     fireEvent.click(behind);
     expect(within(screen.getByRole("list", { name: "Behind you" })).getByRole("button").textContent).toContain("passed");
+  });
+});
+
+describe("Exam timeline labels", () => {
+  it("never lets labels touch when exams cluster in one week, and shortens long course names", () => {
+    const long = "History of European political thought and institutions";
+    const ts = [
+      target("p", "1. Kolokvij", -4, "passed"),
+      target("a", "1. Kolokvij", 3, "upcoming", ["k2", "Linear algebra", "green"]),
+      target("b", "1. Kolokvij", 6, "upcoming", ["k3", long, "violet"]),
+      target("c", "1. Kolokvij", 7, "upcoming", ["k4", "Organic chemistry", "pink"]),
+      target("d", "1. Kolokvij", 8, "upcoming", ["k5", "Microeconomics", "orange"]),
+    ] as unknown as TimelineTarget[];
+    const { container } = render(<Timeline targets={ts} />);
+    const labels = [...container.querySelectorAll("text.tl-name")].map((el) => ({
+      y: Number(el.getAttribute("y")),
+      x: Number(el.getAttribute("x")),
+      w: (el.textContent ?? "").length * 6.2,
+      text: el.textContent ?? "",
+    }));
+    expect(labels).toHaveLength(5);
+    for (const a of labels)
+      for (const b of labels)
+        if (a !== b && a.y === b.y) expect(Math.abs(a.x - b.x)).toBeGreaterThanOrEqual((a.w + b.w) / 2 + 10);
+    expect(new Set(labels.map((l) => l.y)).size).toBeGreaterThan(2); // more than the old two rows
+    expect(labels.some((l) => l.text.endsWith("…") && l.text.startsWith("1. Kolokvij · History of European"))).toBe(true);
+    expect(container.textContent).toContain(long); // whole name in the tooltip
+    expect(container.querySelectorAll("line.tl-leader").length).toBeGreaterThan(0);
   });
 });
