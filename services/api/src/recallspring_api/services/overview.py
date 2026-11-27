@@ -415,6 +415,11 @@ _EVENT_TEXT = {
     "assessment.grade_override": "Grade overridden",
     "auth.login": "Signed in",
     "auth.logout": "Signed out",
+    "auth.passkey_added": "Passkey added",
+    "auth.passkey_renamed": "Passkey renamed",
+    "auth.passkey_removed": "Passkey removed",
+    "auth.password_changed": "Password changed",
+    "auth.password_reset": "Password reset on the server",
     "focus.completed": "Focus block finished",
     "focus.stopped": "Focus block stopped early",
     "focus.deleted": "Focus block removed",
@@ -483,6 +488,14 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
     if event_type == "backup.unencrypted_removed":
         n = payload.get("count")
         return f"{n} backup{'' if n == 1 else 's'}"
+    if event_type in ("auth.passkey_added", "auth.passkey_removed"):
+        return f"{payload.get('name')} · {payload.get('address')}"
+    if event_type == "auth.passkey_renamed":
+        return f"{payload.get('from')} → {payload.get('to')}"
+    if event_type in ("auth.password_changed", "auth.password_reset"):
+        n = payload.get("signed_out") or 0
+        other = "other " if event_type == "auth.password_changed" else ""
+        return f"{n} {other}session{'' if n == 1 else 's'} signed out"
     if event_type in ("focus.completed", "focus.stopped"):
         return f"{payload.get('minutes')} of {payload.get('planned_minutes')} min"
     if event_type in ("focus.deleted", "focus.restored"):
@@ -576,7 +589,7 @@ def history(db: Session, user: User, limit: int) -> list[dict[str, Any]]:
             "kind": "audit",
             "type": a.action,
             "text": _EVENT_TEXT.get(a.action, a.action),
-            "detail": _detail(a.action, a.details) if a.action.startswith(("backup.", "focus.")) else None,
+            "detail": _detail(a.action, a.details) if a.action.startswith(("backup.", "focus.", "auth.")) else None,
             "entity_type": a.target_type,
             "entity_id": str(a.target_id) if a.target_id else None,
             "label": labels.get(a.target_id) if a.target_id else None,

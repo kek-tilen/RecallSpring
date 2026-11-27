@@ -1,6 +1,7 @@
 """Owner administration CLI. There is no public sign-up: the single owner account is created here.
 
 recallspring create-owner --username <name>      (password is prompted, never passed as an argument)
+recallspring reset-password --username <name>    (new password, prompted twice; signs out every session)
 recallspring seed-demo --username <name>         (adds a clearly labelled demo course)
 recallspring worker [--once]                     (processes source extraction jobs; no model calls)
 recallspring connector-token --username <name> [--client codex|antigravity]
@@ -61,6 +62,37 @@ def create_owner(username: str, timezone: str | None = None) -> int:
         audit(db, actor_id=user.id, action="user.created", target_type="user", target_id=user.id)
         db.commit()
     print(f"Owner account {username!r} created.")
+    return 0
+
+
+def reset_password(username: str) -> int:
+    """For when nobody can sign in: a new password, every session signed out, recorded in History. Passkeys and
+    connector tokens are not affected."""
+    from .api.auth import set_password
+
+    with new_session() as db:
+        user = db.scalar(select(User).where(User.username == username))
+        if user is None:
+            print(f"User {username!r} not found.", file=sys.stderr)
+            return 1
+        password = getpass.getpass("New password (min 12 characters): ")
+        if len(password) < 12:
+            print("Password must have at least 12 characters.", file=sys.stderr)
+            return 2
+        if getpass.getpass("Repeat password: ") != password:
+            print("Passwords do not match.", file=sys.stderr)
+            return 2
+        signed_out = set_password(db, user, password, None)
+        audit(
+            db,
+            actor_id=user.id,
+            action="auth.password_reset",
+            target_type="user",
+            target_id=user.id,
+            details={"via": "command", "signed_out": signed_out},
+        )
+        db.commit()
+    print(f"Password for {username!r} changed; {signed_out} session(s) signed out.")
     return 0
 
 
@@ -330,7 +362,7 @@ def serve_api(host: str, port: int, log_file: Path | None) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="recallspring")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("create-owner", "seed-demo"):
+    for name in ("create-owner", "seed-demo", "reset-password"):
         p = sub.add_parser(name)
         p.add_argument("--username", required=True)
         if name == "create-owner":
@@ -374,6 +406,8 @@ def main(argv: list[str] | None = None) -> int:
         return backup_restore(args.snapshot, args.database, args.storage, args.key, args.root)
     if args.command == "create-owner":
         return create_owner(args.username, args.timezone)
+    if args.command == "reset-password":
+        return reset_password(args.username)
     if args.command == "connector-token":
         return connector_token(args.username, args.label, args.file or default_token_file(args.client), args.client)
     if args.command == "serve":

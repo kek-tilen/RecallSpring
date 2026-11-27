@@ -17,3 +17,4 @@ pillow  # converts TIFF/BMP and oversized pictures for Claude, in the isolated r
 python-multipart
 fsrs==6.3.3  # FSRS-6 review model, computed in shadow only (ADR-014 §5; MIT, Open Spaced Repetition)
 pyrage==1.4.0  # age encryption for backups with a recovery key (MIT; bindings to rage, the Rust age implementation)
+webauthn==3.0.1  # passkeys: WebAuthn checked on the server (BSD-3-Clause, Duo Labs py_webauthn)
