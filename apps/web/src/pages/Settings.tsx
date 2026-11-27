@@ -12,6 +12,7 @@ import { AssistantsPanel } from "../components/Assistants";
 import { ExplanationPaceDefault } from "../components/ExplanationPace";
 import { ServiceStatus } from "../components/ServiceStatus";
 import { GettingItBack, RecentlyDeletedRow } from "../components/DataRows";
+import { CloudCopyRow } from "../components/CloudCopy";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
 import type { BackupFolderCheck, BackupKey, BackupStatus, StudySettings } from "../types";
 
@@ -889,6 +890,8 @@ const CARD_SECTION: Record<string, SectionId> = {
   chatgpt: "assistants",
   connector: "assistants",
   backups: "data",
+  "cloud-copy": "data",
+  "backup-encryption": "data",
   history: "data",
   profile: "account",
   "sign-in": "account",
@@ -983,6 +986,7 @@ export function SettingsPage() {
                     <BackupFolder b={backup.data} />
                   </div>
                 )}
+                {backup.data && <CloudCopyRow b={backup.data} />}
                 {backup.data && (
                   <div id="backup-encryption">
                     <BackupEncryption b={backup.data} />

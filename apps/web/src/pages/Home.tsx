@@ -35,6 +35,7 @@ function attentionLink(a: AttentionItem): string {
   if (a.kind === "quiz" && a.id) return `/simulations/${a.id}`;
   if (a.kind === "duplicates") return "/exams";
   if (a.kind === "backup") return "/settings#backups";
+  if (a.kind === "cloud") return "/settings#cloud-copy";
   return "/history";
 }
 

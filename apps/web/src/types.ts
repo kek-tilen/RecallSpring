@@ -599,7 +599,7 @@ export interface Plan {
 }
 
 export interface AttentionItem {
-  kind: "source" | "quiz" | "answers" | "duplicates" | "backup";
+  kind: "source" | "quiz" | "answers" | "duplicates" | "backup" | "cloud";
   id: string | null;
   course_id: string | null;
   title: string;
@@ -802,6 +802,32 @@ export interface BackupStatus {
   /** Kept backups made before encryption was turned on. */
   unencrypted_snapshots: number;
   remove_unencrypted_pending: boolean;
+  /** Cloud copy of the encrypted backups (2026-11-27). */
+  cloud?: CloudView;
+}
+
+/** A code to type at Google; the device code itself never reaches the browser. */
+export interface CloudDevice {
+  user_code: string;
+  verification_url: string;
+  expires_at: string;
+  interval: number;
+}
+
+export interface CloudView {
+  /** Providers this server has an app ID for. */
+  available: { google: boolean };
+  provider: "google" | null;
+  connected_at: string | null;
+  state: "off" | "waiting" | "copying" | "ok" | "failing" | "revoked";
+  last_success_at: string | null;
+  backups: number | null;
+  bytes: number | null;
+  free_bytes: number | null;
+  error: { code: string; message: string; at: string } | null;
+  next_try_at: string | null;
+  progress: { done_files: number; total_files: number; done_bytes: number; total_bytes: number } | null;
+  pending: CloudDevice | null;
 }
 
 /** A new recovery key, returned once and never stored by the server. */
