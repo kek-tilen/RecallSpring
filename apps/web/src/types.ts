@@ -1085,3 +1085,21 @@ export interface DeletedList {
   restorable_days: number;
   items: DeletedItem[];
 }
+
+/** Settings › Account & system › Sign-in (GET /auth/passkeys; docs/08 -> Passkeys). */
+export interface PasskeyItem {
+  id: string;
+  name: string;
+  address: string;
+  synced: boolean;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface SignInView {
+  remote_host: string | null;
+  password_changed_at: string;
+  password_changed: boolean;
+  passkeys: PasskeyItem[];
+  confirmed_until: string | null;
+}

@@ -62,6 +62,34 @@ yet), and never in production or with `RS_FIRST_RUN_ENABLED=false` (there: `reca
 rules are the login's (≥ 12 characters, Argon2id); the account creation is audited (`user.created`, via first_run).
 It is not self-signup: after the first account the endpoint answers 409.
 
+**Implemented: passkeys, Change password and reset-password (2026-11-27).** Passkeys sit alongside the password
+(`services/passkeys.py`, `api/auth.py`); the password stays the fallback. Turning password sign-in off is for a later
+MFA step.
+
+- **Standard:** WebAuthn, checked on the server with py_webauthn 3.0.1 (BSD-3-Clause, pinned with hashes with its
+  dependencies cbor2, cryptography, pyasn1, pyasn1-modules, pyopenssl). The browser uses `navigator.credentials`
+  directly; no extra npm package.
+- **Addresses:** a passkey belongs to one relying party: `localhost` (or `<name>.localhost`) on this computer, and the
+  host of `RS_REMOTE_URL` when set. Other origins, and IP addresses such as 127.0.0.1 (WebAuthn needs a name), are
+  refused; the login page on 127.0.0.1 links to the same page at localhost. Each passkey records its address.
+- **Stored (migration 0038):** `passkeys` with the credential id, the **public** key, the signature counter,
+  transports, whether a password manager syncs it, the AAGUID, a name, the address, added and last used. No secret:
+  the private key never leaves the device. A restored backup keeps the passkeys.
+- **Sign-in:** discoverable credentials with user verification required (fingerprint, face or PIN); autofill in the
+  username field where the browser offers it, plus the button. Challenges are random (32 bytes), single use, bound to
+  the address (and for adding or confirming, to the session) and expire after 5 minutes; they live in the API process
+  (one worker, ADR-001). The counter must grow when the authenticator keeps one. Failures share the password login's
+  rate limit window; the session is the same 24-hour session.
+- **Confirm it is you:** adding and removing a passkey need the password or a passkey in the last 5 minutes
+  (`auth_sessions.confirmed_at`). Renaming does not. Removing is permanent (a removed passkey must stop working at
+  once) and asked once more; the last one can be removed, the password still works.
+- **Change password:** the current password, then the new one (≥ 12 characters) twice; every other session is signed
+  out, this one stays. Connector tokens and passkeys are not affected. `recallspring reset-password --username <name>`
+  on the server asks twice without echo and signs out every session.
+- **Audited:** `auth.passkey_added`, `auth.passkey_renamed`, `auth.passkey_removed`, `auth.password_changed`,
+  `auth.password_reset`; a passkey sign-in is `auth.login` with method passkey, a failed one `auth.login_failed`.
+  Records hold the passkey's row id, name and address, never a credential id or a key.
+
 **Implemented: Windows installer (2026-11-21, Phase 3).** `scripts/install.ps1` installs only from the hashed lock
 files (`--require-hashes`, `npm ci`), writes the Git-ignored `.env` files only when missing (random database password
 from `secrets`, never printed), keeps the database on 127.0.0.1, changes nothing outside the repository and Docker's

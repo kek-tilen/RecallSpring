@@ -1,9 +1,10 @@
 import { BrandMark } from "../components/BrandMark";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { get, request } from "../api";
 import { ErrorNote, Loading } from "../components/ui";
+import { autofillAvailable, browserError, getPasskey, localhostUrl, onIpAddress, passkeysSupported } from "../passkey";
 import { keys } from "../queries";
 import type { SessionInfo } from "../types";
 import { FirstRunForm } from "./Welcome";
@@ -34,6 +35,65 @@ export function LoginPage() {
   return <SignIn />;
 }
 
+interface PasskeyOptions {
+  challenge_id: string;
+  options: Record<string, unknown>;
+}
+
+/** The passkey button and, where the browser offers it, passkeys in the username field (autofill). */
+function usePasskeySignIn(done: (s: SessionInfo) => void) {
+  const where: "here" | "ip" | "none" = !passkeysSupported() ? "none" : onIpAddress() ? "ip" : "here";
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [autofill, setAutofill] = useState(false);
+  const pending = useRef<AbortController | null>(null);
+
+  async function finish(opts: PasskeyOptions, credential: Record<string, unknown>) {
+    done(await request<SessionInfo>("/auth/passkey/login", { method: "POST", json: { challenge_id: opts.challenge_id, credential } }));
+  }
+
+  useEffect(() => {
+    if (where !== "here") return;
+    let stopped = false;
+    void (async () => {
+      if (!(await autofillAvailable()) || stopped) return;
+      setAutofill(true);
+      try {
+        const opts = await request<PasskeyOptions>("/auth/passkey/login/options", { method: "POST" });
+        if (stopped) return;
+        const ctrl = new AbortController();
+        pending.current = ctrl;
+        const credential = await getPasskey(opts.options, ctrl.signal);
+        await finish(opts, credential);
+      } catch (e) {
+        // A cancelled autofill is silent; the button and the password stay.
+        if (!stopped && !(e instanceof DOMException)) setError(browserError(e));
+      }
+    })();
+    return () => {
+      stopped = true;
+      pending.current?.abort();
+    };
+  }, [where]);
+
+  async function start() {
+    pending.current?.abort(); // the browser allows one prompt at a time
+    pending.current = null;
+    setBusy(true);
+    setError(null);
+    try {
+      const opts = await request<PasskeyOptions>("/auth/passkey/login/options", { method: "POST" });
+      await finish(opts, await getPasskey(opts.options));
+    } catch (e) {
+      setError(browserError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return { where, busy, error, autofill, start };
+}
+
 function SetupElsewhere({ refusal }: { refusal: "disabled" | "not_local" }) {
   return (
     <div className="card stack" role="status">
@@ -58,13 +118,15 @@ function SignIn() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const signedIn = (session: SessionInfo) => {
+    qc.setQueryData(keys.session, session);
+    navigate(safeNext(params.get("next")), { replace: true });
+  };
   const login = useMutation({
     mutationFn: () => request<SessionInfo>("/auth/login", { method: "POST", json: { username, password } }),
-    onSuccess: (session) => {
-      qc.setQueryData(keys.session, session);
-      navigate(safeNext(params.get("next")), { replace: true });
-    },
+    onSuccess: signedIn,
   });
+  const passkey = usePasskeySignIn(signedIn);
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -85,7 +147,7 @@ function SignIn() {
         </div>
         <label className="field">
           Username
-          <input type="text" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
+          <input type="text" autoComplete={passkey.autofill ? "username webauthn" : "username"} value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
         </label>
         <label className="field">
           Password
@@ -95,6 +157,23 @@ function SignIn() {
         <button type="submit" className="btn primary" disabled={login.isPending}>
           {login.isPending ? "Signing in…" : "Sign in"}
         </button>
+        {passkey.where === "here" && (
+          <>
+            <div className="or-line" aria-hidden="true">
+              or
+            </div>
+            <button type="button" className="btn" onClick={() => passkey.start()} disabled={passkey.busy}>
+              {passkey.busy ? "Waiting for the passkey…" : "Sign in with a passkey"}
+            </button>
+            {passkey.error && <ErrorNote error={passkey.error} />}
+          </>
+        )}
+        {passkey.where === "ip" && (
+          <p className="notice small" style={{ margin: 0 }}>
+            Passkeys work at <span className="mono">localhost{window.location.port ? `:${window.location.port}` : ""}</span>, not at{" "}
+            {window.location.hostname}. <a href={localhostUrl()}>Open there</a>
+          </p>
+        )}
         <p className="muted tiny">This sign-in is RecallSpring's own. It is separate from any AI assistant or provider.</p>
       </form>
     </main>

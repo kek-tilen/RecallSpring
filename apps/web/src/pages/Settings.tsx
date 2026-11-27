@@ -4,7 +4,7 @@ import { TimeZoneSelect, useSaveProfile } from "./Welcome";
 import { greeting } from "./Home";
 import { request } from "../api";
 import { Async, Card, Confirm, ErrorNote } from "../components/ui";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, useLocation } from "react-router";
 import { bytes, dateLabel, dateTime, plural, relativeDay, timeOnly } from "../format";
 import { keys, useAssistants, useBackup, useConnector, useSession, useStudySettings } from "../queries";
 import { PreferencesEditor } from "./Import";
@@ -13,6 +13,7 @@ import { ExplanationPaceDefault } from "../components/ExplanationPace";
 import { ServiceStatus } from "../components/ServiceStatus";
 import { GettingItBack, RecentlyDeletedRow } from "../components/DataRows";
 import { CloudCopyRow } from "../components/CloudCopy";
+import { SignInRows } from "../components/SignInRows";
 import { readTheme, saveTheme, THEMES, type ThemeId } from "../theme";
 import type { BackupFolderCheck, BackupKey, BackupStatus, StudySettings } from "../types";
 
@@ -852,27 +853,6 @@ function ProfileForm() {
 }
 
 /** Sign out (moved here from the menu, 2026-11-27): the menu keeps only the six areas, Settings and Help. */
-function SignOut() {
-  const session = useSession();
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const logout = useMutation({
-    mutationFn: () => request<void>("/auth/logout", { method: "POST" }),
-    onSettled: () => {
-      qc.clear();
-      navigate("/login", { replace: true });
-    },
-  });
-  return (
-    <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-      <span className="small">Signed in as {session.data?.user.username}</span>
-      <button type="button" className="btn small" onClick={() => logout.mutate()} disabled={logout.isPending}>
-        Sign out
-      </button>
-    </div>
-  );
-}
-
 /** The five parts of Settings, in page order (the contents beside the page link to them). */
 export const SECTIONS = [
   { id: "study", title: "Study", sub: "How much you study and how RecallSpring plans your time." },
@@ -1021,7 +1001,7 @@ export function SettingsPage() {
                   <ProfileForm />
                 </Card>
                 <Card title="Sign-in" id="sign-in" level={3}>
-                  <SignOut />
+                  <SignInRows />
                 </Card>
                 <Card title="Running in the background" id="service" level={3}>
                   <ServiceStatus />

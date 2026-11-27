@@ -47,7 +47,10 @@ The first visit to `http://127.0.0.1:4318/` asks you to create your account: a u
 characters (there is no e-mail reset, so keep it in your password manager) and your time zone (taken from this
 computer). This works only on the computer RecallSpring runs on and only while no account exists; afterwards the page
 is the normal sign-in. `services\api\.venv\Scripts\recallspring create-owner --username <name> [--timezone <zone>]`
-does the same from the command line.
+does the same from the command line. A forgotten password is set again on this computer with
+`services\api\.venv\Scripts\recallspring reset-password --username <name>` (it signs out every session). To sign in
+with one tap instead of typing, add a passkey in Settings › Account & system › Sign-in; passkeys work at
+`http://localhost:4318/`, not at 127.0.0.1.
 
 Then RecallSpring asks which assistants you study with (tick one or more). For the apps with a connector it shows one
 command, `scripts\install-connectors.ps1 -Assistants claude,codex -Username <you>`, which runs the scripts below in turn. RecallSpring itself keeps your records and plans your reviews;

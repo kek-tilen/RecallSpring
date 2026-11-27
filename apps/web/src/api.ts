@@ -78,7 +78,8 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 
 function failure(res: Response, data: unknown, path: string): ApiError {
   const e = (data ?? {}) as { code?: string; message?: string; details?: Record<string, unknown>; request_id?: string };
-  if (res.status === 401 && path !== "/auth/login") onUnauthenticated?.();
+  // Only a missing or expired session signs out; a wrong password or passkey is an ordinary error.
+  if (res.status === 401 && e.code === "not_authenticated" && path !== "/auth/login") onUnauthenticated?.();
   return new ApiError(res.status, e.code ?? "error", e.message ?? `Request failed (${res.status}).`, e.details, e.request_id);
 }
 
