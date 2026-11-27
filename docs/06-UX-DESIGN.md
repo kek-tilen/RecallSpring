@@ -270,11 +270,13 @@ Implemented (2026-11-21, ADR-008):
 - **First run and Welcome (Phase 3 of docs/plan-without-claude.md):** while an install has no account, the sign-in page is
   *Welcome to RecallSpring*: username, password and repeat (at least 12 characters, no e-mail reset), time zone (from
   the browser, a list of IANA zones). Only on the computer RecallSpring runs on; elsewhere the page says where to do
-  it. Then **/welcome** (*Choose your assistant*): Claude (Claude Desktop), Codex, ChatGPT in RecallSpring, **Mix** or Decide
-  later, each with what it needs; after saving, the next steps for that assistant with copyable commands. Mix (owner
-  2026-11-22) shows checkboxes for the three; Save needs at least two ("Choose at least two."), and the next steps
-  come for each one chosen. Home shows a
-  short nudge while none is chosen.
+  it. Then **/welcome**, redrawn as the UI direction has it (2026-11-27): no rail yet, the mark, *Welcome to
+  RecallSpring* in serif and one decision: tiles to tick for Claude Desktop, Codex, Antigravity and ChatGPT. One
+  ticked is that assistant, two or more a mix, none is fine ("None yet is fine"). For the apps with a connector one
+  row shows one command (`scripts\install-connectors.ps1 -Assistants … -Username …`, Copy command) and folds the
+  steps for each; ChatGPT ticked shows Sign in with ChatGPT right there (the choice is saved first and the sign-in
+  comes back to /welcome). Continue saves and opens Courses with New course started. Changeable later in
+  Settings › Assistants. Home shows a short nudge while none is chosen.
 - **Settings layout** (2026-11-23, redrawn 2026-11-27): five sections, each with a one-line purpose: **Study** (study time and balance, study preferences, explanation pace), **Assistants** (your assistants, ChatGPT preview, assistant connector), **Data & backups** (Backups, History, Recently deleted), **Appearance** (theme) and **Account & system** (profile, sign-in, running in the background). The serif "Settings" heading and the section list sit on the left (a scrolling row on narrow screens); the chosen section is on tint (`aria-current="page"`) and only that section is shown, so the page stays short. Data & backups is a list of rows: Backups (when the last one ran, where it is kept, Back up now; the paths and notes folded under Backup details), How often (the schedule and what is kept; Change opens a choice of daily, every 3 days, weekly, every 2 weeks, monthly or every N days, and the time, with how many days of records a failure could lose), Where backups go (the folder, another disk or not, a sync app; Change opens the folder field in place, Check folder lists what it found, Use this folder saves it; a short fold explains synced folders for Google Drive, OneDrive, Dropbox and iCloud Drive), Encryption (off, or on since a date with the key id; Turn on or New key opens three steps in place: what it means, the recovery key shown once with Download and Copy and a tick that it is kept elsewhere, then its last 4 characters and what to do with older unencrypted backups, deleting them only after a confirmation), History (Open history; the History page has a crumb back to Settings · Data & backups) and Recently deleted (each list keeps 30 days). Old links (`/settings#chatgpt`, `#connector`, `#backups`, `#history`, `#profile`, `#service`, `#pace`) open the section that holds the card and scroll to it.
 - **Explanation pace** (2026-11-26, migration 0035): Settings → Study has the default for every course (Step
   by step / Balanced / Larger chunks / Auto, with what each means); a course page has `Explanations` with `Default

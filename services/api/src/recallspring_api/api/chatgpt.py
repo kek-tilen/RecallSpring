@@ -19,7 +19,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterator
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Request
@@ -222,10 +222,16 @@ def _availability(request: Request) -> str | None:
     return None
 
 
-def _safe_origin(origin: str) -> str:
-    """Only send the browser back to RecallSpring on this computer."""
-    parts = urlsplit(origin)
-    return origin if parts.scheme in ("http", "https") and siwc.is_local(parts.hostname) else ""
+BACK_PAGES = ("/settings", "/welcome")  # where a sign-in may return to (the welcome page: 2026-11-27)
+
+
+def _back_url(return_to: str, outcome: str) -> str:
+    """Only send the browser back to RecallSpring on this computer, to Settings or the welcome page."""
+    parts = urlsplit(return_to)
+    local = parts.scheme in ("http", "https") and siwc.is_local(parts.hostname)
+    origin = f"{parts.scheme}://{parts.netloc}" if local else ""
+    page = parts.path if parts.path in BACK_PAGES else "/settings"
+    return f"{origin}{page}?chatgpt={outcome}" + ("#chatgpt" if page == "/settings" else "")
 
 
 @router.get("/ai/chatgpt")
@@ -234,8 +240,11 @@ def chatgpt_status(request: Request, ctx: Ctx = Depends(current_ctx)) -> dict[st
 
 
 @router.post("/ai/chatgpt/connect")
-def connect(request: Request, ctx: Ctx = Depends(csrf_ctx)) -> dict[str, str]:
-    """The ChatGPT sign-in page to open. It returns to http://127.0.0.1:<this port>/api/v1/ai/chatgpt/callback."""
+def connect(
+    request: Request, back: Literal["settings", "welcome"] = "settings", ctx: Ctx = Depends(csrf_ctx)
+) -> dict[str, str]:
+    """The ChatGPT sign-in page to open. It returns to http://127.0.0.1:<this port>/api/v1/ai/chatgpt/callback,
+    which sends the browser on to ``back`` (Settings, or the welcome page)."""
     reason = _availability(request)
     if reason == "disabled":
         raise ApiError(409, "chatgpt_disabled", "Sign in with ChatGPT is turned off (RS_CHATGPT_SIGNIN_ENABLED).")
@@ -247,7 +256,7 @@ def connect(request: Request, ctx: Ctx = Depends(csrf_ctx)) -> dict[str, str]:
         )
     port = request.url.port or (443 if request.url.scheme == "https" else 80)
     origin = f"{request.url.scheme}://{request.url.netloc}"
-    return {"authorize_url": siwc.start(ctx.user.id, port, origin)}
+    return {"authorize_url": siwc.start(ctx.user.id, port, f"{origin}/{back}")}
 
 
 @router.get("/ai/chatgpt/callback", include_in_schema=False)
@@ -261,7 +270,7 @@ def callback(request: Request, db: Session = Depends(get_db)) -> RedirectRespons
             details["scopes"] = siwc.status(user_id)["scopes"]
         audit(db, actor_id=user_id, action="ai.chatgpt_sign_in", details=details)
         db.commit()
-    return RedirectResponse(f"{_safe_origin(return_to)}/settings?chatgpt={outcome}#chatgpt", status_code=303)
+    return RedirectResponse(_back_url(return_to, outcome), status_code=303)
 
 
 @router.get("/ai/chatgpt/models")

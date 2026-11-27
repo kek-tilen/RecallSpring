@@ -97,8 +97,10 @@ def openai(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> FakeOpenAI:
     return install_fake_openai(monkeypatch, tmp_path)
 
 
-def sign_in(api: Api, fake: FakeOpenAI, client_id: str = "oaiapp_test", scopes: str = SCOPES) -> tuple[dict, Any]:
-    r = api.post("/ai/chatgpt/connect")
+def sign_in(
+    api: Api, fake: FakeOpenAI, client_id: str = "oaiapp_test", scopes: str = SCOPES, back: str = ""
+) -> tuple[dict, Any]:
+    r = api.post(f"/ai/chatgpt/connect{back}")
     assert r.status_code == 200, r.text
     q = {k: v[0] for k, v in parse_qs(urlsplit(r.json()["authorize_url"]).query).items()}
     fake.tokens.append(
@@ -117,6 +119,12 @@ def sign_in(api: Api, fake: FakeOpenAI, client_id: str = "oaiapp_test", scopes: 
     params = {"state": q["state"], "code": "code-1", "client_id": client_id, "scope": scopes}
     callback = api.client.get("/api/v1/ai/chatgpt/callback", params=params, follow_redirects=False)
     return q, callback
+
+
+def test_sign_in_from_the_welcome_page_returns_there(owner_api: Api, openai: FakeOpenAI) -> None:
+    _, callback = sign_in(owner_api, openai, back="?back=welcome")
+    assert callback.status_code == 303 and callback.headers["location"].endswith("/welcome?chatgpt=connected")
+    assert owner_api.post("/ai/chatgpt/connect?back=elsewhere").status_code == 422  # only the two pages
 
 
 def _audits(action: str) -> list[AuditEvent]:

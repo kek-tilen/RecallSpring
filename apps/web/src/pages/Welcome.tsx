@@ -1,18 +1,19 @@
 import { BrandMark } from "../components/BrandMark";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { request } from "../api";
 import { ASSISTANTS } from "../assistant";
+import { ChatGptSignIn, OUTCOME, useChatGptStatus } from "../components/ChatGpt";
 import { CopyButton } from "../components/Copy";
-import { Card, ErrorNote, PageHead } from "../components/ui";
+import { ErrorNote } from "../components/ui";
 import { keys, useSession } from "../queries";
 import type { AssistantChoice, AssistantKey, ExplanationPace, SessionInfo, User } from "../types";
 
 /**
  * A new install (plan-without-claude.md, Phase 3): the first visit creates the account (FirstRunForm, shown on the
- * sign-in page while no account exists), then /welcome asks which assistant the learner studies with and shows the
- * next steps for it. Both can be changed later in Settings → Profile.
+ * sign-in page while no account exists), then /welcome (no rail yet, 2026-11-27) asks which assistants the learner
+ * studies with and shows one command for those with a connector. Changeable later in Settings › Assistants.
  */
 
 export function browserZone(): string {
@@ -285,89 +286,142 @@ export function useSaveProfile() {
   });
 }
 
+/** The welcome page's tiles (UI direction, 2026-11-27): tick any; two or more is a mix, none is "not chosen". */
+const TILE: Record<AssistantKey, { name: string; note: string }> = {
+  claude: { name: "Claude Desktop", note: "Connector · one command" },
+  codex: { name: "Codex", note: "Connector · one command" },
+  antigravity: { name: "Antigravity", note: "Connector · one command" },
+  chatgpt: { name: "ChatGPT", note: "Sign in with ChatGPT · Chat inside RecallSpring" },
+};
+
+/** The one command that sets up every ticked app with a connector (scripts/install-connectors.ps1), or null. */
+export function connectorCommand(picked: AssistantKey[], username: string): string | null {
+  const apps = picked.filter((k) => k !== "chatgpt");
+  if (apps.length === 0) return null;
+  return `powershell -ExecutionPolicy Bypass -File scripts\\install-connectors.ps1 -Assistants ${apps.join(",")} -Username ${username}`;
+}
+
+function choiceBody(picked: AssistantKey[]): { assistant: AssistantChoice | null; assistant_mix?: AssistantKey[] } {
+  if (picked.length === 0) return { assistant: null };
+  if (picked.length === 1) return { assistant: picked[0] ?? null };
+  return { assistant: "mix", assistant_mix: picked };
+}
+
+function names(keys: AssistantKey[]): string {
+  const n = keys.map((k) => TILE[k].name);
+  return n.length > 1 ? `${n.slice(0, -1).join(", ")} and ${n.at(-1) ?? ""}` : (n[0] ?? "");
+}
+
+function ChatGptRow({ save }: { save: () => Promise<unknown> }) {
+  const status = useChatGptStatus();
+  const [params] = useSearchParams();
+  const outcome = OUTCOME[params.get("chatgpt") ?? ""];
+  return (
+    <section className="welcome-box stack" style={{ gap: 8 }} aria-label="ChatGPT">
+      <span>ChatGPT</span>
+      {outcome && !status.data?.connected && (
+        <div className={outcome.warn ? "notice warn small" : "notice small"} role="status">
+          {outcome.text}
+        </div>
+      )}
+      {status.data?.connected ? (
+        <span className="small" role="status">
+          ✓ Signed in with ChatGPT{status.data.plan_usage ? "" : ", but using your plan was not allowed"}
+        </span>
+      ) : status.data ? (
+        <>
+          <div>
+            <ChatGptSignIn status={status.data} compact back="welcome" before={save} />
+          </div>
+          {!status.data.unavailable_reason && (
+            <span className="tiny muted">Uses your ChatGPT plan, not a paid API. Skip it and sign in later in Settings › Assistants.</span>
+          )}
+        </>
+      ) : (
+        <span className="tiny muted">Checking…</span>
+      )}
+    </section>
+  );
+}
+
 export function WelcomePage() {
   const session = useSession();
   const user = session.data?.user;
-  const [choice, setChoice] = useState<AssistantChoice | null>(user?.assistant ?? null);
-  const [mix, setMix] = useState<AssistantKey[]>(user?.assistant_mix ?? []);
-  const mixTooSmall = choice === "mix" && mix.length < 2;
-  const [saved, setSaved] = useState(false);
+  const navigate = useNavigate();
+  const [picked, setPicked] = useState<AssistantKey[] | null>(null);
+  const saved: AssistantKey[] = user?.assistant === "mix" ? (user.assistant_mix ?? []) : user?.assistant ? [user.assistant] : [];
+  const chosen = ASSISTANTS.map((a) => a.key).filter((k) => (picked ?? saved).includes(k));
   const save = useSaveProfile();
+  const command = user ? connectorCommand(chosen, user.username) : null;
+  const apps = chosen.filter((k) => k !== "chatgpt");
+  const toggle = (key: AssistantKey, on: boolean) => setPicked(ASSISTANTS.map((a) => a.key).filter((k) => (k === key ? on : chosen.includes(k))));
   return (
-    <div className="page">
-      <PageHead
-        title="Choose your assistant"
-        sub="RecallSpring keeps your records and plans your reviews; an AI assistant tutors you with them. Grades from any of them count the same and show who gave them. You can change this in Settings."
-      />
-      <Card>
-        <form
-          className="stack"
-          style={{ gap: 12 }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (mixTooSmall) return;
-            save.mutate(choice === "mix" ? { assistant: choice, assistant_mix: mix } : { assistant: choice }, {
-              onSuccess: () => setSaved(true),
-            });
-          }}
-        >
-          <AssistantPicker
-            value={choice}
-            mix={mix}
-            onChange={(a, m) => {
-              setChoice(a);
-              setMix(m);
-              setSaved(false);
-            }}
-          />
-          {save.error && <ErrorNote error={save.error} />}
-          <div>
-            <button type="submit" className="btn primary" disabled={save.isPending || mixTooSmall}>
-              {save.isPending ? "Saving…" : "Save"}
-            </button>
+    <main className="welcome-page">
+      <div className="welcome">
+        <BrandMark size={34} />
+        <h1 className="welcome-title">Welcome to RecallSpring</h1>
+        <p className="welcome-lede">
+          You learn with an assistant; RecallSpring keeps your material, answers and review dates. Choose who helps you. You can use more than one.
+        </p>
+        <fieldset className="welcome-pick">
+          <legend className="small">Choose your assistant</legend>
+          <div className="welcome-tiles">
+            {ASSISTANTS.map((a) => (
+              <label key={a.key} className="welcome-tile">
+                <input type="checkbox" checked={chosen.includes(a.key)} onChange={(e) => toggle(a.key, e.target.checked)} />
+                <span className="stack" style={{ gap: 2 }}>
+                  <span>{TILE[a.key].name}</span>
+                  <span className="tiny muted">{TILE[a.key].note}</span>
+                </span>
+              </label>
+            ))}
           </div>
-        </form>
-      </Card>
-      {saved && user && (
-        <Card
-          title={
-            choice === "mix"
-              ? "Next: set up your assistants"
-              : choice
-                ? `Next: set up ${ASSISTANTS.find((a) => a.key === choice)!.label}`
-                : "Next"
-          }
-        >
-          <div className="stack" style={{ gap: 12 }} role="status">
-            {choice === "mix" ? (
-              <>
-                {ASSISTANTS.filter((a) => mix.includes(a.key)).map((a) => (
-                  <section key={a.key} className="stack" style={{ gap: 6 }} aria-label={`Set up ${a.label}`}>
-                    <h3 className="assistant-step-title">{a.label}</h3>
-                    <AssistantNextSteps assistant={a.key} username={user.username} />
+        </fieldset>
+        {command && user && (
+          <section className="welcome-box stack" style={{ gap: 6 }} aria-label="Connector command">
+            <span className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <span>Command for {names(apps)}</span>
+              <CopyButton text={command} label="Copy command" />
+            </span>
+            <code className="welcome-command">{command}</code>
+            <span className="tiny muted">
+              Install {apps.length > 1 ? "the apps" : "the app"} and sign in first. Run it in PowerShell in the RecallSpring folder: it makes the
+              connector&apos;s sign-in on this computer (never shown) and adds RecallSpring to {apps.length > 1 ? "each" : "it"}
+              {apps.some((k) => k !== "claude") ? ", with one study folder per course in Documents\\RecallSpring Study" : ""}.
+              {apps.includes("claude") ? " For Claude Desktop it waits until you quit Claude Desktop (tray icon → Quit), then starts it again." : ""}
+            </span>
+            <details className="settings-details">
+              <summary>Steps for each</summary>
+              <div className="stack" style={{ gap: 10 }}>
+                {apps.map((k) => (
+                  <section key={k} className="stack" style={{ gap: 4 }} aria-label={`Set up ${TILE[k].name}`}>
+                    <strong className="small">{TILE[k].name}</strong>
+                    <AssistantNextSteps assistant={k} username={user.username} />
                   </section>
                 ))}
-                <p className="small muted" style={{ margin: 0 }}>
-                  Set up one now and the others when you need them; Settings → Assistants shows which are connected.
-                </p>
-              </>
-            ) : choice ? (
-              <AssistantNextSteps assistant={choice} username={user.username} />
-            ) : (
-              <p className="small" style={{ margin: 0 }}>
-                Add your material under <Link to="/library">Library</Link> and your exam dates under <Link to="/exams">Exams</Link>. Courses are set up
-                with an assistant; choose one any time in{" "}
-                <Link to="/settings#profile">Settings</Link>.
-              </p>
-            )}
-            <div>
-              <Link className="btn" to="/">
-                Go to Home
-              </Link>
-            </div>
-          </div>
-        </Card>
-      )}
-    </div>
+              </div>
+            </details>
+          </section>
+        )}
+        {chosen.includes("chatgpt") && <ChatGptRow save={() => save.mutateAsync(choiceBody(chosen))} />}
+        {chosen.length === 0 && (
+          <p className="tiny muted">
+            None yet is fine: RecallSpring keeps your material, notes, reviews and plans without one. Choose later in Settings › Assistants.
+          </p>
+        )}
+        {save.error && <ErrorNote error={save.error} />}
+        <div className="welcome-foot">
+          <span className="small muted">Next: add a course and its material</span>
+          <button
+            type="button"
+            className="btn primary"
+            disabled={save.isPending}
+            onClick={() => save.mutate(choiceBody(chosen), { onSuccess: () => navigate("/courses", { state: { newCourse: true } }) })}
+          >
+            {save.isPending ? "Saving…" : "Continue"}
+          </button>
+        </div>
+      </div>
+    </main>
   );
 }

@@ -49,14 +49,15 @@ computer). This works only on the computer RecallSpring runs on and only while n
 is the normal sign-in. `services\api\.venv\Scripts\recallspring create-owner --username <name> [--timezone <zone>]`
 does the same from the command line.
 
-Then RecallSpring asks which assistant you study with. RecallSpring itself keeps your records and plans your reviews;
+Then RecallSpring asks which assistants you study with (tick one or more). For the apps with a connector it shows one
+command, `scripts\install-connectors.ps1 -Assistants claude,codex -Username <you>`, which runs the scripts below in turn. RecallSpring itself keeps your records and plans your reviews;
 the assistant tutors you with them. Grades from any of them count the same and show who gave them.
 
 | Assistant | You need | Set up |
 | --- | --- | --- |
-| **Claude** (Claude Desktop) | Claude Desktop from the Microsoft Store, a paid Claude plan | the welcome page shows two commands: `recallspring connector-token --username <you>`, then `scripts\install-claude-desktop-connector.ps1` (docs/connector-setup.md) |
+| **Claude** (Claude Desktop) | Claude Desktop from the Microsoft Store, a paid Claude plan | `recallspring connector-token --username <you>`, then `scripts\install-claude-desktop-connector.ps1` (docs/connector-setup.md) |
 | **Codex** | Codex (app, CLI or IDE extension), signed in with your ChatGPT plan | `scripts\install-codex-connector.ps1 -Username <you>` (docs/codex-setup.md) |
-| **ChatGPT in RecallSpring** (preview) | a ChatGPT Plus or Pro plan | Settings → ChatGPT → Sign in with ChatGPT, then Chat |
+| **ChatGPT in RecallSpring** (preview) | a ChatGPT Plus or Pro plan | Sign in with ChatGPT on the welcome page or in Settings → Assistants, then Chat |
 | Decide later | nothing | material, notes, reviews and plans work without an assistant |
 
 With ChatGPT in RecallSpring, a new Chat conversation with **Planning (all courses)** picked under Study sets up your

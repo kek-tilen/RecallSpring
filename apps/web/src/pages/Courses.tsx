@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { request } from "../api";
 import { CourseDot, GroupDialog, KIND_LABEL, NewInterestDialog, cc, isFocused, useInvalidateOrganisation } from "../components/organise";
 import { NewCourseDialog, RecentlyDeletedCourses } from "../components/CourseForms";
@@ -215,7 +215,9 @@ export function CoursesPage() {
   const archived = useArchived();
   const [creating, setCreating] = useState(false);
   const [addingInterest, setAddingInterest] = useState(false);
-  const [addingCourse, setAddingCourse] = useState(false);
+  const location = useLocation();
+  // The welcome page's Continue opens Courses with a new course started (2026-11-27).
+  const [addingCourse, setAddingCourse] = useState(() => Boolean((location.state as { newCourse?: boolean } | null)?.newCourse));
   const [looseClosed, toggleLoose] = useCollapse("loose");
   const [interestsClosed, toggleInterests] = useCollapse("interests");
   const [archiveClosed, toggleArchive] = useCollapse("archived");

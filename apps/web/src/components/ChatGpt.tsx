@@ -23,7 +23,7 @@ export function useChatGptStatus() {
   return useQuery({ queryKey: STATUS_KEY, queryFn: () => get<ChatGptStatus>("/ai/chatgpt") });
 }
 
-const OUTCOME: Record<string, { text: string; warn?: boolean }> = {
+export const OUTCOME: Record<string, { text: string; warn?: boolean }> = {
   connected: { text: "Signed in with ChatGPT." },
   no_plan_usage: {
     text: "Signed in, but using your ChatGPT plan was not allowed. Sign in again and allow it to send messages.",
@@ -34,10 +34,20 @@ const OUTCOME: Record<string, { text: string; warn?: boolean }> = {
   error: { text: "The sign-in did not work. Try again; if it keeps failing, check History for details.", warn: true },
 };
 
-/** The official "Sign in with ChatGPT" button, or why it is not available here. */
-export function ChatGptSignIn({ status, compact, again }: { status: ChatGptStatus; compact?: boolean; again?: boolean }) {
+/** The official "Sign in with ChatGPT" button, or why it is not available here. `back`: the page the sign-in returns
+ * to (Settings by default); `before`: saved first, since the browser leaves RecallSpring for ChatGPT. */
+export function ChatGptSignIn({ status, compact, again, back, before }: {
+  status: ChatGptStatus;
+  compact?: boolean;
+  again?: boolean;
+  back?: "welcome";
+  before?: () => Promise<unknown>;
+}) {
   const connect = useMutation({
-    mutationFn: () => request<{ authorize_url: string }>("/ai/chatgpt/connect", { method: "POST" }),
+    mutationFn: async () => {
+      await before?.();
+      return request<{ authorize_url: string }>(`/ai/chatgpt/connect${back ? `?back=${back}` : ""}`, { method: "POST" });
+    },
     onSuccess: ({ authorize_url }) => window.location.assign(authorize_url),
   });
   if (status.unavailable_reason === "not_local") {

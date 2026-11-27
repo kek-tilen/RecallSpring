@@ -59,6 +59,7 @@ export const router = createBrowserRouter([
   {
     element: <RequireSession />,
     children: [
+      { path: "welcome", element: <WelcomePage /> }, // first run: no rail yet (UI direction, 2026-11-27)
       {
         element: <Layout />,
         children: [
@@ -89,7 +90,6 @@ export const router = createBrowserRouter([
           { path: "history", element: <HistoryPage /> },
           { path: "guide", element: <GuidePage /> },
           { path: "settings", element: <SettingsPage /> },
-          { path: "welcome", element: <WelcomePage /> },
           { path: "*", element: <NotFound /> },
         ],
       },
