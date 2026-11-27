@@ -294,6 +294,10 @@ Implemented (2026-11-21, ADR-008):
   only to Claude users. Chat's Study picker offers **Planning (all courses)** (default) or one course. Factual connector text (Claude Desktop, Codex tokens) stays.
 - **Settings → ChatGPT (preview):** the connection only. It holds `Sign in with ChatGPT` per OpenAI's UI guidelines, the privacy notes, the account, plan usage, Open Chat, Sign in again and Sign out (confirmed). It states clearly when sign-in is unavailable (not on 127.0.0.1, or turned off).
 
+### Help (2026-11-27)
+
+The Guide is no longer a tab: it opens from the **?** button next to Settings at the bottom of the rail (in the top bar on a phone) or with the `?` key. Its steps are quiet numbered sections (a tinted number, a serif heading, where it happens as a chip, then the prompts to copy) instead of boxed cards; setup and Good to know stay as cards. Settings names the ? button in its left column.
+
 ### Answering from another assistant (Codex)
 
 Built 2026-11-21 (plan-without-claude.md, Phase 0). When an assistant cannot show RecallSpring's forms in its chat, it gives the learner a link:
@@ -386,6 +390,7 @@ Do not hide primary features behind keyboard commands. Optional:
 - `Ctrl/Cmd+K` opens global search; `Esc` closes dialogs.
 - `Ctrl/Cmd+\` hides or shows the menu rail (built).
 - On the Focus page: `Space` starts or pauses the timer, `F` opens focus mode, `Esc` leaves it (built).
+- `?` opens the Guide (Help), except while typing or in a dialog (built, 2026-11-27).
 
 Provide full mouse/touch alternatives. In-context help should be short, not a tutorial maze.
 

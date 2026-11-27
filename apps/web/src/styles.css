@@ -6838,3 +6838,50 @@ input.switch:focus-visible {
     white-space: nowrap;
   }
 }
+
+
+/* Guide as the Help page (UI direction, 2026-11-27): opened from the ? button or the ? key; steps as quiet numbered
+   sections instead of boxed cards. */
+.guide-steps {
+  gap: 0;
+}
+
+.guide-step {
+  border-top: 1px solid var(--border);
+  padding: 16px 0;
+}
+
+.guide-step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.guide-step-head h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.15rem;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.guide-step .step-num {
+  background: var(--tint);
+  color: var(--tint-ink);
+  width: 26px;
+  height: 26px;
+  font-weight: 600;
+}
+
+.guide-step-body {
+  padding-left: 36px;
+}
+
+@media (max-width: 640px) {
+  .guide-step-body {
+    padding-left: 0;
+  }
+}

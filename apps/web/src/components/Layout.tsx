@@ -12,7 +12,7 @@ import {
   type Icon,
 } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, Outlet, useLocation } from "react-router";
+import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { useAssistants, useDueCount, useSession } from "../queries";
 import { BrandMark } from "./BrandMark";
 import { FocusPill, PomodoroProvider } from "./Pomodoro";
@@ -53,6 +53,16 @@ function railHidden(): boolean {
 
 function under(path: string, base: string): boolean {
   return path === base || path.startsWith(`${base}/`);
+}
+
+/** "?" opens the Guide, except while typing or with a dialog open (2026-11-27). */
+export function opensHelp(e: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "target">): boolean {
+  if (e.key !== "?" || e.ctrlKey || e.metaKey || e.altKey) return false;
+  const t = e.target;
+  if (t instanceof HTMLElement) {
+    if (t.isContentEditable || t.closest("input, textarea, select, [contenteditable], dialog, [role=dialog]")) return false;
+  }
+  return true;
 }
 
 export function isActive(path: string, a: Area): boolean {
@@ -114,11 +124,15 @@ export function Layout() {
     (hidden ? showButton : hideButton).current?.focus();
   }, [hidden]);
 
+  const navigate = useNavigate();
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === "\\") {
         e.preventDefault();
         toggle(!hidden);
+      } else if (opensHelp(e)) {
+        e.preventDefault();
+        navigate("/guide");
       }
     }
     window.addEventListener("keydown", onKey);
@@ -191,7 +205,7 @@ export function Layout() {
               to="/guide"
               className={`rail-icon${under(path, "/guide") ? " active" : ""}`}
               aria-label="Help: the Guide"
-              title="Help: the Guide"
+              title="Help: the Guide (?)"
               aria-current={under(path, "/guide") ? "page" : undefined}
             >
               <IconHelp size={20} stroke={1.75} aria-hidden="true" focusable="false" />

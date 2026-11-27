@@ -184,20 +184,17 @@ export function GuidePage() {
 
       <SetupCard a={a} />
 
-      <ol className="steps">
+      <ol className="steps guide-steps">
         {STEPS.map((step, i) => (
-          <li key={step.id}>
-            <Card
-              title={
-                <span className="row" style={{ gap: 10 }}>
-                  <span className="step-num" aria-hidden="true">
-                    {i + 1}
-                  </span>
-                  {step.title}
-                </span>
-              }
-              action={<span className="chip">{step.where}</span>}
-            >
+          <li key={step.id} className="guide-step" aria-labelledby={`step-${step.id}`}>
+            <div className="guide-step-head">
+              <span className="step-num" aria-hidden="true">
+                {i + 1}
+              </span>
+              <h2 id={`step-${step.id}`}>{step.title}</h2>
+              <span className="chip">{step.where}</span>
+            </div>
+            <div className="guide-step-body">
               <div className="stack">
                 <p className="small muted">{fill(step.why, a)}</p>
                 {step.claudeTip && a.key === "claude" && <p className="small muted">{step.claudeTip}</p>}
@@ -213,7 +210,7 @@ export function GuidePage() {
                 </ul>
                 {step.check && <p className="tiny muted">Check it here: {step.check}</p>}
               </div>
-            </Card>
+            </div>
           </li>
         ))}
       </ol>
