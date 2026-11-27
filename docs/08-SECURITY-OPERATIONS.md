@@ -225,6 +225,51 @@ learner's Google Drive (`My Drive › RecallSpring backups`), with no sync app. 
   (once per run of failures), `backup.cloud_files_deleted`. Only the first account may connect or disconnect.
 - **Not yet:** OneDrive and Dropbox (Dropbox next); a restore command that downloads by itself.
 
+### Export (`services/exports.py`, 2026-11-27)
+
+Settings → Data & backups → *Export* makes a ZIP of one learner's own records as plain files: material by course
+(as uploaded, in the learner's folders), notes as Markdown (the body exactly as saved), and answers and grades as
+`answers.csv` (UTF-8 with BOM, the grade in force with `overridden`) and `answers.json` (every assessment, the
+grade in force marked), with a README that says AI grades are not a validated test score. All courses or a choice,
+and any of the three parts.
+
+- Made by the worker (`make_export` job), no model calls, one at a time per learner, only that learner's rows (never
+  another learner's, the audit log, tokens or settings). Refused when there is not enough disk space (507).
+- Written as `.part`, then renamed, under `storage_dir/exports/<user id>/`; **not encrypted** (the row says so).
+  Kept 24 hours, then deleted by the worker; *Delete it now* deletes it at once. A download needs the signed-in
+  session (`Cache-Control: no-store`). Today shows a ready export until it is downloaded, and a failed one.
+- History: `export.created`, `export.downloaded`, `export.sent_to_drive`.
+
+### Your Google Drive (`services/my_drive.py`, migration 0040, 2026-11-27)
+
+Settings → Data & backups → *Your Google Drive* keeps a **readable** copy of each learner's own material in their
+own Google account, in `My Drive › RecallSpring › <course>/<their folders>/<file>`. It is not a backup (that is
+Cloud copy, encrypted, for the whole installation) and it is one way: RecallSpring keeps working from its own copy.
+
+- **Sign-in:** the same device-code sign-in and the same Google app as Cloud copy (`RS_CLOUD_GOOGLE_CLIENT_ID`,
+  `RS_CLOUD_GOOGLE_CLIENT_SECRET`), scope `drive.file`, but each learner signs in with their own account. With the
+  app published *In production* (docs/cloud-copy-google.md) any Google account can; nothing else to set up.
+- **Secrets:** each learner's refresh token is kept in `secrets_dir/drive-<user id>.bin` (DPAPI on Windows, 0600
+  elsewhere); the device code waits in `drive-<user id>-pending.bin`. Neither reaches the database, a backup,
+  History, logs or the browser. No account name or address is stored. The database keeps only the connection state
+  (`drive_connections`) and which Drive file holds which course, folder or file (`drive_items`).
+- **What is copied:** material added after connecting. Material from before is copied only with *Copy what is
+  already here*, which shows how many files and how much first. Renamed courses and folders are renamed in Drive;
+  a folder deleted (or in the bin) in Drive is made again and its files copied again. Moving a folder in RecallSpring
+  does not move it in Drive. Material deleted in RecallSpring stays in Drive (it is the learner's copy).
+- **Day to day:** the worker looks every minute for waiting material (up to 200 files a run), with a lock per
+  learner; uploads are resumable 8 MiB pieces. A failure waits 15 minutes, 1, 4 and 12 hours (no room: until
+  tomorrow); Today shows a failing copy after a day, and withdrawn access at once (nothing else stops).
+- **Exports:** with *Exports go here too* on, Export offers *To my Drive*: the finished ZIP is uploaded to
+  `My Drive › RecallSpring › Exports` and deleted here. If Drive fails, the ZIP stays here to download and Today
+  says so.
+- **Disconnect** forgets the sign-in and asks Google to withdraw it. The files stay unless the learner chooses
+  *Delete everything RecallSpring made there* (asked once more), which deletes the RecallSpring folder.
+- History: `drive.connected`, `drive.copy_existing`, `drive.failed` (once per failing streak), `drive.disconnected`
+  (files kept or deleted).
+- Rollback: migration 0040 only adds the two tables (`alembic downgrade 0039` drops them); the files in Drive and the
+  token files are untouched by a downgrade, so disconnect first.
+
 ### FSRS-6 shadow report (ADR-014 §5)
 
 `recallspring shadow-report [--username <name>] [--save]` prints what FSRS-6 in shadow would have done, for the

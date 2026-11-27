@@ -18,6 +18,8 @@ Without these settings, Settings › Data & backups › Cloud copy says that a G
    External app is in *Testing*, Google lets its sign-ins expire after 7 days, so the daily copy would stop with
    "Google Drive no longer allows RecallSpring" a week after connecting. (In *Testing* only accounts listed under
    Test users can sign in at all. A name and logo on the consent screen need Google's lighter brand verification.)
+   The same app also serves *Your Google Drive* (each learner's own readable copy of their material, docs/08);
+   each learner signs in with their own account.
 4. **Clients › Create client:** application type **TVs and Limited Input devices**, a name such as "RecallSpring
    server". Copy the client ID and the client secret.
 5. Put them in `services/api/.env` on the computer RecallSpring runs on and restart the API and the worker:
