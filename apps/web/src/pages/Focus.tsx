@@ -3,7 +3,8 @@ import { useEffect, useState, type ChangeEvent } from "react";
 import { request } from "../api";
 import { Link } from "react-router";
 import { BACKGROUNDS, ClockFace, FocusStage, RoundDots, TimerText, useBackgroundImage, usePomodoro } from "../components/Pomodoro";
-import { Async, Card, Confirm, ErrorNote, PageHead } from "../components/ui";
+import { Async, Confirm, ErrorNote, PageHead } from "../components/ui";
+import { CourseDot } from "../components/organise";
 import { IMAGE_CHANGED, chime, imageProblem, loadImage, removeImage, saveImage } from "../focusMedia";
 import { timeOnly, dayHeading } from "../format";
 import { DEFAULT_SETTINGS, FACES, LIMITS, PHASE_LABEL, type PomodoroSettings } from "../pomodoro";
@@ -37,6 +38,8 @@ function Timer() {
   const { run, settings, left } = p;
   const label = run.status === "running" ? "Pause" : run.status === "paused" ? "Resume" : "Start";
   const options = (courses.data ?? []).filter((c) => c.status !== "archived");
+  const course = options.find((c) => c.id === run.courseId);
+  const length = run.phase === "focus" ? settings.focus : run.phase === "short" ? settings.short : settings.long;
 
   /** Start and Resume put the timer over the whole window; Pause stays here. */
   function startOrPause() {
@@ -61,60 +64,58 @@ function Timer() {
   }, [p]);
 
   return (
-    <Card title="Timer" meta={`Block ${Math.min(run.round, settings.rounds)} of ${settings.rounds}`}>
-      <div className="stack timer-box" data-phase={run.phase}>
-        <FocusStage settings={settings} className="timer-stage">
-          <div className="phase-steps" aria-hidden="true">
-            {(["focus", "short", "long"] as const).map((ph) => (
-              <span key={ph} className={ph === run.phase ? "on" : undefined}>
-                {PHASE_LABEL[ph]}
-              </span>
-            ))}
-          </div>
-          <p className="sr-only">Now: {PHASE_LABEL[run.phase]}</p>
-          <div className="timer-face">
-            <ClockFace face={settings.face} ms={left} total={run.totalMs} />
-          </div>
-          <TimerText ms={left} phase={run.phase} paused={run.status === "paused"} />
-          <RoundDots run={run} rounds={settings.rounds} />
-        </FocusStage>
-        <div className="row" style={{ justifyContent: "center" }}>
-          <button type="button" className="btn primary timer-main" onClick={startOrPause}>
-            {label}
-          </button>
-          <button type="button" className="btn" onClick={p.skip} title="End this phase and go to the next one">
-            Skip
-          </button>
-          <button type="button" className="btn" onClick={p.reset} title="Back to focus block 1">
-            Reset
-          </button>
-          <button type="button" className="btn" data-focus-mode-opener onClick={() => p.setFocusMode(true)}>
-            Focus mode
-          </button>
+    <section className="stack timer-box focus-timer" data-phase={run.phase} aria-label="Timer">
+      <p className="small muted focus-line">
+        {course && <CourseDot color={course.color} />}
+        {course ? course.title : "No course"} · block {Math.min(run.round, settings.rounds)} of {settings.rounds} · {PHASE_LABEL[run.phase].toLowerCase()}{" "}
+        {length} min
+      </p>
+      <FocusStage settings={settings} className="timer-stage">
+        <p className="sr-only">Now: {PHASE_LABEL[run.phase]}</p>
+        <div className="timer-face">
+          <ClockFace face={settings.face} ms={left} total={run.totalMs} />
         </div>
-        <label className="field">
-          Course (optional)
-          <span className="hint">Finished focus blocks count as study time for this course. Breaks are not counted.</span>
-          <select value={run.courseId ?? ""} onChange={(e) => p.setCourse(e.target.value || null)}>
-            <option value="">No course</option>
-            {options.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        {p.unsaved > 0 && (
-          <p className="notice small" role="status">
-            {p.unsaved === 1 ? "1 focus block is" : `${p.unsaved} focus blocks are`} kept in this browser until
-            RecallSpring is reachable again.
-          </p>
-        )}
-        <p className="tiny muted" style={{ margin: 0 }}>
-          Start and Resume show the timer over the whole window. Space starts or pauses · F opens focus mode · a block stopped after at least a minute is saved as stopped early.
-        </p>
+        <TimerText ms={left} phase={run.phase} paused={run.status === "paused"} />
+        <RoundDots run={run} rounds={settings.rounds} />
+      </FocusStage>
+      <div className="row" style={{ justifyContent: "center" }}>
+        <button type="button" className="btn primary timer-main" onClick={startOrPause}>
+          {label}
+        </button>
+        <button type="button" className="btn" onClick={p.skip} title="End this phase and go to the next one">
+          Skip
+        </button>
+        <button type="button" className="btn" data-focus-mode-opener onClick={() => p.setFocusMode(true)}>
+          Focus mode
+        </button>
+        <button type="button" className="btn ghost" onClick={p.reset} title="Back to focus block 1">
+          Reset
+        </button>
       </div>
-    </Card>
+      <label className="field focus-course-field">
+        <span className="small">Course</span>
+        <select value={run.courseId ?? ""} onChange={(e) => p.setCourse(e.target.value || null)} aria-describedby="focus-course-hint">
+          <option value="">No course</option>
+          {options.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.title}
+            </option>
+          ))}
+        </select>
+        <span className="hint" id="focus-course-hint">
+          Finished focus blocks count as study time for this course. Breaks are not counted.
+        </span>
+      </label>
+      {p.unsaved > 0 && (
+        <p className="notice small" role="status">
+          {p.unsaved === 1 ? "1 focus block is" : `${p.unsaved} focus blocks are`} kept in this browser until
+          RecallSpring is reachable again.
+        </p>
+      )}
+      <p className="tiny muted" style={{ margin: 0, textAlign: "center" }}>
+        Space starts or pauses · F opens focus mode · a block stopped after at least a minute is saved as stopped early.
+      </p>
+    </section>
   );
 }
 
@@ -122,24 +123,18 @@ function Timer() {
 
 export function FocusTime({ s, compact = false }: { s: FocusSummary; compact?: boolean }) {
   const max = Math.max(1, ...s.days.map((d) => d.minutes));
+  const courses = useCourses();
+  const colors = new Map((courses.data ?? []).map((c) => [c.id, c.color]));
   return (
-    <div className="stack" style={{ gap: 14 }}>
-      <div className="stats">
-        <div className="stat">
-          <div className="n">{minutesText(s.today.minutes)}</div>
-          <div className="l">
-            today · {s.today.sessions} {s.today.sessions === 1 ? "block" : "blocks"}
-          </div>
-        </div>
-        <div className="stat">
-          <div className="n">{minutesText(s.week_minutes)}</div>
-          <div className="l">last 7 days</div>
-        </div>
+    <section className="stack focus-week" style={{ gap: 6 }} aria-labelledby="focus-week-h">
+      <div className="focus-week-head">
+        <h2 id="focus-week-h">Focus time, last 7 days</h2>
+        <span>{minutesText(s.week_minutes)}</span>
       </div>
-      <ul className="focus-days" aria-label="Focus time on each of the last 7 days">
+      <ul className="focus-days slim" aria-label="Focus time on each of the last 7 days">
         {s.days.map((d) => (
           // Hover, or focus with Tab, shows the day's time; screen readers get the same from the hidden text.
-          <li key={d.date} tabIndex={0}>
+          <li key={d.date} tabIndex={0} className={d.date === s.today.date ? "today" : undefined}>
             <span className="focus-tip" aria-hidden="true">
               <strong>{d.date === s.today.date ? "Today" : DAY_TIP.format(dayOf(d.date))}</strong>
               <span>
@@ -147,9 +142,13 @@ export function FocusTime({ s, compact = false }: { s: FocusSummary; compact?: b
                 {d.sessions > 0 && ` · ${d.sessions} ${d.sessions === 1 ? "block" : "blocks"}`}
               </span>
             </span>
-            <span className="bar" style={{ height: `${Math.max(2, Math.round((d.minutes / max) * 64))}px` }} aria-hidden="true" />
-            <span className="tiny muted" aria-hidden="true">
-              {WEEKDAY.format(dayOf(d.date))}
+            <span
+              className={d.minutes > 0 ? "bar" : "bar none"}
+              style={{ height: `${Math.max(2, Math.round((d.minutes / max) * 40))}px` }}
+              aria-hidden="true"
+            />
+            <span className="tiny" aria-hidden="true">
+              {WEEKDAY.format(dayOf(d.date)).slice(0, 2)}
             </span>
             <span className="sr-only">
               {WEEKDAY_LONG.format(dayOf(d.date))}: {minutesText(d.minutes)}
@@ -157,22 +156,34 @@ export function FocusTime({ s, compact = false }: { s: FocusSummary; compact?: b
           </li>
         ))}
       </ul>
+      <p className="tiny muted" style={{ margin: 0 }}>
+        Today {minutesText(s.today.minutes)} · {s.today.sessions} {s.today.sessions === 1 ? "block" : "blocks"}
+      </p>
       {!compact && s.by_course.length > 0 && (
-        <ul className="list">
+        <ul className="source-rows" aria-label="Focus time by course">
           {s.by_course.map((c) => (
-            <li key={c.course_id ?? "none"} className="row" style={{ justifyContent: "space-between" }}>
-              {c.course_id ? <Link to={`/courses/${c.course_id}`}>{c.course_title}</Link> : <span className="muted">No course</span>}
-              <span className="small muted">
-                {minutesText(c.minutes)} · {c.sessions} {c.sessions === 1 ? "block" : "blocks"}
+            <li key={c.course_id ?? "none"} className="source-row">
+              <span className="focus-course-name">
+                {c.course_id ? (
+                  <>
+                    <CourseDot color={colors.get(c.course_id)} />
+                    <Link to={`/courses/${c.course_id}`}>{c.course_title}</Link>
+                  </>
+                ) : (
+                  <span className="muted">No course</span>
+                )}
+              </span>
+              <span className="small" title={`${c.sessions} ${c.sessions === 1 ? "block" : "blocks"}`}>
+                {minutesText(c.minutes)}
               </span>
             </li>
           ))}
         </ul>
       )}
       <p className="tiny muted" style={{ margin: 0 }}>
-        Time you timed yourself. It shows effort, not what you learned.
+        Finished focus blocks only; breaks are not counted. It shows effort, not what you learned.
       </p>
-    </div>
+    </section>
   );
 }
 
@@ -374,7 +385,7 @@ function TimerSettings() {
     s.rounds === DEFAULT_SETTINGS.rounds;
 
   return (
-    <Card title="Timer settings">
+    <div className="focus-more-body">
       <div className="stack">
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
           <NumberField label="Focus (min)" value={s.focus} limits={LIMITS.focus} onChange={(n) => set({ focus: n })} />
@@ -427,33 +438,7 @@ function TimerSettings() {
           These settings are saved on this device.
         </p>
       </div>
-    </Card>
-  );
-}
-
-function FacePicker() {
-  const p = usePomodoro();
-  const total = p.settings.focus * 60_000;
-  return (
-    <Card title="Clock face">
-      <div className="face-grid" role="radiogroup" aria-label="Clock face">
-        {FACES.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            role="radio"
-            aria-checked={p.settings.face === f.id}
-            className="face-card"
-            onClick={() => p.setSettings({ ...p.settings, face: f.id })}
-          >
-            <span className="face-sample">
-              <ClockFace face={f.id} ms={total * 0.62} total={total} preview />
-            </span>
-            <span className="theme-name">{f.name}</span>
-          </button>
-        ))}
-      </div>
-    </Card>
+    </div>
   );
 }
 
@@ -496,7 +481,7 @@ function BackgroundPicker() {
   }
 
   return (
-    <Card title="Focus mode background">
+    <div className="focus-more-body">
       <div className="stack">
         <div className="bg-grid" role="radiogroup" aria-label="Focus mode background">
           {BACKGROUNDS.filter((b) => b.id !== "image" || hasImage).map((b) => (
@@ -543,7 +528,63 @@ function BackgroundPicker() {
           The timer above shows your choice. Your image stays in this browser: it is not uploaded to RecallSpring and is not in backups.
         </p>
       </div>
-    </Card>
+    </div>
+  );
+}
+
+/** A quiet picker: a small preview of each of the six faces, the chosen one on tint (2026-11-27). */
+function FacePicker() {
+  const p = usePomodoro();
+  const total = p.settings.focus * 60_000;
+  const chosen = FACES.find((f) => f.id === p.settings.face);
+  return (
+    <section className="focus-faces" aria-labelledby="focus-faces-h">
+      <div className="focus-week-head">
+        <h2 id="focus-faces-h">Clock face</h2>
+        <span className="small muted">{chosen?.name}</span>
+      </div>
+      <div className="face-grid mini" role="radiogroup" aria-labelledby="focus-faces-h">
+        {FACES.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            role="radio"
+            aria-checked={p.settings.face === f.id}
+            className="face-card mini"
+            onClick={() => p.setSettings({ ...p.settings, face: f.id })}
+          >
+            <span className="face-sample" aria-hidden="true">
+              <ClockFace face={f.id} ms={total * 0.62} total={total} preview />
+            </span>
+            <span className="theme-name">{f.name}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Keep screen on while a block runs (Screen Wake Lock); a browser without it says so. */
+function KeepAwake() {
+  const p = usePomodoro();
+  const supported = typeof navigator !== "undefined" && "wakeLock" in navigator;
+  return (
+    <label className="focus-switch">
+      <span>
+        Keep screen on
+        <span className="small muted" style={{ display: "block" }}>
+          {supported ? "While a block runs" : "This browser cannot keep the screen on"}
+        </span>
+      </span>
+      <input
+        type="checkbox"
+        role="switch"
+        className="switch"
+        checked={supported && p.settings.keepAwake}
+        disabled={!supported}
+        onChange={(e) => p.setSettings({ ...p.settings, keepAwake: e.target.checked })}
+      />
+    </label>
   );
 }
 
@@ -552,25 +593,26 @@ function BackgroundPicker() {
 export function FocusPage() {
   const summary = useFocusSummary();
   return (
-    <div className="page">
-      <PageHead
-        title="Focus"
-        sub="A Pomodoro timer: focus blocks with short breaks, and a long break after each cycle. The timer keeps running while you use other pages."
-      />
-      <div className="split">
-        <div className="stack" style={{ gap: 20 }}>
-          <Timer />
+    <div className="page focus-page">
+      <PageHead title="Focus" />
+      <div className="focus-layout">
+        <Timer />
+        <div className="stack" style={{ gap: 18 }}>
           <FacePicker />
-          <BackgroundPicker />
-        </div>
-        <div className="stack" style={{ gap: 20 }}>
-          <Card title="Focus time">
-            <Async q={summary}>{(s) => <FocusTime s={s} />}</Async>
-          </Card>
-          <TimerSettings />
-          <Card title="Latest blocks">
+          <KeepAwake />
+          <Async q={summary}>{(s) => <FocusTime s={s} />}</Async>
+          <details className="focus-more">
+            <summary>Timer settings</summary>
+            <TimerSettings />
+          </details>
+          <details className="focus-more">
+            <summary>Focus mode background</summary>
+            <BackgroundPicker />
+          </details>
+          <details className="focus-more">
+            <summary>Latest blocks</summary>
             <Async q={summary}>{(s) => <Recent s={s} />}</Async>
-          </Card>
+          </details>
         </div>
       </div>
     </div>

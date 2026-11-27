@@ -74,6 +74,35 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   settingsRef.current = settings;
   runRef.current = run;
 
+  // Keep screen on (2026-11-27): while the timer runs, ask the browser to keep the screen awake; released on pause,
+  // stop or when the tab is hidden (the browser does that itself) and asked again when it comes back.
+  const awake = settings.keepAwake && run.status === "running";
+  useEffect(() => {
+    const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> } };
+    if (!awake || !nav.wakeLock) return;
+    let lock: { release: () => Promise<void> } | null = null;
+    let gone = false;
+    const ask = () => {
+      if (document.visibilityState !== "visible") return;
+      nav.wakeLock!
+        .request("screen")
+        .then((l) => {
+          if (gone) void l.release();
+          else lock = l;
+        })
+        .catch(() => {
+          /* refused (battery saver, policy): the timer simply runs without it */
+        });
+    };
+    ask();
+    document.addEventListener("visibilitychange", ask);
+    return () => {
+      gone = true;
+      document.removeEventListener("visibilitychange", ask);
+      if (lock) void lock.release();
+    };
+  }, [awake]);
+
   const commit = useCallback((next: RunState) => {
     runRef.current = next;
     setRun(next);

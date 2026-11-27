@@ -313,6 +313,15 @@ Built 2026-11-21 (plan-without-claude.md, Phase 0). When an assistant cannot sho
 
 Built (owner decision 2026-11-21). `/focus` in the main menu.
 
+**As drawn (UI direction, 2026-11-27):** the timer on the left ("Cell Biology · block 2 of 4 · focus 45 min", the
+chosen clock face, `Start`/`Pause`, `Skip`, `Focus mode`, a quiet `Reset`, and the course the blocks count for). On
+the right a quiet clock-face picker (a small preview of each of the six faces, the chosen one on tint), **Keep screen
+on** (a switch; while a block runs the browser's Screen Wake Lock keeps the screen awake, released on pause or stop
+and asked again when the tab comes back; browsers without it show the switch disabled with "This browser cannot
+keep the screen on"; saved on this device, off by default), and focus time for the last 7 days by day (today
+highlighted) and by course with its colour (finished focus blocks only; breaks are not counted). Timer settings,
+Focus mode background and Latest blocks (with Remove and Recently removed) are folded below.
+
 - **Cycle:** focus blocks with a short break after each and a long break after the last block of a cycle. Defaults are 45 min focus, 10 min short break, 15 min long break, 4 blocks per cycle. All four can be changed (focus 1–180 min, breaks 1–60 / 1–90 min, 1–12 blocks); a new length applies from the next phase that has not started.
 - **Controls:** Start / Pause / Resume (on the Focus page, Start and Resume open focus mode, so only the timer fills the browser window; owner 2026-11-21: the window, not the whole screen), Skip (ends the phase; never starts the next one by itself), Reset (back to block 1), Focus mode. A block skipped or reset while paused ends at its pause (owner 2026-11-25): pausing in the evening and resetting the next morning counts the time on the evening's day. Optional: start the next phase automatically, a chime (Web Audio, no sound files), a desktop notification (asked for only when the learner turns it on).
 - **Six clock faces** (Settings are per device): Default, Flip Clock, Progress Bar, Dot Matrix (one dot per minute, up to 60), Pie and Ring (a pie with a hole, the time in the middle). The bright part is the time left, so every face empties as the phase runs. Faces are visual only (`aria-hidden`); screen readers get the phase and whole minutes left, and phase changes are announced once.

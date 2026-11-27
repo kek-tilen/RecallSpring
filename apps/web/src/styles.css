@@ -6532,3 +6532,206 @@ button.exams-label {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Focus as drawn (UI direction, 2026-11-27): the timer on the left; on the right a quiet face picker with small
+   previews, Keep screen on, the week's focus time by day and by course; the rarer settings folded below. */
+.focus-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.focus-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.focus-timer .timer-stage {
+  border: 0;
+  padding: 4px 0 8px;
+}
+
+.focus-course-field {
+  max-width: 340px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.focus-week-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.focus-week-head h2 {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.face-grid.mini {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.face-card.mini {
+  padding: 4px 2px 5px;
+  gap: 2px;
+  border-radius: 10px;
+  min-width: 0;
+}
+
+.face-card.mini .face-sample {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 40px;
+  background: none;
+  pointer-events: none;
+}
+
+/* the real face, drawn small: a preview, not a second timer */
+.face-card.mini .face-sample > * {
+  flex: none;
+  transform: scale(0.38);
+}
+
+.face-card.mini .theme-name {
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.face-card.mini[aria-checked="true"] {
+  background: var(--tint);
+  border-color: var(--tint-ink);
+}
+
+.face-card.mini[aria-checked="true"] .theme-name {
+  color: var(--tint-ink);
+}
+
+.focus-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+input.switch {
+  appearance: none;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--border-strong);
+  position: relative;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+input.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 120ms ease;
+}
+
+input.switch:checked {
+  background: var(--tint-ink);
+}
+
+input.switch:checked::after {
+  transform: translateX(16px);
+}
+
+input.switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input.switch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.focus-days.slim li {
+  height: 62px;
+  color: var(--muted);
+}
+
+.focus-days.slim .bar {
+  max-width: 22px;
+  border-radius: 2px;
+  background: var(--ramp-1, #9ecfc4);
+}
+
+.focus-days.slim .bar.none {
+  background: var(--border);
+}
+
+.focus-days.slim li.today {
+  color: var(--tint-ink);
+}
+
+.focus-days.slim li.today .bar:not(.none) {
+  background: var(--tint-ink);
+}
+
+.focus-course-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.focus-more {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.focus-more > summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.focus-more[open] > summary {
+  margin-bottom: 10px;
+}
+
+.focus-more .card-head {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .focus-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 420px) {
+  .face-grid.mini {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

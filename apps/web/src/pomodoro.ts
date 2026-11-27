@@ -23,6 +23,7 @@ export interface PomodoroSettings {
   face: Face;
   background: BackgroundId;
   dim: number; // % darkening over a background image
+  keepAwake: boolean; // keep the screen on while a block runs (Screen Wake Lock, 2026-11-27)
 }
 
 export interface RunState {
@@ -61,6 +62,7 @@ export const DEFAULT_SETTINGS: PomodoroSettings = {
   face: "default",
   background: "theme",
   dim: 40,
+  keepAwake: false,
 };
 
 export const LIMITS = { focus: [1, 180], short: [1, 60], long: [1, 90], rounds: [1, 12], dim: [0, 80] } as const;
@@ -103,6 +105,7 @@ export function cleanSettings(raw: unknown): PomodoroSettings {
     background:
       typeof r.background === "string" && BACKGROUND_IDS.has(r.background) ? (r.background as BackgroundId) : d.background,
     dim: clamp(r.dim, LIMITS.dim, d.dim),
+    keepAwake: typeof r.keepAwake === "boolean" ? r.keepAwake : d.keepAwake,
   };
 }
 

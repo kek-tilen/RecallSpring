@@ -139,7 +139,10 @@ describe("Pomodoro timer", () => {
       face: "default",
       background: "image",
       dim: 80,
+      keepAwake: false,
     });
+    expect(cleanSettings({ keepAwake: true }).keepAwake).toBe(true);
+    expect(cleanSettings({ keepAwake: "yes" }).keepAwake).toBe(false);
     saveSettings({ ...DEFAULT_SETTINGS, focus: 50, face: "ring" });
     expect(readSettings()).toMatchObject({ focus: 50, face: "ring" });
     const run = start(initialRun(DEFAULT_SETTINGS), 1000, id);
