@@ -21,6 +21,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
     Numeric,
     SmallInteger,
@@ -75,6 +76,8 @@ class User(Base):
     id: Mapped[uuid.UUID] = _pk()
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    # Set by Change password and `recallspring reset-password` (migration 0038); NULL = unchanged since set-up.
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, server_default="Europe/Ljubljana")
     connector_limit_percent: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default="100", default=100
@@ -134,6 +137,28 @@ class AuthSession(Base):
     created_at: Mapped[datetime] = _created()
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # "Confirm it is you" (password or passkey) for adding and removing passkeys; valid 5 minutes (0038).
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Passkey(Base):
+    """A WebAuthn credential (migration 0038, 2026-11-27). Only the public half: the private key never leaves the
+    learner's device or password manager. ``rp_id`` is the address it works at (localhost or the remote host)."""
+
+    __tablename__ = "passkeys"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    credential_id: Mapped[bytes] = mapped_column(LargeBinary, unique=True, nullable=False)
+    public_key: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    sign_count: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0", default=0)
+    transports: Mapped[list[Any]] = _json_list()
+    backed_up: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false", default=False)
+    aaguid: Mapped[str | None] = mapped_column(String(36))
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    rp_id: Mapped[str] = mapped_column(String(253), nullable=False)
+    created_at: Mapped[datetime] = _created()
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 # --------------------------------------------------------------------------- courses
