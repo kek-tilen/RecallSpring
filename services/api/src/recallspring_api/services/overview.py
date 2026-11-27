@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import backup, clock
+from .. import backup, clock, cloud
 from ..learning.scheduler import grade_text
 from ..models import (
     Assessment,
@@ -45,6 +45,15 @@ from .quizzes import results_view
 from .reviews import effective_assessment
 from .sources import source_view
 from .targets import active_target, duplicate_groups, live_targets, target_view
+
+CLOUD_FAILURE = {
+    "revoked": "access withdrawn",
+    "no_room": "not enough room",
+    "unreachable": "could not reach the provider",
+    "mismatch": "a file did not match",
+    "missing": "a folder was gone",
+    "unexpected": "unexpected error",
+}
 
 
 def _review(state: ReviewState | None, now: datetime) -> dict[str, Any] | None:
@@ -397,6 +406,10 @@ _EVENT_TEXT = {
     "backup.schedule_changed": "Backup schedule changed",
     "backup.encryption_on": "Backup encryption turned on",
     "backup.key_replaced": "New recovery key for backups",
+    "backup.cloud_connected": "Cloud copy connected",
+    "backup.cloud_disconnected": "Cloud copy disconnected",
+    "backup.cloud_failed": "Cloud copy failed",
+    "backup.cloud_files_deleted": "Cloud copy files deleted",
     "backup.unencrypted_removed": "Unencrypted backups removed",
     "review.defer": "Review deferred",
     "assessment.grade_override": "Grade overridden",
@@ -461,6 +474,12 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         return f"{assistants.DEFAULT_LABEL.get(client, client)}, {n} token{'' if n == 1 else 's'}"
     if event_type in ("backup.encryption_on", "backup.key_replaced"):
         return f"key {payload.get('key_id')}"
+    if event_type in ("backup.cloud_connected", "backup.cloud_files_deleted"):
+        return "Google Drive" if payload.get("provider") == "google" else str(payload.get("provider"))
+    if event_type == "backup.cloud_disconnected":
+        return f"Google Drive, files {payload.get('files')}"
+    if event_type == "backup.cloud_failed":
+        return CLOUD_FAILURE.get(str(payload.get("code")), str(payload.get("code")))
     if event_type == "backup.unencrypted_removed":
         n = payload.get("count")
         return f"{n} backup{'' if n == 1 else 's'}"
@@ -589,6 +608,8 @@ def attention(db: Session, user: User) -> list[dict[str, Any]]:
     simulations, answers waiting for feedback."""
     items: list[dict[str, Any]] = []
     if item := backup.attention_item():
+        items.append(item)
+    if item := cloud.attention_item():
         items.append(item)
     live = list(
         db.scalars(

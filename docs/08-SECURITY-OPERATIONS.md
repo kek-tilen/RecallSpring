@@ -165,6 +165,38 @@ folder: 36 tables, every row count equal to the manifest, Alembic revision match
 checksums, that day's answers and notes present, and the API started and answered `ready` on the copy. The throwaway
 database and folder were then removed.
 
+### Cloud copy to Google Drive (`cloud.py`, 2026-11-27)
+
+Settings → Data & backups → *Cloud copy* uploads the **encrypted** backups to a folder RecallSpring creates in the
+learner's Google Drive (`My Drive › RecallSpring backups`), with no sync app. The local folder stays the main copy.
+
+- **Needs encryption on.** A snapshot whose manifest is not encrypted is never uploaded; older unencrypted backups stay
+  on this computer only.
+- **Sign-in:** OAuth device authorization. Google shows a short code the learner types at google.com/device on any
+  device; no return address is needed (localhost, home server or hosted work alike). Scope `drive.file` only: the
+  app sees only files it created. The app ID comes from the server settings (`RS_CLOUD_GOOGLE_CLIENT_ID`,
+  `RS_CLOUD_GOOGLE_CLIENT_SECRET`), never from Git; without them the row says so (docs/cloud-copy-google.md).
+- **Secrets:** only the refresh token is kept, in `secrets_dir` (`cloud-google.bin`, DPAPI on Windows, 0600 elsewhere),
+  like the ChatGPT sign-in; the device code waits there while the learner signs in. Neither reaches the database, a
+  backup, History, logs or the browser. No account name or address is stored.
+- **Layout:** the same as the backup folder (`snapshots/<name>/{db.dump.age, secret.json.age, manifest.json}` and
+  `sealed/<hmac>.age`; the manifest goes last, so a snapshot is complete when its manifest is there). A folder
+  downloaded from drive.google.com restores with `recallspring backup-restore --from <folder> --key <key file>
+  --database <new> --storage <empty folder>`.
+- **Day to day:** the worker checks every 10 minutes after its backup check; a copy runs when there is a newer local
+  backup (Back up now starts one at once). Only missing files are uploaded, in resumable 8 MiB pieces (a dropped
+  piece asks Google how far it got); sizes are read back; then what the local folder removed (7 daily, 4 weekly or
+  the last 7) is removed from the cloud too. One copy at a time (PostgreSQL advisory lock).
+- **Failures:** never affect the local backup. Retries wait 15 minutes, 1, 4, then 12 hours; *not enough room* waits
+  until the next day. Today → Needs attention shows a failure after a day in a row, and at once when Google
+  withdrew access (copying stops until the learner signs in again). If the folder was deleted in Drive, it is made
+  again.
+- **Disconnect:** forgets the sign-in and asks Google to revoke it; the files stay unless the learner chooses to
+  delete them too (asked once more; permanent at Google).
+- **Audited:** `backup.cloud_connected`, `backup.cloud_disconnected` (files kept or deleted), `backup.cloud_failed`
+  (once per run of failures), `backup.cloud_files_deleted`. Only the first account may connect or disconnect.
+- **Not yet:** OneDrive and Dropbox (Dropbox next); a restore command that downloads by itself.
+
 ### FSRS-6 shadow report (ADR-014 §5)
 
 `recallspring shadow-report [--username <name>] [--save]` prints what FSRS-6 in shadow would have done, for the

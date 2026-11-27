@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import backup, clock
+from .. import backup, clock, cloud
 from ..ai import siwc
 from ..config import get_settings
 from ..connector_auth import daily_limit, new_token, used_today
@@ -108,6 +108,7 @@ def _backup_view(db: Session, user: User) -> dict[str, Any]:
     """The status view every backup route returns, with whether this account may change backups."""
     view = backup.status_view()
     view["can_change"] = get_settings().backup_settings_from_web and _backup_owner(db, user)
+    view["cloud"] = cloud.view()
     return view
 
 
@@ -182,6 +183,8 @@ def backup_now(ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
         if exc.code == "busy":
             raise ApiError(409, "backup_busy", exc.message) from exc
         raise ApiError(503, "backup_failed", exc.message, {"reason": exc.code}) from exc
+    if cloud.connection() is not None:
+        cloud.copy_in_background(actor_id=ctx.user.id, request_id=ctx.request_id)
     return commit_with_response(db, ctx, None, 200, _backup_view(db, ctx.user))
 
 
@@ -212,6 +215,84 @@ def backup_encryption_set(
     except backup.BackupError as exc:
         status = {"busy": 409, "invalid_key": 422, "folder_locked": 403}.get(exc.code, 409)
         raise ApiError(status, "backup_busy" if exc.code == "busy" else exc.code, exc.message) from exc
+    return commit_with_response(db, ctx, payload, 200, _backup_view(db, ctx.user))
+
+
+# ---------------------------------------------------------------- cloud copy (cloud.py, 2026-11-27)
+
+CLOUD_STATUS = {"not_configured": 409, "needs_encryption": 409, "unreachable": 503, "refused": 502, "revoked": 409}
+
+
+def _cloud_error(exc: cloud.CloudError) -> ApiError:
+    return ApiError(CLOUD_STATUS.get(exc.code, 503), f"cloud_{exc.code}", exc.message)
+
+
+class CloudDisconnectIn(BaseModel):
+    delete_files: bool = False
+
+
+@router.post("/settings/backup/cloud/google/start")
+def cloud_google_start(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> JSONResponse:
+    """A code to type at google.com/device. The device code stays on the server; nothing is kept for replays."""
+    _require_backup_owner(db, ctx.user)
+    if cloud.connection() is not None:
+        raise ApiError(409, "cloud_connected", "A cloud copy is connected already. Disconnect it first.")
+    try:
+        body = cloud.start_google()
+    except cloud.CloudError as exc:
+        raise _cloud_error(exc) from exc
+    return JSONResponse(body, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/settings/backup/cloud/google/poll")
+def cloud_google_poll(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Whether the learner finished signing in at Google: pending, connected, denied or expired. On connected the
+    first copy starts in the background."""
+    _require_backup_owner(db, ctx.user)
+    db.rollback()
+    try:
+        state = cloud.poll_google(actor_id=ctx.user.id, request_id=ctx.request_id)
+    except cloud.CloudError as exc:
+        raise _cloud_error(exc) from exc
+    if state == "connected":
+        cloud.copy_in_background(actor_id=ctx.user.id, request_id=ctx.request_id)
+    return {"state": state, "backup": _backup_view(db, ctx.user)}
+
+
+@router.post("/settings/backup/cloud/cancel")
+def cloud_cancel(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    _require_backup_owner(db, ctx.user)
+    cloud.cancel()
+    return _backup_view(db, ctx.user)
+
+
+@router.post("/settings/backup/cloud/copy")
+def cloud_copy_now(ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)) -> JSONResponse:
+    """Copy now, in the background; the page follows the status."""
+    if replay := replay_if_seen(db, ctx, None):
+        return replay
+    _require_backup_owner(db, ctx.user)
+    if cloud.connection() is None:
+        raise ApiError(409, "cloud_off", "No cloud copy is connected.")
+    db.rollback()
+    cloud.copy_in_background(actor_id=ctx.user.id, request_id=ctx.request_id)
+    return commit_with_response(db, ctx, None, 202, _backup_view(db, ctx.user))
+
+
+@router.post("/settings/backup/cloud/disconnect")
+def cloud_disconnect(
+    payload: CloudDisconnectIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
+) -> JSONResponse:
+    """Forget the sign-in and ask Google to withdraw it; the files in Drive stay unless delete_files (the page asks
+    once more). Audited as backup.cloud_disconnected (and backup.cloud_files_deleted)."""
+    if replay := replay_if_seen(db, ctx, payload):
+        return replay
+    _require_backup_owner(db, ctx.user)
+    db.rollback()
+    try:
+        cloud.disconnect(payload.delete_files, actor_id=ctx.user.id, request_id=ctx.request_id)
+    except cloud.CloudError as exc:
+        raise _cloud_error(exc) from exc
     return commit_with_response(db, ctx, payload, 200, _backup_view(db, ctx.user))
 
 

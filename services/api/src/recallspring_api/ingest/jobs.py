@@ -20,7 +20,7 @@ from typing import Any
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from .. import backup, clock, runtime
+from .. import backup, clock, cloud, runtime
 from ..config import get_settings
 from ..db import new_session
 from ..models import Job, Source, SourceSection
@@ -216,6 +216,7 @@ def run_worker(poll_seconds: float = 2.0, should_stop: Callable[[], bool] = lamb
             next_heartbeat = time.monotonic() + runtime.HEARTBEAT_SECONDS
         if time.monotonic() >= next_backup_check:
             backup.run_if_due()
+            cloud.copy_if_due()  # the encrypted backups to Google Drive, when connected (cloud.py)
             chatgpt_import.expire_all()
             next_backup_check = time.monotonic() + BACKUP_CHECK_SECONDS
         if not run_once():

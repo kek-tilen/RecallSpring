@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -119,6 +119,11 @@ class Settings(BaseSettings):
     chatgpt_auth_base: str = "https://auth.openai.com"
     chatgpt_api_base: str = "https://api.openai.com/v1"
     secrets_dir: Path = _REPO_ROOT / "local-data" / "secrets"
+    # Cloud copy of encrypted backups (cloud.py, 2026-11-27): the Google app this RecallSpring signs in with (an
+    # OAuth client of type "TVs and Limited Input devices", scope drive.file). Only from the server settings, never
+    # from Git; without them Settings says a cloud copy needs an app ID.
+    cloud_google_client_id: str | None = None
+    cloud_google_client_secret: SecretStr | None = None
     # Small runtime files, e.g. the worker heartbeat the API reads (runtime.py); never learner data.
     run_dir: Path = _REPO_ROOT / "local-data" / "run"
     ai_evaluation_lease_seconds: int = 180
