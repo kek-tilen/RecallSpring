@@ -70,6 +70,15 @@ asks new ones. The end shows **Review done**: what was saved (`Saved`, `Saved ·
 answers). The same block shows on Review and on Today while answers wait; until they are graded their next review
 date stays open.
 
+### Results (2026-11-27)
+Results answers "How did I answer?" in two views (`Simulations · Answers`). **Simulations** lists each simulation once,
+with its retakes folded in (course colour, date, "2 versions", "check first" for a diagnostic, and the first version's
+points as the benchmark). The picked one shows beside the list: its versions side by side per question with their
+grades, `Open answers` (the newest version) and `Take it again`. On phones the list opens a simulation directly, each
+retake has its own row, and the latest graded answers follow. **Answers** lists every answer (newest first, up to 200)
+as "concept · first sentence of the feedback" with its grade or "Waiting for a grade", filtered by course and grade;
+a row opens the answer and the full explanation of its grade in place. "AI grades are study feedback, not a score."
+
 ### Exams that are behind the learner (owner 2026-11-23)
 
 - Marking an exam **Passed** or **Cancelled** when its course is in focus and has no other exam coming up asks: "<course> is in focus until <date>. … End the focus now?" with `Keep until <date>` and `End focus`. Failed does not ask (a retake usually follows). Ending it is the same audited change as `End focus` on the course.

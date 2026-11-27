@@ -592,7 +592,7 @@ function itemText(x: unknown): string {
 const CONFIDENCE: Record<string, string> = { high: "high", medium: "medium", low: "low" };
 
 /** The learner's exact answer and the explanation of its grade, opened from the Answers tab. */
-function AnswerDetail({ row }: { row: AttemptRow }) {
+export function AnswerDetail({ row }: { row: AttemptRow }) {
   const q = useQuery({ queryKey: ["attempt", row.attempt_id], queryFn: () => get<AttemptDetail>(`/attempts/${row.attempt_id}`) });
   return (
     <Async q={q} lines={3}>

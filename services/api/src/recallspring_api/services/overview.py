@@ -318,13 +318,27 @@ def attempts_list(db: Session, user: User, course_id: uuid.UUID | None, limit: i
     )
     if course_id is not None:
         stmt = stmt.where(Question.course_id == course_id)
+    rows = db.execute(stmt).all()
+    # Results → Answers (2026-11-27): which concepts each answer was about, so a row reads "concept · feedback".
+    terms: dict[uuid.UUID, list[dict[str, str]]] = {}
+    if rows:
+        for question_id, concept_id, term in db.execute(
+            select(QuestionConcept.question_id, Concept.id, Concept.term)
+            .join(Concept, Concept.id == QuestionConcept.concept_id)
+            .where(QuestionConcept.question_id.in_({q.id for _, q in rows}), Concept.deleted_at.is_(None))
+            .order_by(Concept.term)
+        ).all():
+            terms.setdefault(question_id, []).append({"id": str(concept_id), "term": term})
     out = []
-    for attempt, question in db.execute(stmt).all():
+    for attempt, question in rows:
         eff = effective_assessment(assessments_for(db, attempt.id))
         out.append(
             {
                 "attempt_id": str(attempt.id),
                 "course_id": str(question.course_id),
+                "question_id": str(question.id),
+                "concepts": terms.get(question.id, []),
+                "feedback": eff.feedback if eff else None,
                 "question": question.prompt,
                 "question_type": question.question_type,
                 "bloom_level": question.bloom_level,

@@ -8,7 +8,7 @@ import { AwaitingGrade, QuizForm } from "../components/QuizForm";
 import { MathText } from "../components/Markdown";
 import { Async, Card, Empty, ErrorNote, GradeChip, PageHead } from "../components/ui";
 import { ATTEMPT_KIND, dateLabel, dateTime, gradedBy, plural } from "../format";
-import { courseTitles, keys, useCourses, useQuiz, useQuizzes } from "../queries";
+import { courseTitles, keys, useCourses, useQuiz } from "../queries";
 import type { QuizComparison, QuizItemView, QuizSummary, QuizView } from "../types";
 
 /** A retake answers seen questions; the first version stays the benchmark (2026-11-26). */
@@ -48,7 +48,7 @@ function Retake({ quiz, course }: { quiz: QuizView; course: string }) {
     },
   });
   return (
-    <Card title="Take it again">
+    <Card id="retake" title="Take it again">
       <div className="stack" style={{ gap: 10 }}>
         <p className="small" style={{ margin: 0 }}>
           A retake is a new version with the same questions; this one stays as it is, and the versions are compared per
@@ -191,20 +191,6 @@ export function QuizTable({ quizzes, titles }: { quizzes: QuizSummary[]; titles?
   );
 }
 
-export function SimulationsPage() {
-  const q = useQuizzes();
-  const courses = useCourses();
-  return (
-    <div className="page">
-      <PageHead
-        title="Simulations"
-        sub="Midterm and exam simulations. Answer open ones here or in your assistant's form; multiple-choice is graded from the answer key, open answers by your assistant."
-      />
-      <Async q={q}>{(quizzes) => <QuizTable quizzes={quizzes} titles={courseTitles(courses.data)} />}</Async>
-    </div>
-  );
-}
-
 function Item({ item, submitted }: { item: QuizItemView; submitted: boolean }) {
   const picked = item.answer?.match(/^([A-H])\)/)?.[1];
   return (
@@ -294,7 +280,7 @@ export function SimulationPage() {
               <PageHead
                 title={quiz.title}
                 crumbs={[
-                  { to: "/simulations", label: "Simulations" },
+                  { to: "/simulations", label: "Results" },
                   { to: `/courses/${quiz.course_id}?tab=simulations`, label: titles[quiz.course_id] ?? "Course" },
                 ]}
                 sub={

@@ -22,7 +22,8 @@ import { ReadinessPage } from "./pages/Readiness";
 import { ReviewPage } from "./pages/Review";
 import { ReviewRunPage } from "./pages/ReviewRun";
 import { SettingsPage } from "./pages/Settings";
-import { SimulationPage, SimulationsPage } from "./pages/Simulations";
+import { ResultsPage } from "./pages/Results";
+import { SimulationPage } from "./pages/Simulations";
 import { WeekPage } from "./pages/Week";
 import { WelcomePage } from "./pages/Welcome";
 import { useSession } from "./queries";
@@ -70,7 +71,7 @@ export const router = createBrowserRouter([
           { path: "concepts/:conceptId", element: <ConceptPage /> },
           { path: "review", element: <ReviewPage /> },
           { path: "review/now/:courseId", element: <ReviewRunPage /> },
-          { path: "simulations", element: <SimulationsPage /> },
+          { path: "simulations", element: <ResultsPage /> },
           { path: "simulations/:quizId", element: <SimulationPage /> },
           { path: "library", element: <LibraryPage /> },
           { path: "library/archived", element: <ArchivedPage /> },

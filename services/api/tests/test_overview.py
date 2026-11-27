@@ -59,6 +59,10 @@ def test_dashboard_course_concept_and_history_views(owner_api: Api, conn: Connec
 
     answers_list = owner_api.get("/attempts", course_id=course).json()
     assert len(answers_list) == 4 and {a["question"] for a in answers_list} >= {"Which scan is easiest to detect?"}
+    # Results → Answers (2026-11-27): each row names its concepts and carries the effective grade's feedback
+    assert all(a["concepts"] == [{"id": ids["Nmap"], "term": "Nmap"}] for a in answers_list)
+    assert all(a["question_id"] for a in answers_list)
+    assert {a["feedback"] is None for a in answers_list if a["grade"] is None} <= {True}
 
     hist = owner_api.get("/history").json()
     texts = {h["text"] for h in hist}

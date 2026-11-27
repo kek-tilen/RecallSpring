@@ -428,6 +428,10 @@ export interface AttemptDetail {
 export interface AttemptRow {
   attempt_id: string;
   course_id: string;
+  /** Results → Answers (2026-11-27) */
+  question_id?: string;
+  concepts?: { id: string; term: string }[];
+  feedback?: string | null;
   question: string;
   question_type: "open" | "mcq";
   bloom_level: number;
