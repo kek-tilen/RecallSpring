@@ -1,0 +1,105 @@
+# RecallSpring in Docker (docs/install-docker.md). The install script puts this file, unchanged, next to its .env
+# (random database password, the image pinned by digest, ports, your user id) and runs it; the `recallspring` command
+# in the same folder starts, stops and updates it. Every port is on 127.0.0.1 only: this computer, nobody else.
+#
+#   db       PostgreSQL 16, on an internal network with no way out and no port on this computer
+#   migrate  brings the database structure up to date (with a backup first when it holds data), then stops
+#   api      the API and the web app at http://127.0.0.1:${RS_PORT}
+#   worker   imports, backups, reminders (no model calls)
+#   mcp      the connector for Codex and Antigravity at http://127.0.0.1:${RS_MCP_PORT}/mcp
+
+x-app: &app
+  image: ${RS_IMAGE:?set RS_IMAGE in .env}
+  user: "${RS_UID:-10001}:${RS_GID:-10001}"
+  read_only: true
+  tmpfs:
+    - /tmp:size=512m
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  environment:
+    RS_DATABASE_URL: postgresql+psycopg://recallspring:${RS_DB_PASSWORD:?set RS_DB_PASSWORD in .env}@db:5432/${RS_DB_NAME:-recallspring}
+    RS_DEFAULT_TIMEZONE: ${RS_TIMEZONE:-UTC}
+    RS_STORAGE_DIR: ${RS_STORAGE_DIR:-/data/storage} # RS_DB_NAME and RS_STORAGE_DIR: after a restore (Going back)
+  volumes:
+    - ./data:/data
+    - ${RS_BACKUP_HOST_DIR:-./backups}:/backups
+  networks: [db, out]
+  pids_limit: 512
+
+services:
+  db:
+    image: postgres:16.16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
+    environment:
+      POSTGRES_USER: recallspring
+      POSTGRES_DB: recallspring
+      POSTGRES_PASSWORD: ${RS_DB_PASSWORD:?set RS_DB_PASSWORD in .env}
+    volumes:
+      - db:/var/lib/postgresql/data
+    networks: [db]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recallspring -d recallspring"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 512m
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["recallspring", "upgrade-db", "--config", "/app/api/alembic.ini"]
+    depends_on:
+      db: { condition: service_healthy }
+    mem_limit: 512m
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["recallspring", "serve", "--host", "0.0.0.0", "--port", "4318"]
+    ports:
+      - "127.0.0.1:${RS_PORT:-4318}:4318"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4318/api/v1/health/ready', timeout=5)"]
+      interval: 15s
+      timeout: 8s
+      start_period: 30s
+      retries: 4
+    mem_limit: 1g
+    restart: unless-stopped
+
+  worker:
+    <<: *app
+    command: ["recallspring", "worker"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    mem_limit: 1g
+    restart: unless-stopped
+
+  mcp:
+    image: ${RS_IMAGE:?set RS_IMAGE in .env}
+    user: "${RS_UID:-10001}:${RS_GID:-10001}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command: ["recallspring-mcp", "--http", "--host", "0.0.0.0", "--port", "4319"]
+    environment:
+      RS_API_URL: http://api:4318
+      RS_REMOTE_URL: http://127.0.0.1:${RS_MCP_PORT:-4319}
+      RS_WEB_URL: http://127.0.0.1:${RS_PORT:-4318}
+    ports:
+      - "127.0.0.1:${RS_MCP_PORT:-4319}:4319"
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [out]
+    mem_limit: 256m
+    pids_limit: 128
+    restart: unless-stopped
+
+networks:
+  db:
+    internal: true # the database never reaches outside
+  out: {}
+
+volumes:
+  db:

@@ -1,0 +1,199 @@
+#!/bin/sh
+# The everyday command of a Docker install (docs/install-docker.md). It lives in the install folder, next to
+# compose.yml and .env, and only talks to Docker's project for this folder.
+#
+#   recallspring status              version, what runs, health, and whether a newer release exists
+#   recallspring update [--beta] [--version vX.Y.Z] [--yes] [--no-backup]
+#   recallspring logs [--worker|--mcp|--db]
+#   recallspring stop | start
+#   recallspring setup-link          a new one-time link for the first account
+#   recallspring backup              back up now (also runs every night)
+#   recallspring admin <command>     run a RecallSpring admin command, e.g. admin reset-password --username ana
+#   recallspring uninstall           stop and remove the containers; your data stays unless you say otherwise
+set -eu
+
+RS_REPO="kek-tilen/RecallSpring"
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if command -v cygpath >/dev/null 2>&1; then # Git Bash on Windows: hand Docker C:/... paths
+  DIR=$(cygpath -m "$DIR")
+fi
+ENV_FILE="$DIR/.env"
+
+say() { printf '%s\n' "$*"; }
+fail() {
+  printf 'recallspring: %s\n' "$*" >&2
+  exit 1
+}
+[ -f "$ENV_FILE" ] || fail "no .env next to this command ($DIR). Is RecallSpring installed here?"
+
+value_of() { sed -n "s/^$1=//p" "$2" | head -n 1; }
+PORT=$(value_of RS_PORT "$ENV_FILE")
+VERSION=$(value_of RS_VERSION "$ENV_FILE")
+
+dc() { # MSYS_NO_PATHCONV: Git Bash must not turn container paths such as /data into Windows paths
+  if [ -f "$DIR/compose.local.yml" ]; then
+    MSYS_NO_PATHCONV=1 docker compose --project-directory "$DIR" -f "$DIR/compose.yml" -f "$DIR/compose.local.yml" --env-file "$ENV_FILE" "$@"
+  else
+    MSYS_NO_PATHCONV=1 docker compose --project-directory "$DIR" -f "$DIR/compose.yml" --env-file "$ENV_FILE" "$@"
+  fi
+}
+
+healthy() { curl -fs -o /dev/null --max-time 3 "http://127.0.0.1:${PORT:-4318}/api/v1/health/ready"; }
+
+wait_healthy() {
+  i=0
+  until healthy; do
+    i=$((i + 1))
+    [ "$i" -lt 90 ] || return 1
+    sleep 2
+  done
+}
+
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+
+newest() { # [beta] -> tag of the newest release
+  if [ "${1:-0}" = 1 ]; then url="https://api.github.com/repos/$RS_REPO/releases?per_page=1"; else
+    url="https://api.github.com/repos/$RS_REPO/releases/latest"
+  fi
+  curl -fsSL --proto '=https' --tlsv1.2 --max-time 15 "$url" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+ask() {
+  [ "${YES:-0}" = 1 ] && return 0
+  { exec 3</dev/tty; } 2>/dev/null || fail "no terminal to ask in; add --yes"
+  printf '%s [y/N] ' "$1"
+  read -r answer <&3 || answer=""
+  exec 3<&-
+  case "$answer" in y | Y | yes | YES | Yes) return 0 ;; *) return 1 ;; esac
+}
+
+set_value() { # KEY VALUE: replace a line of .env, keeping it readable by you only
+  tmp="$ENV_FILE.new"
+  (umask 077 && sed "s|^$1=.*|$1=$2|" "$ENV_FILE" >"$tmp")
+  mv "$tmp" "$ENV_FILE"
+}
+
+cmd_status() {
+  say "RecallSpring ${VERSION:-?} in $DIR"
+  dc ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}' || true
+  if healthy; then say "Web app: http://127.0.0.1:$PORT/ (ready)"; else say "Web app: not answering at http://127.0.0.1:$PORT/"; fi
+  latest=$(newest 0 2>/dev/null || true)
+  if [ -n "$latest" ] && [ "$latest" != "$VERSION" ]; then
+    say "A newer release exists: $latest. Update with: $DIR/recallspring update"
+  fi
+}
+
+cmd_update() {
+  BETA=0
+  TARGET=""
+  YES=0
+  NO_BACKUP=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --beta) BETA=1; shift ;;
+      --version) TARGET="${2:?--version needs a release}"; shift 2 ;;
+      --yes | -y) YES=1; shift ;;
+      --no-backup) NO_BACKUP=1; shift ;;
+      *) fail "unknown option $1" ;;
+    esac
+  done
+  [ -n "$TARGET" ] || TARGET=$(newest "$BETA") || true
+  [ -n "$TARGET" ] || fail "could not ask GitHub for the newest release"
+  if [ "$TARGET" = "$VERSION" ]; then
+    say "RecallSpring $VERSION is the newest release."
+    return 0
+  fi
+  WORK=$(mktemp -d 2>/dev/null || mktemp -d -t recallspring)
+  trap 'rm -rf "$WORK"' EXIT
+  base="https://github.com/$RS_REPO/releases/download/$TARGET"
+  for f in SHA256SUMS compose.yml images.env recallspring; do
+    curl -fsSL --proto '=https' --tlsv1.2 --retry 2 -o "$WORK/$f" "$base/$f" || fail "could not download $f of $TARGET"
+  done
+  for f in compose.yml images.env recallspring; do
+    want=$(awk -v f="$f" '$2 == f || $2 == "*" f { print $1 }' "$WORK/SHA256SUMS")
+    [ -n "$want" ] && [ "$(sha256_of "$WORK/$f")" = "$want" ] || fail "$f of $TARGET does not match its SHA256SUMS"
+  done
+  if [ "$(value_of RS_FULL "$ENV_FILE")" = 1 ]; then key=RS_IMAGE_FULL; else key=RS_IMAGE_BASE; fi
+  image=$(value_of "$key" "$WORK/images.env")
+  [ -n "$image" ] || fail "images.env of $TARGET names no image"
+
+  say "Update RecallSpring $VERSION -> $TARGET"
+  say "What is new: https://github.com/$RS_REPO/releases/tag/$TARGET"
+  ask "Continue?" || fail "nothing was changed."
+  if [ "$NO_BACKUP" = 0 ]; then
+    say "Backing up first..."
+    dc exec -T api recallspring backup || fail "the backup failed, so nothing was changed (or add --no-backup)."
+  fi
+  cp "$DIR/compose.yml" "$DIR/compose.yml.previous"
+  cp "$ENV_FILE" "$ENV_FILE.previous"
+  cp "$WORK/compose.yml" "$WORK/images.env" "$DIR/"
+  set_value RS_IMAGE "$image"
+  set_value RS_VERSION "$TARGET"
+  dc pull || fail "could not download the new images; the old version keeps running."
+  # The database structure changes as its own step (the migrate service) before the new version starts.
+  if dc up -d --remove-orphans && wait_healthy; then
+    chmod 700 "$WORK/recallspring"
+    mv "$WORK/recallspring" "$DIR/recallspring" # a new file: this running script keeps the old one
+    say "RecallSpring $TARGET is running at http://127.0.0.1:$PORT/"
+    return 0
+  fi
+  say "The new version did not start. Going back to $VERSION..."
+  mv "$DIR/compose.yml.previous" "$DIR/compose.yml"
+  mv "$ENV_FILE.previous" "$ENV_FILE"
+  dc up -d --remove-orphans || true
+  if wait_healthy; then
+    say "$VERSION runs again. The log of the failed start: $DIR/recallspring logs"
+  else
+    say "$VERSION does not start either: the database structure may have changed already."
+    say "Restore the backup made before the update: docs/install-docker.md > Going back."
+  fi
+  exit 1
+}
+
+cmd_uninstall() {
+  say "This stops RecallSpring and removes its containers. Your data stays in Docker's volume and in $DIR,"
+  say "and the backups stay where they are, so installing again in $DIR brings everything back."
+  YES=0
+  ask "Remove the containers?" || fail "nothing was changed."
+  dc down --remove-orphans
+  say "Removed. To delete your data too, type: delete my data"
+  { exec 3</dev/tty; } 2>/dev/null || return 0
+  printf '> '
+  read -r answer <&3 || answer=""
+  exec 3<&-
+  if [ "$answer" = "delete my data" ]; then
+    dc down -v
+    rm -rf "$DIR/data" "$ENV_FILE"
+    say "Deleted the database and $DIR/data. Backups were kept; delete them yourself when you are sure."
+  else
+    say "Your data was kept."
+  fi
+}
+
+command="${1:-status}"
+[ $# -gt 0 ] && shift
+case "$command" in
+  status) cmd_status ;;
+  update) cmd_update "$@" ;;
+  logs)
+    case "${1:-}" in --worker) svc=worker ;; --mcp) svc=mcp ;; --db) svc=db ;; *) svc=api ;; esac
+    dc logs --tail 100 -f "$svc"
+    ;;
+  stop) dc stop ;;
+  start | up)
+    dc up -d --remove-orphans
+    [ "$command" = up ] || { wait_healthy && say "RecallSpring runs at http://127.0.0.1:$PORT/"; }
+    ;;
+  pull) dc pull --quiet ;;
+  setup-link) dc exec -T api recallspring setup-link --url "http://127.0.0.1:$PORT" ;;
+  backup) dc exec -T api recallspring backup ;;
+  admin) # a terminal when there is one (reset-password asks), none when called from a script
+    if [ -t 0 ] && [ -t 1 ]; then dc exec api recallspring "$@"; else dc exec -T api recallspring "$@"; fi
+    ;;
+  uninstall) cmd_uninstall ;;
+  version) say "${VERSION:-unknown}" ;;
+  -h | --help | help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) fail "unknown command $command (try: recallspring help)" ;;
+esac

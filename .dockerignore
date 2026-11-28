@@ -1,0 +1,27 @@
+# Only what infra/docker/Dockerfile needs goes into the build: never local data, settings files, virtual
+# environments or Git history.
+*
+!LICENSE
+!apps/web/package.json
+!apps/web/package-lock.json
+!apps/web/index.html
+!apps/web/public
+!apps/web/src
+!apps/web/tsconfig.json
+!apps/web/vite.config.ts
+!services/api/pyproject.toml
+!services/api/alembic.ini
+!services/api/migrations
+!services/api/src
+!services/api/requirements.lock
+!services/api/requirements-dev.lock
+!services/mcp/pyproject.toml
+!services/mcp/src
+!services/mcp/requirements.lock
+!packages/contracts/schemas
+!infra/docker/linux_lock.py
+**/__pycache__
+**/*.egg-info
+**/.env
+**/*.test.ts
+**/*.test.tsx
