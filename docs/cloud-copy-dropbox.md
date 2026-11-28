@@ -44,5 +44,5 @@ Only its own app folder, `Dropbox › Apps › RecallSpring`:
   there.
 
 Nothing else in the Dropbox, no account name and no email address. Only one provider at a time: to move from Google
-Drive to Dropbox (or back), disconnect first. Details and the rest of the behaviour: docs/08 → Cloud copy and Your
+Drive or OneDrive to Dropbox (or back), disconnect first. Details and the rest of the behaviour: docs/08 → Cloud copy and Your
 cloud folder.

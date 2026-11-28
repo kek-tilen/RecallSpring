@@ -39,4 +39,4 @@ it creates. The page continues by itself; the first copy starts at once.
 
 Only the files it created: the folder `My Drive › RecallSpring backups` and what is in it. Nothing else in the Drive,
 no account name and no email address. Details and the rest of the behaviour: docs/08 → Cloud copy. For Dropbox
-instead, see docs/cloud-copy-dropbox.md.
+or OneDrive instead, see docs/cloud-copy-dropbox.md or docs/cloud-copy-onedrive.md.

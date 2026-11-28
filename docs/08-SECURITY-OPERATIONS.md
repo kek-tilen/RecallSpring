@@ -193,11 +193,12 @@ folder: 36 tables, every row count equal to the manifest, Alembic revision match
 checksums, that day's answers and notes present, and the API started and answered `ready` on the copy. The throwaway
 database and folder were then removed.
 
-### Cloud copy to Google Drive or Dropbox (`cloud.py`, 2026-11-27; Dropbox `cloud_dropbox.py`, 2026-11-28)
+### Cloud copy to Google Drive, Dropbox or OneDrive (`cloud.py`, 2026-11-27; `cloud_dropbox.py`, `cloud_onedrive.py`, 2026-11-28)
 
 Settings → Data & backups → *Cloud copy* uploads the **encrypted** backups to a folder RecallSpring creates in the
-learner's Google Drive (`My Drive › RecallSpring backups`) or Dropbox (`Dropbox › Apps › RecallSpring › Backups`),
-with no sync app. One provider at a time; the local folder stays the main copy.
+learner's Google Drive (`My Drive › RecallSpring backups`), Dropbox (`Dropbox › Apps › RecallSpring › Backups`) or
+OneDrive (`OneDrive › Apps › RecallSpring › Backups`), with no sync app. One provider at a time; the local folder
+stays the main copy.
 
 - **Needs encryption on.** A snapshot whose manifest is not encrypted is never uploaded; older unencrypted backups stay
   on this computer only.
@@ -210,28 +211,38 @@ with no sync app. One provider at a time; the local folder stays the main copy.
   `files.metadata.read` and `files.content.write`; no `account_info.read`, so no account details and no free room
   (a full Dropbox shows as "Your Dropbox is full" when an upload fails). Only the App key from the server settings
   (`RS_CLOUD_DROPBOX_APP_KEY`), no secret (docs/cloud-copy-dropbox.md).
-- **Secrets:** only the refresh token is kept, in `secrets_dir` (`cloud-google.bin` or `cloud-dropbox.bin`, DPAPI on
+- **Sign-in, OneDrive:** the same device-code sign-in as Google, at microsoft.com/devicelogin, through
+  `login.microsoftonline.com/common` (personal and school or work accounts). Scopes `Files.ReadWrite.AppFolder` and
+  `offline_access` only: the app sees only its own folder (`special/approot`), no account details; free room is read
+  from the drive quota when Microsoft gives it. Only the Application (client) ID of an app the installation registers
+  in its own Entra directory (`RS_CLOUD_ONEDRIVE_CLIENT_ID`), public client, no secret (docs/cloud-copy-onedrive.md).
+  A school that blocks code sign-in (Conditional Access, AADSTS53003) is shown as *blocked*, a school whose OneDrive
+  refuses the app folder as *not supported*; nothing is connected and wider access is never asked for. Microsoft
+  rotates the refresh token on each use and the newest replaces the old one.
+- **Secrets:** only the refresh token is kept, in `secrets_dir` (`cloud-<provider>.bin`, DPAPI on
   Windows, 0600 elsewhere), like the ChatGPT sign-in; the device code or the PKCE verifier waits there while the
   learner signs in (`cloud-<provider>-pending.bin`). Neither reaches the database, a backup, History, logs or the
   browser. The pasted code is used once and never stored or logged. No account name or address is stored.
 - **Layout:** the same as the backup folder (`snapshots/<name>/{db.dump.age, secret.json.age, manifest.json}` and
   `sealed/<hmac>.age`; the manifest goes last, so a snapshot is complete when its manifest is there). A folder
-  downloaded from drive.google.com or dropbox.com restores with `recallspring backup-restore --from <folder> --key <key file>
-  --database <new> --storage <empty folder>`.
+  downloaded from drive.google.com, dropbox.com or onedrive.live.com restores with
+  `recallspring backup-restore --from <folder> --key <key file> --database <new> --storage <empty folder>`.
 - **Day to day:** the worker checks every 10 minutes after its backup check; a copy runs when there is a newer local
-  backup (Back up now starts one at once). Only missing files are uploaded, in resumable 8 MiB pieces (a dropped
-  piece asks Google how far it got; Dropbox upload sessions resume from the offset Dropbox reports); sizes are read
+  backup (Back up now starts one at once). Only missing files are uploaded, in resumable 8 MiB pieces (10 MiB for
+  OneDrive; a dropped piece asks Google how far it got; Dropbox upload sessions resume from the offset Dropbox
+  reports; OneDrive upload sessions from the ranges OneDrive still expects); sizes are read
   back; then what the local folder removed (7 daily, 4 weekly or
   the last 7) is removed from the cloud too. One copy at a time (PostgreSQL advisory lock).
 - **Failures:** never affect the local backup. Retries wait 15 minutes, 1, 4, then 12 hours; *not enough room* waits
-  until the next day. Today → Needs attention shows a failure after a day in a row, and at once when Google or
-  Dropbox withdrew access (copying stops until the learner signs in again). If the folder was deleted there, it is
-  made again.
-- **Disconnect:** forgets the sign-in and asks Google or Dropbox to revoke it; the files stay unless the learner
-  chooses to delete them too (asked once more; Dropbox keeps deleted files in its own deleted files for a while).
+  until the next day. Today → Needs attention shows a failure after a day in a row, and at once when Google,
+  Dropbox or Microsoft withdrew access (copying stops until the learner signs in again). If the folder was deleted
+  there, it is made again.
+- **Disconnect:** forgets the sign-in and asks Google or Dropbox to revoke it (Microsoft has no such call: the row
+  says the learner can remove RecallSpring in their Microsoft account); the files stay unless the learner chooses to
+  delete them too (asked once more; Dropbox and OneDrive keep deleted files in their own bin for a while).
 - **Audited:** `backup.cloud_connected`, `backup.cloud_disconnected` (files kept or deleted), `backup.cloud_failed`
   (once per run of failures), `backup.cloud_files_deleted`. Only the first account may connect or disconnect.
-- **Not yet:** OneDrive (next); a restore command that downloads by itself.
+- **Not yet:** iCloud Drive (no API; only through a synced folder); a restore command that downloads by itself.
 
 ### Export (`services/exports.py`, 2026-11-27)
 
@@ -248,11 +259,12 @@ and any of the three parts.
   session (`Cache-Control: no-store`). Today shows a ready export until it is downloaded, and a failed one.
 - History: `export.created`, `export.downloaded`, `export.sent_to_drive`.
 
-### Your cloud folder (`services/my_drive.py`, migration 0040, 2026-11-27; Dropbox migration 0041, 2026-11-28)
+### Your cloud folder (`services/my_drive.py`, migration 0040, 2026-11-27; Dropbox 0041, OneDrive 0042, 2026-11-28)
 
 Settings → Data & backups → *Your cloud folder* (called *Your Google Drive* until 2026-11-28) keeps a **readable**
 copy of each learner's own material in their own Google Drive, in `My Drive › RecallSpring › <course>/<their
-folders>/<file>`, or Dropbox, in `Dropbox › Apps › RecallSpring › Material › <course>/…`. One provider at a time per
+folders>/<file>`, Dropbox, in `Dropbox › Apps › RecallSpring › Material › <course>/…`, or OneDrive, in
+`OneDrive › Apps › RecallSpring › Material › <course>/…`. One provider at a time per
 learner. It is not a backup (that is Cloud copy, encrypted, for the whole installation) and it is one way:
 RecallSpring keeps working from its own copy.
 
@@ -262,6 +274,10 @@ RecallSpring keeps working from its own copy.
   Dropbox: the same pasted-code sign-in and Dropbox app as Cloud copy (`RS_CLOUD_DROPBOX_APP_KEY`), each learner
   with their own account (docs/cloud-copy-dropbox.md). Dropbox names are unique regardless of letter case, so a
   second file that differs only in case gets " (1)"; renames are moves within the app folder.
+  OneDrive: the same code sign-in and Microsoft app as Cloud copy (`RS_CLOUD_ONEDRIVE_CLIENT_ID`), each learner with
+  their own account (docs/cloud-copy-onedrive.md). Names OneDrive refuses (`" * : < > ? / \ |`, a trailing dot or
+  space, `CON`, `desktop.ini` and the like) are made safe with `_`; a clash regardless of case gets " 1"; uploads
+  are 10 MiB pieces.
 - **Secrets:** each learner's refresh token is kept in `secrets_dir/drive-<user id>.bin` (DPAPI on Windows, 0600
   elsewhere); the device code waits in `drive-<user id>-pending.bin`. Neither reaches the database, a backup,
   History, logs or the browser. No account name or address is stored. The database keeps only the connection state
@@ -276,11 +292,14 @@ RecallSpring keeps working from its own copy.
   tomorrow); Today shows a failing copy after a day, and withdrawn access at once (nothing else stops).
 - **Exports:** with *Exports go here too* on, Export offers *To my cloud folder*: the finished ZIP is uploaded to
   `Exports` in that folder and deleted here. If the upload fails, the ZIP stays here to download and Today says so.
-- **Disconnect** forgets the sign-in and asks Google or Dropbox to withdraw it. The files stay unless the learner chooses
-  *Delete everything RecallSpring made there* (asked once more), which deletes the RecallSpring folder.
+- **Disconnect** forgets the sign-in and asks Google or Dropbox to withdraw it (OneDrive: it only forgets it). The
+  files stay unless the learner chooses *Delete everything RecallSpring made there* (asked once more), which deletes
+  the RecallSpring folder.
 - History: `drive.connected`, `drive.copy_existing`, `drive.failed` (once per failing streak), `drive.disconnected`
   (files kept or deleted).
-- Rollback: migration 0041 only widens `drive_connections.provider` to allow `dropbox` (`alembic downgrade 0040`
+- Rollback: migration 0042 only widens `drive_connections.provider` to allow `onedrive` (`alembic downgrade 0041` is
+  refused while a learner has OneDrive connected, so disconnect first); migration 0041 only widens
+  `drive_connections.provider` to allow `dropbox` (`alembic downgrade 0040`
   is refused while a learner has Dropbox connected, so disconnect first); migration 0040 only adds the two tables
   (`alembic downgrade 0039` drops them); the files in Drive and the
   token files are untouched by a downgrade, so disconnect first.
