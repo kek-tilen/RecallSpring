@@ -1,5 +1,5 @@
 """Cloud copy of the encrypted backups (docs/08 -> Backups -> Cloud copy, decided 2026-11-27): Google Drive, and
-Dropbox since 2026-11-28 (cloud_dropbox.py). One of them at a time.
+since 2026-11-28 Dropbox (cloud_dropbox.py) and OneDrive (cloud_onedrive.py). One of them at a time.
 
 RecallSpring uploads its own encrypted backups to a folder it creates in the learner's cloud storage, with no sync app.
 The local backup folder stays the main copy; the cloud copy follows it after every backup and removes what the local
@@ -11,6 +11,8 @@ folder removed, so the cloud keeps the same backups (7 daily and 4 weekly, or th
   (RS_CLOUD_GOOGLE_CLIENT_ID / RS_CLOUD_GOOGLE_CLIENT_SECRET), never from Git (2026-11-27).
 - Dropbox: the same copy into Dropbox/Apps/<app name>/Backups; sign-in with a code Dropbox shows and the learner
   pastes back (PKCE, no app secret; RS_CLOUD_DROPBOX_APP_KEY). Details in cloud_dropbox.py.
+- OneDrive: the same copy into OneDrive/Apps/<app name>/Backups; the same device-code sign-in as Google, at
+  microsoft.com/devicelogin (no secret; RS_CLOUD_ONEDRIVE_CLIENT_ID). Details in cloud_onedrive.py.
 - Only the refresh token is kept, protected like the ChatGPT sign-in (``secrets_dir``: DPAPI on Windows, 0600
   elsewhere); never in the database, a backup, History, logs or the browser. No account details are stored.
 - Only encrypted backups leave the computer: a snapshot whose manifest is not encrypted is never uploaded, and
@@ -44,8 +46,10 @@ from .config import get_settings
 
 log = logging.getLogger(__name__)
 
-PROVIDERS = ("google", "dropbox")
-LABELS = {"google": "Google Drive", "dropbox": "Dropbox"}
+PROVIDERS = ("google", "dropbox", "onedrive")
+LABELS = {"google": "Google Drive", "dropbox": "Dropbox", "onedrive": "OneDrive"}
+DEVICE_PROVIDERS = ("google", "onedrive")  # sign-in with a code typed at the provider (device authorization)
+COMPANY = {"google": "Google", "onedrive": "Microsoft"}
 DROPBOX_PENDING = timedelta(minutes=30)  # how long a Dropbox sign-in waits for its code
 GOOGLE_DEVICE = "https://oauth2.googleapis.com/device/code"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
@@ -135,6 +139,8 @@ def configured(provider: str = "google") -> bool:
     s = get_settings()
     if provider == "dropbox":
         return bool(s.cloud_dropbox_app_key)
+    if provider == "onedrive":
+        return bool(s.cloud_onedrive_client_id)
     return bool(s.cloud_google_client_id and s.cloud_google_client_secret)
 
 
@@ -148,12 +154,27 @@ def _dropbox_key() -> str:
     return key
 
 
+def _onedrive_id() -> str:
+    client_id = get_settings().cloud_onedrive_client_id
+    if not client_id:
+        raise CloudError(
+            "not_configured",
+            "OneDrive needs an app ID in the server settings (RS_CLOUD_ONEDRIVE_CLIENT_ID); "
+            "docs/cloud-copy-onedrive.md.",
+        )
+    return client_id
+
+
 def provider(name: str) -> Any:
-    """The storage calls for one run: Google Drive or Dropbox (the same methods; a new object per run)."""
+    """The storage calls for one run: Google Drive, Dropbox or OneDrive (the same methods; a new object per run)."""
     if name == "dropbox":
         from .cloud_dropbox import Dropbox
 
         return Dropbox(_dropbox_key())
+    if name == "onedrive":
+        from .cloud_onedrive import OneDrive
+
+        return OneDrive(_onedrive_id())
     return Google()
 
 
@@ -175,44 +196,116 @@ def _http() -> httpx.Client:
     return httpx.Client(transport=_transport, timeout=httpx.Timeout(60.0, connect=15.0))
 
 
-# ---------------------------------------------------------------- sign-in (device authorization)
+# ---------------------------------------------------------------- sign-in (device authorization: Google, Microsoft)
 
 
-def start_google() -> dict[str, Any]:
-    """Ask Google for a code the learner types at google.com/device. The device code stays on the server."""
-    if backup.encryption() is None:
-        raise CloudError("needs_encryption", "Turn on encryption first: only encrypted backups leave this computer.")
-    client_id, _ = _client()
+def _device(name: str) -> tuple[str, str, dict[str, str], dict[str, str], str]:
+    """(device code URL, token URL, what to ask for a code, how the app is named when polling, default address)."""
+    if name == "onedrive":
+        from . import cloud_onedrive
+
+        client_id = _onedrive_id()
+        return (
+            cloud_onedrive.DEVICE,
+            cloud_onedrive.TOKEN,
+            {"client_id": client_id, "scope": cloud_onedrive.SCOPES},
+            {"client_id": client_id},
+            "https://microsoft.com/devicelogin",
+        )
+    client_id, secret = _client()
+    return (
+        GOOGLE_DEVICE,
+        GOOGLE_TOKEN,
+        {"client_id": client_id, "scope": SCOPE},
+        {"client_id": client_id, "client_secret": secret},
+        "https://www.google.com/device",
+    )
+
+
+def device_start(name: str) -> dict[str, Any]:
+    """Ask Google or Microsoft for a code the learner types on any device. Returns the pending sign-in to keep in
+    secrets_dir (with the device code, which never reaches the browser)."""
+    device_url, _, ask, _, default_url = _device(name)
+    company = COMPANY[name]
     try:
         with _http() as http:
-            r = http.post(GOOGLE_DEVICE, data={"client_id": client_id, "scope": SCOPE})
+            r = http.post(device_url, data=ask)
     except httpx.HTTPError as exc:
-        raise CloudError("unreachable", "Could not reach Google. Check the connection and try again.") from exc
+        raise CloudError("unreachable", f"Could not reach {company}. Check the connection and try again.") from exc
     if r.status_code != 200:
-        raise CloudError("refused", "Google did not give a sign-in code. Check the app ID in the server settings.")
+        raise CloudError("refused", f"{company} did not give a sign-in code. Check the app ID in the server settings.")
     body = r.json()
     now = clock.now()
-    pending = {
+    return {
+        "provider": name,
         "device_code": body["device_code"],
         "user_code": body["user_code"],
-        "verification_url": body.get("verification_url")
-        or body.get("verification_uri")
-        or "https://www.google.com/device",
-        "expires_at": (now + timedelta(seconds=int(body.get("expires_in", 1800)))).isoformat(),
+        "verification_url": body.get("verification_url") or body.get("verification_uri") or default_url,
+        "expires_at": (now + timedelta(seconds=int(body.get("expires_in", 900)))).isoformat(),
         "interval": max(5, int(body.get("interval", 5))),
         "next_poll_at": now.isoformat(),
     }
+
+
+def device_check(p: dict[str, Any], save: Callable[[dict[str, Any]], None]) -> tuple[str, dict[str, Any] | None]:
+    """One check of a pending device sign-in: ("connected", token response), or pending, denied, expired or blocked
+    (a school or work account whose organisation blocks this sign-in). ``save`` keeps the next poll time."""
+    now = clock.now()
+    if (backup._parse(p.get("expires_at")) or now) <= now:
+        return "expired", None
+    if (backup._parse(p.get("next_poll_at")) or now) > now:
+        return "pending", None  # at least `interval` seconds between checks
+    _, token_url, _, auth, _ = _device(p.get("provider", "google"))
+    data = auth | {"device_code": p["device_code"], "grant_type": "urn:ietf:params:oauth:grant-type:device_code"}
+    try:
+        with _http() as http:
+            r = http.post(token_url, data=data)
+    except httpx.HTTPError:
+        return "pending", None
+    body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    if r.status_code == 200 and body.get("refresh_token"):
+        return "connected", body
+    error = body.get("error")
+    if error == "slow_down":
+        p["interval"] = int(p["interval"]) + 5
+    if error in ("authorization_pending", "slow_down"):
+        p["next_poll_at"] = (now + timedelta(seconds=int(p["interval"]))).isoformat()
+        save(p)
+        return "pending", None
+    if 53003 in (body.get("error_codes") or []) or "AADSTS53003" in str(body.get("error_description") or ""):
+        return "blocked", None  # Conditional Access: the organisation blocks sign-in with a code
+    return ("denied" if error in ("access_denied", "authorization_declined") else "expired"), None
+
+
+def device_token(name: str, body: dict[str, Any]) -> dict[str, Any]:
+    """What is kept of a finished sign-in: the refresh token (and Google's scope)."""
+    if name == "google":
+        return {"refresh_token": body["refresh_token"], "scope": body.get("scope", SCOPE)}
+    return {"refresh_token": body["refresh_token"]}
+
+
+def start_device(name: str) -> dict[str, Any]:
+    """Cloud copy: a code for Google Drive or OneDrive. Needs encryption on."""
+    if backup.encryption() is None:
+        raise CloudError("needs_encryption", "Turn on encryption first: only encrypted backups leave this computer.")
+    pending = device_start(name)
     cancel()
-    _write_secret(_pending_path(), pending)
+    _write_secret(_pending_path(name), pending)
     return _pending_view(pending)
 
 
+def start_google() -> dict[str, Any]:
+    return start_device("google")
+
+
 def _pending_view(p: dict[str, Any]) -> dict[str, Any]:
-    """What the page needs to continue a sign-in: Google's code to type, or the Dropbox page to open. Never the
-    device code or the PKCE verifier."""
+    """What the page needs to continue a sign-in: the code to type at Google or Microsoft, or the Dropbox page to
+    open. Never the device code or the PKCE verifier."""
     if p.get("provider") == "dropbox":
         return {"provider": "dropbox", "authorize_url": p["authorize_url"], "expires_at": p["expires_at"]}
-    return {"provider": "google"} | {k: p[k] for k in ("user_code", "verification_url", "expires_at", "interval")}
+    return {"provider": p.get("provider", "google")} | {
+        k: p[k] for k in ("user_code", "verification_url", "expires_at", "interval")
+    }
 
 
 def _live(p: dict[str, Any] | None) -> bool:
@@ -284,43 +377,32 @@ def finish_dropbox(code: str, *, actor_id: uuid.UUID | None = None, request_id: 
     _connected("dropbox", {"refresh_token": body["refresh_token"]}, body["access_token"], actor_id, request_id)
 
 
-def poll_google(*, actor_id: uuid.UUID | None = None, request_id: str | None = None) -> str:
-    """One check whether the learner finished signing in: pending, connected, denied or expired."""
-    p = _read_secret(_pending_path())
-    if p is None:
+def poll_device(*, actor_id: uuid.UUID | None = None, request_id: str | None = None) -> str:
+    """One check whether the learner finished signing in at Google or Microsoft: pending, connected, denied,
+    expired, blocked (the organisation blocks this sign-in) or not_supported (the account refuses the app folder)."""
+    for name in DEVICE_PROVIDERS:
+        p = _read_secret(_pending_path(name))
+        if p is not None:
+            break
+    else:
         return "expired"
-    now = clock.now()
-    if (backup._parse(p.get("expires_at")) or now) <= now:
+    p.setdefault("provider", name)
+    state, body = device_check(p, lambda q: _write_secret(_pending_path(name), q))
+    if state == "pending":
+        return state
+    if state != "connected" or body is None:
         cancel()
-        return "expired"
-    if (backup._parse(p.get("next_poll_at")) or now) > now:
-        return "pending"  # Google asks for at least `interval` seconds between checks
-    client_id, secret = _client()
-    data = {
-        "client_id": client_id,
-        "client_secret": secret,
-        "device_code": p["device_code"],
-        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-    }
+        return state
     try:
-        with _http() as http:
-            r = http.post(GOOGLE_TOKEN, data=data)
-    except httpx.HTTPError:
-        return "pending"
-    body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-    if r.status_code == 200 and body.get("refresh_token"):
-        token = {"refresh_token": body["refresh_token"], "scope": body.get("scope", SCOPE)}
-        _connected("google", token, body["access_token"], actor_id, request_id)
-        return "connected"
-    error = body.get("error")
-    if error == "slow_down":
-        p["interval"] = int(p["interval"]) + 5
-    if error in ("authorization_pending", "slow_down"):
-        p["next_poll_at"] = (now + timedelta(seconds=int(p["interval"]))).isoformat()
-        _write_secret(_pending_path(), p)
-        return "pending"
-    cancel()
-    return "denied" if error == "access_denied" else "expired"
+        _connected(name, device_token(name, body), body["access_token"], actor_id, request_id)
+    except CloudError as exc:
+        if exc.code != "not_supported":
+            raise
+        return "not_supported"
+    return "connected"
+
+
+poll_google = poll_device
 
 
 def _access_token(http: httpx.Client, token_file: Path | None = None) -> str:

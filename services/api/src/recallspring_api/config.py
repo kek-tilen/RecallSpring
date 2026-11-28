@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     # Dropbox (cloud_dropbox.py, 2026-11-28): the App key of a Dropbox app with App folder access. PKCE sign-in, so
     # there is no app secret. Only from the server settings, never from Git.
     cloud_dropbox_app_key: str | None = None
+    # OneDrive (cloud_onedrive.py, 2026-11-28): the Application (client) ID of a Microsoft Entra app for personal and
+    # school or work accounts, with public client flows on. Device-code sign-in, no secret. Never from Git.
+    cloud_onedrive_client_id: str | None = None
     # Small runtime files, e.g. the worker heartbeat the API reads (runtime.py); never learner data.
     run_dir: Path = _REPO_ROOT / "local-data" / "run"
     ai_evaluation_lease_seconds: int = 180

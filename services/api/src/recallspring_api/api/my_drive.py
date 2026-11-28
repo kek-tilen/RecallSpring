@@ -1,5 +1,5 @@
-"""Your cloud folder (BYOS step 2, 2026-11-27; Dropbox 2026-11-28): each learner's own readable copy of their
-material in Google Drive or Dropbox (services/my_drive.py)."""
+"""Your cloud folder (BYOS step 2, 2026-11-27; Dropbox and OneDrive 2026-11-28): each learner's own readable copy of
+their material in Google Drive, Dropbox or OneDrive (services/my_drive.py)."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ STATUS = {
     "busy": 409,
     "bad_code": 422,
     "expired": 409,
+    "not_supported": 409,
 }
 
 
@@ -70,6 +71,12 @@ def drive_start(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> 
     return _start(db, ctx, "google")
 
 
+@router.post("/drive/onedrive/start")
+def drive_onedrive_start(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> JSONResponse:
+    """OneDrive: a code to type at microsoft.com/devicelogin. The device code stays on the server."""
+    return _start(db, ctx, "onedrive")
+
+
 @router.post("/drive/dropbox/start")
 def drive_dropbox_start(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> JSONResponse:
     """Dropbox: the page to open; Dropbox shows a code to paste back. The PKCE verifier stays on the server."""
@@ -92,7 +99,8 @@ def drive_dropbox_finish(
 
 @router.post("/drive/poll")
 def drive_poll(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Whether the learner finished signing in at Google: pending, connected, denied or expired."""
+    """Whether the learner finished signing in at Google or Microsoft: pending, connected, denied, expired, blocked
+    or not_supported."""
     try:
         state = my_drive.poll(db, ctx.user, ctx.request_id)
     except CloudError as exc:

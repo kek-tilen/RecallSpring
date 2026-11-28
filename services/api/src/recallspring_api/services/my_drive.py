@@ -1,10 +1,11 @@
 """Your cloud folder (BYOS step 2, decided 2026-11-27): a readable copy of each learner's own material, by course,
 and exports sent there when the learner chooses. Google Drive (My Drive › RecallSpring) or, since 2026-11-28, Dropbox
-(Dropbox › Apps › RecallSpring › Material); one of them at a time.
+(Dropbox › Apps › RecallSpring › Material) or OneDrive (OneDrive › Apps › RecallSpring › Material); one at a time.
 
 Each learner signs in with their own account (the same sign-in and app as the cloud copy of backups, cloud.py: Google
-with scope ``drive.file``, only files RecallSpring made; Dropbox with an app folder, only that folder, and a code the
-learner pastes back). The refresh token is kept per learner in
+with scope ``drive.file``, only files RecallSpring made; Dropbox and OneDrive with an app folder, only that folder;
+Dropbox with a code the learner pastes back, Google and OneDrive with a code typed at the provider). The refresh
+token is kept per learner in
 ``secrets_dir/drive-<user id>.bin`` (DPAPI on Windows, 0600 elsewhere), never in the database, a backup, History, logs
 or the browser. No account name or address is stored.
 
@@ -84,34 +85,14 @@ def connection(db: Session, user_id: uuid.UUID) -> DriveConnection | None:
     return row if row is not None and _token_path(user_id).exists() else None
 
 
-# ---------------------------------------------------------------- sign-in (as cloud.py: Google's device code, or the
-# code Dropbox shows)
+# ---------------------------------------------------------------- sign-in (as cloud.py: a code typed at Google or
+# Microsoft, or the code Dropbox shows)
 
 
 def start(user: User, provider: str = "google") -> dict[str, Any]:
     if provider == "dropbox":
         return _start_dropbox(user)
-    client_id, _ = cloud._client()
-    try:
-        with cloud._http() as http:
-            r = http.post(cloud.GOOGLE_DEVICE, data={"client_id": client_id, "scope": cloud.SCOPE})
-    except httpx.HTTPError as exc:
-        raise CloudError("unreachable", "Could not reach Google. Check the connection and try again.") from exc
-    if r.status_code != 200:
-        raise CloudError("refused", "Google did not give a sign-in code. Check the app ID in the server settings.")
-    body = r.json()
-    now = clock.now()
-    pending = {
-        "device_code": body["device_code"],
-        "user_code": body["user_code"],
-        "verification_url": body.get("verification_url")
-        or body.get("verification_uri")
-        or "https://www.google.com/device",
-        "expires_at": (now + timedelta(seconds=int(body.get("expires_in", 1800)))).isoformat(),
-        "interval": max(5, int(body.get("interval", 5))),
-        "next_poll_at": now.isoformat(),
-        "provider": "google",
-    }
+    pending = cloud.device_start(provider)
     cloud._write_secret(_pending_path(user.id), pending)
     return cloud._pending_view(pending)
 
@@ -181,42 +162,26 @@ def cancel(user_id: uuid.UUID) -> None:
 
 
 def poll(db: Session, user: User, request_id: str | None) -> str:
-    """One check whether the learner finished signing in: pending, connected, denied or expired."""
+    """One check whether the learner finished signing in at Google or Microsoft: pending, connected, denied, expired,
+    blocked (the organisation blocks this sign-in) or not_supported (the account refuses the app folder)."""
     p = cloud._read_secret(_pending_path(user.id))
-    if p is None or p.get("provider", "google") != "google":
+    name = (p or {}).get("provider", "google")
+    if p is None or name not in cloud.DEVICE_PROVIDERS:
         return "expired"
-    now = clock.now()
-    if (backup._parse(p.get("expires_at")) or now) <= now:
+    p.setdefault("provider", name)
+    state, body = cloud.device_check(p, lambda q: cloud._write_secret(_pending_path(user.id), q))
+    if state == "pending":
+        return state
+    if state != "connected" or body is None:
         cancel(user.id)
-        return "expired"
-    if (backup._parse(p.get("next_poll_at")) or now) > now:
-        return "pending"
-    client_id, secret = cloud._client()
-    data = {
-        "client_id": client_id,
-        "client_secret": secret,
-        "device_code": p["device_code"],
-        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-    }
+        return state
     try:
-        with cloud._http() as http:
-            r = http.post(cloud.GOOGLE_TOKEN, data=data)
-    except httpx.HTTPError:
-        return "pending"
-    body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-    if r.status_code == 200 and body.get("refresh_token"):
-        token = {"refresh_token": body["refresh_token"], "scope": body.get("scope", cloud.SCOPE)}
-        _connected(db, user, "google", token, body["access_token"], request_id)
-        return "connected"
-    error = body.get("error")
-    if error == "slow_down":
-        p["interval"] = int(p["interval"]) + 5
-    if error in ("authorization_pending", "slow_down"):
-        p["next_poll_at"] = (now + timedelta(seconds=int(p["interval"]))).isoformat()
-        cloud._write_secret(_pending_path(user.id), p)
-        return "pending"
-    cancel(user.id)
-    return "denied" if error == "access_denied" else "expired"
+        _connected(db, user, name, cloud.device_token(name, body), body["access_token"], request_id)
+    except CloudError as exc:
+        if exc.code != "not_supported":
+            raise
+        return "not_supported"
+    return "connected"
 
 
 # ---------------------------------------------------------------- copy runs
@@ -660,7 +625,7 @@ def view(db: Session, user: User) -> dict[str, Any]:
         "state": conn.state,
         "provider": conn.provider,
         "connected_at": conn.connected_at.isoformat(),
-        "folder": p.where + (f" › {p.drive_root}" if conn.provider == "dropbox" else "") if p else None,
+        "folder": p.where + (f" › {p.drive_root}" if conn.provider != "google" else "") if p else None,
         "mirror": conn.mirror,
         "exports": conn.exports,
         "files": int(files),

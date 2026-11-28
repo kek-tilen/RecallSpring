@@ -228,6 +228,7 @@ CLOUD_STATUS = {
     "revoked": 409,
     "bad_code": 422,
     "expired": 409,
+    "not_supported": 409,
 }
 
 
@@ -251,6 +252,20 @@ def cloud_google_start(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_d
         raise ApiError(409, "cloud_connected", "A cloud copy is connected already. Disconnect it first.")
     try:
         body = cloud.start_google()
+    except cloud.CloudError as exc:
+        raise _cloud_error(exc) from exc
+    return JSONResponse(body, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/settings/backup/cloud/onedrive/start")
+def cloud_onedrive_start(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> JSONResponse:
+    """A code to type at microsoft.com/devicelogin. The device code stays on the server; nothing is kept for
+    replays."""
+    _require_backup_owner(db, ctx.user)
+    if cloud.connection() is not None:
+        raise ApiError(409, "cloud_connected", "A cloud copy is connected already. Disconnect it first.")
+    try:
+        body = cloud.start_device("onedrive")
     except cloud.CloudError as exc:
         raise _cloud_error(exc) from exc
     return JSONResponse(body, headers={"Cache-Control": "no-store"})
@@ -284,14 +299,15 @@ def cloud_dropbox_finish(
     return {"state": "connected", "backup": _backup_view(db, ctx.user)}
 
 
+@router.post("/settings/backup/cloud/onedrive/poll")
 @router.post("/settings/backup/cloud/google/poll")
 def cloud_google_poll(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Whether the learner finished signing in at Google: pending, connected, denied or expired. On connected the
-    first copy starts in the background."""
+    """Whether the learner finished signing in at Google or Microsoft: pending, connected, denied, expired, blocked
+    or not_supported. On connected the first copy starts in the background."""
     _require_backup_owner(db, ctx.user)
     db.rollback()
     try:
-        state = cloud.poll_google(actor_id=ctx.user.id, request_id=ctx.request_id)
+        state = cloud.poll_device(actor_id=ctx.user.id, request_id=ctx.request_id)
     except cloud.CloudError as exc:
         raise _cloud_error(exc) from exc
     if state == "connected":
