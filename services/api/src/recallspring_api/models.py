@@ -858,15 +858,15 @@ class Export(Base):
 
 
 class DriveConnection(Base):
-    """A learner's own cloud folder (BYOS step 2, migration 0040, 2026-11-27; Dropbox 0041 and OneDrive 0042,
-    2026-11-28): a readable copy of their material in Google Drive, Dropbox or OneDrive. The refresh token is in
-    secrets_dir (drive-<user id>.bin), never here."""
+    """A learner's own cloud folder (BYOS step 2, migration 0040, 2026-11-27; Dropbox 0041, OneDrive 0042 and a
+    synced folder 0043, 2026-11-28): a readable copy of their material in Google Drive, Dropbox, OneDrive or a synced
+    folder. The refresh token is in secrets_dir (drive-<user id>.bin), never here; a synced folder has none."""
 
     __tablename__ = "drive_connections"
 
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
     provider: Mapped[str] = mapped_column(String(20), nullable=False, server_default="google", default="google")
-    root_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    root_id: Mapped[str] = mapped_column(Text, nullable=False)  # a cloud id, or a path inside a synced folder
     mirror: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"), default=True)
     exports: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
     # Material uploaded from this moment on is copied; NULL = everything (after "Copy what is already here").
@@ -882,7 +882,7 @@ class DriveConnection(Base):
     connected_at: Mapped[datetime] = _created()
 
     __table_args__ = (
-        CheckConstraint("provider IN ('google','dropbox','onedrive')", name="provider"),
+        CheckConstraint("provider IN ('google','dropbox','onedrive','folder')", name="provider"),
         CheckConstraint("state IN ('ok','copying','failing','revoked')", name="state"),
     )
 
@@ -897,7 +897,7 @@ class DriveItem(Base):
     user_id: Mapped[uuid.UUID] = _owner()
     local_kind: Mapped[str] = mapped_column(String(20), nullable=False)
     local_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
-    drive_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    drive_id: Mapped[str] = mapped_column(Text, nullable=False)  # a cloud id, or a path inside a synced folder
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     byte_size: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = _created()
