@@ -808,16 +808,34 @@ export interface BackupStatus {
 
 /** A code to type at Google; the device code itself never reaches the browser. */
 export interface CloudDevice {
+  provider?: "google";
   user_code: string;
   verification_url: string;
   expires_at: string;
   interval: number;
 }
 
+/** A Dropbox sign-in under way (2026-11-28): the page to open; Dropbox shows a code to paste back. The PKCE verifier
+ * never reaches the browser. */
+export interface DropboxPending {
+  provider: "dropbox";
+  authorize_url: string;
+  expires_at: string;
+}
+
+export type CloudProvider = "google" | "dropbox";
+export type CloudPending = CloudDevice | DropboxPending;
+
+export function isDropbox(p: CloudPending | null | undefined): p is DropboxPending {
+  return p?.provider === "dropbox";
+}
+
+export const PROVIDER_LABEL: Record<CloudProvider, string> = { google: "Google Drive", dropbox: "Dropbox" };
+
 export interface CloudView {
-  /** Providers this server has an app ID for. */
-  available: { google: boolean };
-  provider: "google" | null;
+  /** Providers this server has an app ID or key for. */
+  available: Record<CloudProvider, boolean>;
+  provider: CloudProvider | null;
   connected_at: string | null;
   state: "off" | "waiting" | "copying" | "ok" | "failing" | "revoked";
   last_success_at: string | null;
@@ -827,7 +845,7 @@ export interface CloudView {
   error: { code: string; message: string; at: string } | null;
   next_try_at: string | null;
   progress: { done_files: number; total_files: number; done_bytes: number; total_bytes: number } | null;
-  pending: CloudDevice | null;
+  pending: CloudPending | null;
 }
 
 /** A new recovery key, returned once and never stored by the server. */
@@ -1135,15 +1153,16 @@ export interface ExportView {
   current: ExportItem | null;
   last_export_at: string | null;
   keep_hours: number;
-  /** "To my Drive" is offered (Your Google Drive connected, "Exports go here too" on). */
+  /** "To my cloud folder" is offered (Your cloud folder connected, "Exports go here too" on). */
   drive?: boolean;
 }
 
-/** Settings › Your Google Drive (BYOS, 2026-11-27). No token, device code or account details. */
+/** Settings › Your cloud folder (BYOS, 2026-11-27; Dropbox 2026-11-28). No token, code or account details. */
 export interface DriveView {
-  available: boolean;
+  available: Record<CloudProvider, boolean>;
   state: "off" | "ok" | "copying" | "failing" | "revoked";
-  pending: CloudDevice | null;
+  provider: CloudProvider | null;
+  pending: CloudPending | null;
   connected_at?: string;
   folder?: string;
   mirror?: boolean;

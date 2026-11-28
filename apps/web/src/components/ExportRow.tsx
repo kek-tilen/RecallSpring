@@ -14,9 +14,9 @@ const FAILURES: Record<string, string> = {
 };
 
 const DRIVE_FAILURES: Record<string, string> = {
-  drive_revoked: "Google Drive no longer allows RecallSpring.",
-  drive_no_room: "Not enough room in your Google Drive.",
-  drive_busy: "A copy to your Google Drive was running.",
+  drive_revoked: "Your cloud folder no longer allows RecallSpring.",
+  drive_no_room: "Not enough room in your cloud folder.",
+  drive_busy: "A copy to your cloud folder was running.",
 };
 
 function readyNow(c: ExportItem | null): boolean {
@@ -29,10 +29,10 @@ function summary(v: ExportView): string {
     const p = c.progress;
     return p?.total_files ? `Being made · ${p.done_files} of ${p.total_files} items` : "Being made…";
   }
-  if (c && readyNow(c) && c.destination === "drive" && c.error) return "Could not go to your Google Drive · ready to download instead";
+  if (c && readyNow(c) && c.destination === "drive" && c.error) return "Could not go to your cloud folder · ready to download instead";
   if (c && readyNow(c)) return `Ready · ${bytes(c.byte_size ?? 0)} · kept until ${dateTime(c.expires_at!)}`;
   if (c?.destination === "drive" && c.state === "expired" && c.finished_at && !c.error)
-    return `Sent to your Google Drive · ${dateLabel(c.finished_at)} · My Drive › RecallSpring › Exports`;
+    return `Sent to your cloud folder · ${dateLabel(c.finished_at)} · in its Exports folder`;
   if (c?.state === "failed") return `The last export failed · ${FAILURES[c.error ?? ""] ?? "try again"}`;
   if (v.last_export_at) return `Your material, notes and answers as plain files · last export ${dateLabel(v.last_export_at)}`;
   return "Never · your material, notes and answers as a ZIP to download";
@@ -179,7 +179,7 @@ function Choose({ v, onDone, onCancel }: { v: ExportView; onDone: () => void; on
               <input type="radio" name="export-where" checked={!toDrive} onChange={() => setToDrive(false)} /> Download a ZIP
             </label>
             <label className="small">
-              <input type="radio" name="export-where" checked={toDrive} onChange={() => setToDrive(true)} /> To my Drive
+              <input type="radio" name="export-where" checked={toDrive} onChange={() => setToDrive(true)} /> To my cloud folder
             </label>
           </div>
         </fieldset>
@@ -243,7 +243,7 @@ function Ready({ c, keepHours, onNew, onRemove }: { c: ExportItem; keepHours: nu
       </ul>
       {c.destination === "drive" && c.error && (
         <p className="small warn-text" style={{ margin: 0 }}>
-          It could not go to your Google Drive: {DRIVE_FAILURES[c.error] ?? "Google Drive could not be reached."} Download it here instead.
+          It could not go to your cloud folder: {DRIVE_FAILURES[c.error] ?? "It could not be reached."} Download it here instead.
         </p>
       )}
       <p className="notice small" style={{ margin: 0 }}>

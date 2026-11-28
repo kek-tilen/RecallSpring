@@ -96,7 +96,7 @@ describe("Data & backups rows", () => {
     setup({ restorable_days: 30, items: [] });
     await screen.findByRole("heading", { level: 3, name: "Getting it back" });
     const titles = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
-    expect(titles.slice(-5)).toEqual(["Getting it back", "Recently deleted", "History", "Export", "Your Google Drive"]);
+    expect(titles.slice(-5)).toEqual(["Getting it back", "Recently deleted", "History", "Export", "Your cloud folder"]);
     const details = screen.getByText("Backup details").closest("details")!;
     const history = screen.getByRole("heading", { level: 3, name: "History" });
     expect(history.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

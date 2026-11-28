@@ -23,10 +23,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const off: DriveView = { available: true, state: "off", pending: null };
+const both = { google: true, dropbox: true };
+const off: DriveView = { available: both, state: "off", provider: null, pending: null };
 const on = (over: Partial<DriveView> = {}): DriveView => ({
-  available: true,
+  available: both,
   state: "ok",
+  provider: "google",
   pending: null,
   connected_at: "2026-11-27T09:00:00+00:00",
   folder: "My Drive › RecallSpring",
@@ -63,7 +65,7 @@ function show(node: React.ReactNode) {
   render(<QueryClientProvider client={qc}>{node}</QueryClientProvider>);
 }
 
-describe("Your Google Drive row", () => {
+describe("Your cloud folder row", () => {
   it("connects with a code, then copies by itself", async () => {
     let connected = false;
     const calls = serve(off, {
@@ -71,9 +73,9 @@ describe("Your Google Drive row", () => {
       "/drive/poll": () => (connected ? { state: "connected", drive: on() } : { state: "pending", drive: off }),
     });
     show(<DriveRow />);
-    expect(await screen.findByText("Off · a readable copy of your material in your own Google Drive")).toBeTruthy();
+    expect(await screen.findByText("Off · a readable copy of your material in your own Google Drive or Dropbox")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
-    expect(screen.getByText("Readable at Google, like any file you keep there")).toBeTruthy();
+    expect(screen.getByText("Readable at Google or Dropbox, like any file you keep there")).toBeTruthy();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     fireEvent.click(screen.getByRole("button", { name: "Connect Google Drive" }));
     expect(await screen.findByLabelText("Code to enter at Google")).toBeTruthy();
@@ -114,17 +116,62 @@ describe("Your Google Drive row", () => {
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
     expect(screen.getByRole("button", { name: "Sign in to Google again" })).toBeTruthy();
   });
+
+  it("connects Dropbox with a pasted code", async () => {
+    const pending = { provider: "dropbox" as const, authorize_url: "https://www.dropbox.com/oauth2/authorize?x=1", expires_at: "2026-11-28T09:30:00+00:00" };
+    const dropboxOn = on({ provider: "dropbox", folder: "Dropbox › Apps › RecallSpring › Material", free_bytes: null });
+    const calls = serve(off, {
+      "/drive/dropbox/start": () => pending,
+      "/drive/dropbox/finish": () => ({ state: "connected", drive: dropboxOn }),
+    });
+    show(<DriveRow />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    expect(screen.getByText("Dropbox › Apps › RecallSpring › Material › your course")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Connect Dropbox" }));
+    const link = await screen.findByRole("link", { name: "Open Dropbox" });
+    expect(link.getAttribute("href")).toBe(pending.authorize_url);
+    const connect = screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement;
+    expect(connect.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Code from Dropbox"), { target: { value: "  sl.code-from-dropbox  " } });
+    fireEvent.click(connect);
+    expect(await screen.findByText(/Connected · folder Dropbox › Apps › RecallSpring › Material/)).toBeTruthy();
+    expect(calls.find((c) => c.url.endsWith("/drive/dropbox/finish"))?.body).toEqual({ code: "sl.code-from-dropbox" });
+    expect(screen.getByLabelText("Keep the files in your Dropbox")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sign in to Dropbox again" })).toBeNull();
+  });
+
+  it("says when Dropbox withdrew access and signs in to Dropbox again", async () => {
+    const calls = serve(on({ provider: "dropbox", state: "revoked", error: { code: "revoked", message: "Dropbox no longer allows RecallSpring.", at: "" } }), {
+      "/drive/dropbox/start": () => ({ provider: "dropbox", authorize_url: "https://www.dropbox.com/oauth2/authorize?x=2", expires_at: "2026-11-28T09:30:00+00:00" }),
+    });
+    show(<DriveRow />);
+    expect(await screen.findByText("Stopped: Dropbox no longer allows RecallSpring")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign in to Dropbox again" }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/drive/dropbox/start"))).toBe(true));
+    expect(await screen.findByRole("link", { name: "Open Dropbox" })).toBeTruthy();
+  });
+
+  it("says when a server has only one of them", async () => {
+    serve({ ...off, available: { google: false, dropbox: true } });
+    show(<DriveRow />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    expect((screen.getByRole("button", { name: "Connect Google Drive" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Connect Dropbox" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText(/RS_CLOUD_GOOGLE_CLIENT_ID/)).toBeTruthy();
+    expect(screen.queryByText(/RS_CLOUD_DROPBOX_APP_KEY/)).toBeNull();
+  });
 });
 
-describe("Export to Drive", () => {
+describe("Export to the cloud folder", () => {
   const courses = [{ id: "c1", title: "Biology", files: 10, bytes: 300 * 1024 ** 2, notes: 4, answers: 20 }];
   const view = (drive: boolean): ExportView => ({ courses, current: null, last_export_at: null, keep_hours: 24, drive });
 
-  it("offers To my Drive only when it is on", async () => {
+  it("offers To my cloud folder only when it is on", async () => {
     const calls = serve(view(true), { "/exports": () => view(true) });
     show(<ExportRow />);
     fireEvent.click(await screen.findByRole("button", { name: "Export" }));
-    expect(screen.getByLabelText(/To my Drive/)).toBeTruthy();
+    expect(screen.getByLabelText(/To my cloud folder/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Make the export" }));
     await waitFor(() => expect((calls.find((c) => c.method === "POST")?.body as { destination: string }).destination).toBe("drive"));
   });
@@ -133,6 +180,6 @@ describe("Export to Drive", () => {
     serve(view(false));
     show(<ExportRow />);
     fireEvent.click(await screen.findByRole("button", { name: "Export" }));
-    expect(screen.queryByLabelText(/To my Drive/)).toBeNull();
+    expect(screen.queryByLabelText(/To my cloud folder/)).toBeNull();
   });
 });

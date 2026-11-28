@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 const off: CloudView = {
-  available: { google: true },
+  available: { google: true, dropbox: true },
   provider: null,
   connected_at: null,
   state: "off",
@@ -116,11 +116,13 @@ describe("Cloud copy", () => {
   });
 
   it("says a server without a Google app ID cannot connect yet", async () => {
-    setup(status({ ...off, available: { google: false } }));
+    setup(status({ ...off, available: { google: false, dropbox: false } }));
     fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     const google = screen.getByRole("button", { name: /Google Drive/ }) as HTMLButtonElement;
     expect(google.disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /^Dropbox/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/RS_CLOUD_GOOGLE_CLIENT_ID/)).toBeTruthy();
+    expect(screen.getByText(/RS_CLOUD_DROPBOX_APP_KEY/)).toBeTruthy();
     expect(screen.getByText(/Only through a synced folder/)).toBeTruthy();
   });
 
@@ -172,5 +174,58 @@ describe("Cloud copy", () => {
     fireEvent.click(within(row()).getByRole("button", { name: "Manage" }));
     expect(screen.getByRole("button", { name: "Sign in to Google again" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Copy now" })).toBeNull();
+  });
+
+  it("connects Dropbox with a pasted code and names its folder", async () => {
+    const pending = { provider: "dropbox", authorize_url: "https://www.dropbox.com/oauth2/authorize?x=1", expires_at: "2026-11-28T10:00:00+00:00" };
+    const dropbox: CloudView = { ...connected, provider: "dropbox", free_bytes: null, state: "copying" };
+    const calls = setup(status(off), {
+      "/cloud/dropbox/start": () => pending,
+      "/cloud/dropbox/finish": () => ({ state: "connected", backup: status(dropbox) }),
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Dropbox/ }));
+    expect((await screen.findByRole("link", { name: "Open Dropbox" })).getAttribute("href")).toBe(pending.authorize_url);
+    expect(screen.getByText(/only its own folder, Apps › RecallSpring, for your encrypted backups/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Code from Dropbox"), { target: { value: "sl.code-from-dropbox" } });
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(await screen.findByRole("heading", { level: 4, name: "Connected" })).toBeTruthy();
+    expect(screen.getByText("Folder: Dropbox › Apps › RecallSpring › Backups")).toBeTruthy();
+    expect(calls.find((c) => c.url.endsWith("/cloud/dropbox/finish"))?.body).toEqual({ code: "sl.code-from-dropbox" });
+  });
+
+  it("starts the Dropbox sign-in again when the code came too late", async () => {
+    const pending = { provider: "dropbox", authorize_url: "https://www.dropbox.com/oauth2/authorize?x=1", expires_at: "2026-11-28T10:00:00+00:00" };
+    let starts = 0;
+    const calls: { url: string }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      calls.push({ url });
+      const json = (body: unknown, s = 200) => new Response(JSON.stringify(body), { status: s, headers: { "Content-Type": "application/json" } });
+      if (url.includes("/cloud/dropbox/start")) {
+        starts += 1;
+        return json(pending);
+      }
+      if (url.includes("/cloud/dropbox/finish")) return json({ code: "cloud_expired", message: "This sign-in expired. Start again." }, 409);
+      if (url.includes("/deleted")) return json({ restorable_days: 30, items: [] });
+      if (url.includes("/settings/backup") && (init?.method ?? "GET") === "GET") return json(status(off));
+      return json({ code: "not_found", message: "Not found." }, 404);
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/settings#data"]}>
+          <SettingsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Dropbox/ }));
+    fireEvent.change(await screen.findByLabelText("Code from Dropbox"), { target: { value: "sl.code-from-dropbox" } });
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(await screen.findByText(/This sign-in expired before a code was pasted/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Start again" }));
+    expect(await screen.findByLabelText("Code from Dropbox")).toBeTruthy();
+    expect(starts).toBe(2);
   });
 });

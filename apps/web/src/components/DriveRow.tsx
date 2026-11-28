@@ -1,26 +1,33 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { get, request } from "../api";
+import { ApiError, get, request } from "../api";
 import { bytes, dateTime, plural } from "../format";
 import { keys } from "../queries";
-import type { CloudDevice, DriveView } from "../types";
+import { isDropbox, PROVIDER_LABEL, type CloudDevice, type CloudProvider, type DriveView, type DropboxPending } from "../types";
 import { CopyButton } from "./Copy";
+import { DropboxSignIn } from "./DropboxSignIn";
 import { Confirm, ErrorNote } from "./ui";
 
-/** Settings › Data & backups › Your Google Drive (BYOS, 2026-11-27): a readable copy of the learner's own material,
- * by course, in their own Google account. One way: RecallSpring keeps working from its own copy. */
+/** Settings › Data & backups › Your cloud folder (BYOS, 2026-11-27; Dropbox 2026-11-28): a readable copy of the
+ * learner's own material, by course, in their own Google Drive or Dropbox. One way: RecallSpring keeps working from
+ * its own copy. One provider at a time. */
 
 export const DRIVE_KEY = ["drive"] as const;
 
-type Step = null | "about" | "code" | "manage";
+type Step = null | "about" | "code" | "paste" | "manage";
+
+const FOLDER: Record<CloudProvider, string> = {
+  google: "My Drive › RecallSpring › your course",
+  dropbox: "Dropbox › Apps › RecallSpring › Material › your course",
+};
 
 function summary(d: DriveView): string {
-  if (d.state === "off") return "Off · a readable copy of your material in your own Google Drive";
+  if (d.state === "off") return "Off · a readable copy of your material in your own Google Drive or Dropbox";
   if (d.state === "copying") {
     const p = d.progress;
     return p?.total_files ? `Copying ${Math.min(p.done_files + 1, p.total_files)} of ${p.total_files}` : "Copying…";
   }
-  if (d.state === "revoked") return "Stopped: Google Drive no longer allows RecallSpring";
+  if (d.state === "revoked") return `Stopped: ${PROVIDER_LABEL[d.provider ?? "google"]} no longer allows RecallSpring`;
   if (d.state === "failing") return d.error?.message ?? "Copying is failing";
   if (!d.mirror) return "Connected · copying is off";
   const last = d.last_success_at ? ` · last copy ${dateTime(d.last_success_at)}` : "";
@@ -37,6 +44,8 @@ export function DriveRow() {
   const d = view.data;
   const [step, setStep] = useState<Step>(null);
   const [device, setDevice] = useState<CloudDevice | null>(null);
+  const [dropbox, setDropbox] = useState<DropboxPending | null>(null);
+  const [dropboxExpired, setDropboxExpired] = useState(false);
   const [outcome, setOutcome] = useState<"denied" | "expired" | null>(null);
   const [deleteFiles, setDeleteFiles] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -46,8 +55,11 @@ export function DriveRow() {
   };
 
   useEffect(() => {
-    if (d?.pending && !device) setDevice(d.pending);
-  }, [d?.pending, device]);
+    if (!d?.pending) return;
+    if (isDropbox(d.pending)) {
+      if (!dropbox) setDropbox(d.pending);
+    } else if (!device) setDevice(d.pending);
+  }, [d?.pending, device, dropbox]);
 
   const start = useMutation({
     mutationFn: () => request<CloudDevice>("/drive/start", { method: "POST" }),
@@ -55,6 +67,27 @@ export function DriveRow() {
       setDevice(c);
       setOutcome(null);
       setStep("code");
+    },
+  });
+  const startDropbox = useMutation({
+    mutationFn: () => request<DropboxPending>("/drive/dropbox/start", { method: "POST" }),
+    onSuccess: (p) => {
+      setDropbox(p);
+      setDropboxExpired(false);
+      setStep("paste");
+    },
+  });
+  const finishDropbox = useMutation({
+    mutationFn: (code: string) => request<{ state: string; drive: DriveView }>("/drive/dropbox/finish", { method: "POST", json: { code } }),
+    onSuccess: (r) => {
+      set(r.drive);
+      setDropbox(null);
+      setStep("manage");
+      void qc.invalidateQueries({ queryKey: keys.history });
+      void qc.invalidateQueries({ queryKey: keys.dashboard });
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.code === "drive_expired") setDropboxExpired(true);
     },
   });
   const cancel = useMutation({ mutationFn: () => request<DriveView>("/drive/cancel", { method: "POST" }), onSuccess: set });
@@ -114,7 +147,7 @@ export function DriveRow() {
     return (
       <div className="settings-row" id="drive">
         <span>
-          <h3 className="settings-row-title">Your Google Drive</h3>
+          <h3 className="settings-row-title">Your cloud folder</h3>
           <span className="small muted">{view.error ? "Could not load." : "…"}</span>
         </span>
       </div>
@@ -123,11 +156,15 @@ export function DriveRow() {
   const on = d.state !== "off";
   const warn = d.state === "failing" || d.state === "revoked";
   const open = step !== null;
+  const provider: CloudProvider = d.provider ?? "google";
+  const label = PROVIDER_LABEL[provider];
+  const company = provider === "google" ? "Google" : "Dropbox";
+  const none = !d.available.google && !d.available.dropbox;
   return (
     <div id="drive">
       <div className="settings-row">
         <span style={{ minWidth: 0 }}>
-          <h3 className="settings-row-title">Your Google Drive</h3>
+          <h3 className="settings-row-title">Your cloud folder</h3>
           <span className={`small ${warn ? "warn-text" : "muted"}`}>{summary(d)}</span>
         </span>
         <button
@@ -136,9 +173,9 @@ export function DriveRow() {
           aria-expanded={open}
           onClick={() => {
             if (open) {
-              if (step === "code") cancel.mutate();
+              if (step === "code" || step === "paste") cancel.mutate();
               setStep(null);
-            } else setStep(on ? "manage" : d.pending ? "code" : "about");
+            } else setStep(on ? "manage" : d.pending ? (isDropbox(d.pending) ? "paste" : "code") : "about");
           }}
         >
           {open ? "Close" : on ? "Manage" : "Connect"}
@@ -148,13 +185,20 @@ export function DriveRow() {
       {step === "about" && (
         <div className="assistant-steps stack" style={{ gap: 10 }}>
           <p className="small" style={{ margin: 0 }}>
-            RecallSpring copies each file you add into <strong>My Drive › RecallSpring › your course</strong>, as it is. You can open them there
-            any time.
+            RecallSpring copies each file you add into a folder for each course, as it is. You can open them there any time:
           </p>
+          <ul className="small" style={{ margin: 0, paddingLeft: "1.2rem" }}>
+            <li>
+              Google Drive: <strong>{FOLDER.google}</strong>
+            </li>
+            <li>
+              Dropbox: <strong>{FOLDER.dropbox}</strong>
+            </li>
+          </ul>
           <ul className="folder-checks">
             <li data-level="ok">
               <span aria-hidden="true">✓</span>
-              <span>Only the files it creates; nothing else in your Drive</span>
+              <span>Only the files it creates (Google Drive) or its own folder (Dropbox); nothing else</span>
             </li>
             <li data-level="ok">
               <span aria-hidden="true">✓</span>
@@ -162,19 +206,39 @@ export function DriveRow() {
             </li>
             <li data-level="warn">
               <span aria-hidden="true">!</span>
-              <span>Readable at Google, like any file you keep there</span>
+              <span>Readable at Google or Dropbox, like any file you keep there</span>
             </li>
           </ul>
-          {!d.available && (
+          {(!d.available.google || !d.available.dropbox) && (
             <p className="tiny muted" style={{ margin: 0 }}>
-              Not available yet: whoever runs this RecallSpring sets <code>RS_CLOUD_GOOGLE_CLIENT_ID</code> and{" "}
-              <code>RS_CLOUD_GOOGLE_CLIENT_SECRET</code> (docs/08 → Your Google Drive).
+              {none ? "Not available yet: whoever" : "Whoever"} runs this RecallSpring sets{" "}
+              {!d.available.google && (
+                <>
+                  <code>RS_CLOUD_GOOGLE_CLIENT_ID</code> and <code>RS_CLOUD_GOOGLE_CLIENT_SECRET</code> for Google Drive
+                </>
+              )}
+              {none && ", "}
+              {!d.available.dropbox && (
+                <>
+                  <code>RS_CLOUD_DROPBOX_APP_KEY</code> for Dropbox
+                </>
+              )}{" "}
+              (docs/08 → Your cloud folder).
             </p>
           )}
           {start.error && <ErrorNote error={start.error} />}
+          {startDropbox.error && <ErrorNote error={startDropbox.error} />}
           <div className="row">
-            <button type="button" className="btn primary small" disabled={!d.available || start.isPending} onClick={() => start.mutate()}>
+            <button type="button" className="btn primary small" disabled={!d.available.google || start.isPending} onClick={() => start.mutate()}>
               Connect Google Drive
+            </button>
+            <button
+              type="button"
+              className="btn primary small"
+              disabled={!d.available.dropbox || startDropbox.isPending}
+              onClick={() => startDropbox.mutate()}
+            >
+              Connect Dropbox
             </button>
             <button type="button" className="btn small" onClick={() => setStep(null)}>
               Not now
@@ -237,8 +301,25 @@ export function DriveRow() {
         </section>
       )}
 
+      {step === "paste" && (
+        <DropboxSignIn
+          pending={dropbox}
+          what="a readable copy of your material"
+          busy={finishDropbox.isPending || startDropbox.isPending}
+          error={finishDropbox.error}
+          expired={dropboxExpired}
+          onCode={(code) => finishDropbox.mutate(code)}
+          onRestart={() => startDropbox.mutate()}
+          onCancel={() => {
+            cancel.mutate();
+            setDropbox(null);
+            setStep(null);
+          }}
+        />
+      )}
+
       {step === "manage" && on && (
-        <section className="assistant-steps stack" style={{ gap: 10 }} aria-label="Your Google Drive">
+        <section className="assistant-steps stack" style={{ gap: 10 }} aria-label="Your cloud folder">
           <ul className="folder-checks">
             <li data-level={warn ? "warn" : "ok"}>
               <span aria-hidden="true">{warn ? "!" : "✓"}</span>
@@ -259,8 +340,13 @@ export function DriveRow() {
           )}
           {d.state === "revoked" && (
             <div className="row">
-              <button type="button" className="btn primary small" onClick={() => start.mutate()} disabled={start.isPending}>
-                Sign in to Google again
+              <button
+                type="button"
+                className="btn primary small"
+                onClick={() => (provider === "dropbox" ? startDropbox.mutate() : start.mutate())}
+                disabled={start.isPending || startDropbox.isPending}
+              >
+                Sign in to {company} again
               </button>
             </div>
           )}
@@ -300,11 +386,12 @@ export function DriveRow() {
           {options.error && <ErrorNote error={options.error} />}
           {copyExisting.error && <ErrorNote error={copyExisting.error} />}
           {start.error && <ErrorNote error={start.error} />}
+          {startDropbox.error && <ErrorNote error={startDropbox.error} />}
           <fieldset className="plain-choice">
-            <legend className="small">Disconnect: RecallSpring forgets the sign-in and asks Google to withdraw it</legend>
+            <legend className="small">Disconnect: RecallSpring forgets the sign-in and asks {company} to withdraw it</legend>
             <label className="check-row small">
               <input type="radio" name="drive-files" checked={!deleteFiles} onChange={() => setDeleteFiles(false)} />
-              <span>Keep the files in your Google Drive</span>
+              <span>Keep the files in your {label}</span>
             </label>
             <label className="check-row small">
               <input type="radio" name="drive-files" checked={deleteFiles} onChange={() => setDeleteFiles(true)} />
@@ -326,14 +413,15 @@ export function DriveRow() {
       )}
       <Confirm
         open={confirming}
-        title="Delete your Drive copy?"
+        title={`Delete your ${label} copy?`}
         confirmLabel="Disconnect and delete"
         danger
         busy={disconnect.isPending}
         onConfirm={() => disconnect.mutate(true)}
         onClose={() => setConfirming(false)}
       >
-        The folder RecallSpring in your Google Drive and everything in it ({plural(d.files ?? 0, "file")}
+        The folder {provider === "google" ? "RecallSpring in your Google Drive" : "Apps › RecallSpring › Material in your Dropbox"} and everything in it (
+        {plural(d.files ?? 0, "file")}
         {d.exports ? " and exports" : ""}) will be deleted. This cannot be undone. Your material in RecallSpring stays. This is recorded in History.
       </Confirm>
     </div>
