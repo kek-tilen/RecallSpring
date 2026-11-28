@@ -16,6 +16,9 @@ recallspring recompute-reviews                   (replays every review state wit
 recallspring shadow-report [--username <name>] [--save]
                                                  (what FSRS-6 in shadow would have done; local, no model calls;
                                                  --save writes it under local-data/reports)
+recallspring setup-link [--url <address>] [--hours 24]
+                                                 (a one-time link for the first account, e.g. in Docker)
+recallspring upgrade-db [--no-backup]            (backs up a database that holds data, then updates its structure)
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ import getpass
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import select
 
@@ -246,6 +250,13 @@ def backup_restore(
         print(f"  WARNING: row counts differ in {', '.join(result['tables_differing'])}", file=sys.stderr)
     if result["storage"]:
         print(f"  {result['files']} of {result['files_expected']} files copied to {result['storage']}")
+    if os.environ.get("RS_IMAGE_VERSION"):  # the Docker image (docs/install-docker.md > Going back)
+        print("Nothing was switched. To use it, run `recallspring stop`, then add to .env next to compose.yml")
+        print(f"  RS_DB_NAME={result['database']}")
+        if result["storage"]:
+            print(f"  RS_STORAGE_DIR={result['storage']}")
+        print("and run `recallspring start` (it updates the structure first). Keep the old database until sure.")
+        return 0
     print("Nothing was switched. To use it, stop RecallSpring, then in services/api/.env set")
     print(f"  RS_DATABASE_URL={result['database_url']}  (keep your password in place of ***)")
     if result["storage"]:
@@ -344,6 +355,57 @@ def shadow_report(username: str | None, save: bool) -> int:
     return 0
 
 
+def setup_link_now(url: str, hours: int) -> int:
+    """Print a one-time link for the first account (setup_link.py). Refused once an account exists."""
+    from . import setup_link
+
+    with new_session() as db:
+        if db.scalar(select(User.id).limit(1)) is not None:
+            print("RecallSpring already has an account. Sign in, or use reset-password.", file=sys.stderr)
+            return 1
+    code, expires = setup_link.issue(hours)
+    until = expires.strftime("%Y-%m-%d %H:%M UTC")
+    print(f"Open this link to create your account (it works once, until {until}):")
+    print(f"  {url.rstrip('/')}/login#setup={code}")
+    return 0
+
+
+def alembic_config(path: Path | None = None) -> Any:
+    from alembic.config import Config
+
+    ini = path or Path(__file__).resolve().parents[2] / "alembic.ini"
+    config = Config(str(ini))
+    config.set_main_option("script_location", str(ini.parent / "migrations"))
+    return config
+
+
+def upgrade_db(no_backup: bool, ini: Path | None = None) -> int:
+    """Bring the database structure to this version. A database that already holds data and is behind is backed up
+    first, and nothing changes when that backup fails (as scripts/install.ps1 does; the Docker install runs this as
+    its own step before the new version starts)."""
+    from alembic import command
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+
+    from .db import get_engine
+
+    config = alembic_config(ini)
+    head = ScriptDirectory.from_config(config).get_current_head()
+    with get_engine().connect() as conn:
+        current = MigrationContext.configure(conn).get_current_revision()
+    if current == head:
+        print(f"Database structure is up to date ({head}).")
+        return 0
+    if current is not None and not no_backup:
+        print(f"Your data is backed up before the database changes ({current} -> {head}).")
+        if backup_now(False) != 0:
+            print("Nothing was changed. Fix the backup, or run with --no-backup at your own risk.", file=sys.stderr)
+            return 1
+    command.upgrade(config, "head")
+    print(f"Database structure updated to {head}.")
+    return 0
+
+
 def serve_api(host: str, port: int, log_file: Path | None) -> int:
     """scripts/start-local.ps1 runs this without a window, logging to local-data/logs/api.log."""
     import uvicorn
@@ -394,6 +456,12 @@ def main(argv: list[str] | None = None) -> int:
     sr = sub.add_parser("shadow-report", help="what FSRS-6 in shadow would have done (ADR-014; local only)")
     sr.add_argument("--username", help="one account (default: every account with shadow data)")
     sr.add_argument("--save", action="store_true", help="also write the report under local-data/reports")
+    sl = sub.add_parser("setup-link", help="a one-time link for the first account (e.g. in Docker)")
+    sl.add_argument("--url", default="http://127.0.0.1:4318", help="the address the browser opens")
+    sl.add_argument("--hours", type=int, default=24, choices=range(1, 169), metavar="1-168", help="how long it works")
+    up = sub.add_parser("upgrade-db", help="back up a database that holds data, then update its structure")
+    up.add_argument("--no-backup", action="store_true", help="skip the backup (not recommended)")
+    up.add_argument("--config", type=Path, help="alembic.ini (default: the one next to this package)")
     args = parser.parse_args(argv)
     if args.command in ("backup", "backup-status", "backup-restore"):
         import logging
@@ -416,6 +484,13 @@ def main(argv: list[str] | None = None) -> int:
         return recompute_reviews()
     if args.command == "shadow-report":
         return shadow_report(args.username, args.save)
+    if args.command == "setup-link":
+        return setup_link_now(args.url, args.hours)
+    if args.command == "upgrade-db":
+        import logging
+
+        logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s %(message)s")
+        return upgrade_db(args.no_backup, args.config)
     if args.command == "worker":
         import logging
 

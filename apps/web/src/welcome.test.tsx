@@ -83,6 +83,33 @@ describe("first run", () => {
     expect(screen.queryByRole("button", { name: "Create account" })).toBeNull();
   });
 
+  it("creates the first account with the code of a setup link and takes it out of the address bar", async () => {
+    window.history.replaceState(null, "", "/login#setup=K7QF-2MXD-91PA");
+    const calls = mockApi({
+      "GET /auth/setup": () => json(200, { needs_setup: true, refusal: "needs_code" }),
+      "POST /auth/setup": () => json(201, { user: USER, expires_at: "2026-12-01T00:00:00Z" }),
+      "GET /auth/session": () => json(200, { user: USER, expires_at: "2026-12-01T00:00:00Z" }),
+    });
+    renderAt("/login");
+    await screen.findByRole("heading", { name: "Welcome to RecallSpring" });
+    expect(window.location.hash).toBe("");
+    fireEvent.change(screen.getByLabelText(/^Username/), { target: { value: "ana" } });
+    fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: "a-long-password" } });
+    fireEvent.change(screen.getByLabelText(/^Repeat password/), { target: { value: "a-long-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await screen.findByRole("group", { name: "Choose your assistant" });
+    const post = calls.find((c) => c.method === "POST");
+    expect((post?.body as { setup_code?: string }).setup_code).toBe("K7QF-2MXD-91PA");
+  });
+
+  it("asks for the setup link when the install made one and this browser has none", async () => {
+    window.history.replaceState(null, "", "/login");
+    mockApi({ "GET /auth/setup": () => json(200, { needs_setup: true, refusal: "needs_code" }) });
+    renderAt("/login");
+    await screen.findByText(/Open the setup link the install printed/);
+    expect(screen.queryByRole("button", { name: "Create account" })).toBeNull();
+  });
+
   it("shows the normal sign-in once an account exists", async () => {
     mockApi({ "GET /auth/setup": () => json(200, { needs_setup: false, refusal: null }) });
     renderAt("/login");

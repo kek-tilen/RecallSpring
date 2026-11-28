@@ -46,6 +46,7 @@ os.environ.update(
             pathlib.Path(tempfile.mkdtemp(prefix="recallspring-test-backup-settings-")) / "backup-settings.json"
         ),
         "RS_RUN_DIR": tempfile.mkdtemp(prefix="recallspring-test-run-"),  # the worker heartbeat (runtime.py)
+        "RS_SECRETS_DIR": tempfile.mkdtemp(prefix="recallspring-test-secrets-"),  # never the real sign-ins
     }
 )
 

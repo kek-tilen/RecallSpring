@@ -46,6 +46,8 @@ class FirstRunIn(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9._@-]+$")
     password: str = Field(min_length=12, max_length=256)
     timezone: str = Field(min_length=1, max_length=64)
+    # From the setup link (setup_link.py): needed where "this computer" cannot be told, e.g. in Docker.
+    setup_code: str | None = Field(default=None, max_length=32)
 
 
 class ProfileIn(BaseModel):

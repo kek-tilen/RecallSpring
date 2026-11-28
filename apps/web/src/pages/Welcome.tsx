@@ -42,8 +42,9 @@ export function TimeZoneSelect({ value, onChange, id }: { value: string; onChang
   );
 }
 
-/** The first account of a new install. Only shown (and only accepted by the server) on this computer. */
-export function FirstRunForm() {
+/** The first account of a new install. Only shown (and only accepted by the server) on this computer, or with the
+ * code of a setup link (the Docker install prints one), which it sends along. */
+export function FirstRunForm({ setupCode = null }: { setupCode?: string | null }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
@@ -52,7 +53,11 @@ export function FirstRunForm() {
   const [timezone, setTimezone] = useState(browserZone);
   const mismatch = repeat.length > 0 && repeat !== password;
   const create = useMutation({
-    mutationFn: () => request<SessionInfo>("/auth/setup", { method: "POST", json: { username, password, timezone } }),
+    mutationFn: () =>
+      request<SessionInfo>("/auth/setup", {
+        method: "POST",
+        json: setupCode ? { username, password, timezone, setup_code: setupCode } : { username, password, timezone },
+      }),
     onSuccess: (session) => {
       qc.setQueryData(keys.session, session);
       navigate("/welcome", { replace: true });

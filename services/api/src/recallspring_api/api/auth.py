@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import exists, select, text, update
 from sqlalchemy.orm import Session
 
-from .. import clock
+from .. import clock, setup_link
 from ..config import get_settings
 from ..db import get_db
 from ..deps import Ctx, csrf_ctx, current_ctx
@@ -335,21 +335,33 @@ LOOPBACK = {"127.0.0.1", "localhost", "::1", "[::1]"}
 _FIRST_RUN_LOCK = 4318_0001  # pg advisory lock: two first-run requests at once make only one account
 
 
-def _first_run_refusal(request: Request) -> str | None:
+def _first_run_refusal(request: Request, with_code: bool = False) -> str | None:
+    """None when this browser may create the first account. A valid setup link (setup_link.py) stands in for "this
+    computer" (in Docker every browser seems to come from Docker's network) and is the only way in production."""
     settings = get_settings()
-    if settings.environment == "production" or not settings.first_run_enabled:
+    if not settings.first_run_enabled:
         return "disabled"
+    if with_code:
+        return None
+    if settings.environment == "production":
+        return "needs_code" if setup_link.pending() else "disabled"
     if (request.client.host if request.client else "") not in LOOPBACK:
-        return "not_local"
+        return "needs_code" if setup_link.pending() else "not_local"
     return None
 
 
-def _cross_site(request: Request) -> bool:
-    """A page on another site must never create the account (no session or CSRF cookie exists yet)."""
+def _cross_site(request: Request, same_origin_ok: bool = False) -> bool:
+    """A page on another site must never create the account (no session or CSRF cookie exists yet). With a setup
+    link the page may be served at another address (a home server), but it must be RecallSpring's own."""
     if request.headers.get("sec-fetch-site") == "cross-site":
         return True
     origin = request.headers.get("origin")
-    return bool(origin) and (urlsplit(origin).hostname or "") not in LOOPBACK
+    if not origin:
+        return False
+    parts = urlsplit(origin)
+    if (parts.hostname or "") in LOOPBACK:
+        return False
+    return not (same_origin_ok and parts.netloc.lower() == (request.headers.get("host") or "").lower())
 
 
 def _has_users(db: Session) -> bool:
@@ -365,12 +377,29 @@ def setup_status(request: Request, db: Session = Depends(get_db)) -> dict[str, o
 
 @router.post("/setup", status_code=201, response_model=SessionOut)
 def first_run(payload: FirstRunIn, request: Request, db: Session = Depends(get_db)) -> JSONResponse:
-    """Create the first account and sign it in. Refused once any account exists, from another computer, from
-    another site, and in production (use ``recallspring create-owner`` there)."""
-    refusal = _first_run_refusal(request)
+    """Create the first account and sign it in. Refused once any account exists, from another computer or in
+    production without a setup link, and from another site (use ``recallspring create-owner`` or
+    ``recallspring setup-link`` on the server)."""
+    with_code = False
+    if payload.setup_code is not None:
+        limiter, key = _limiter(request), f"setup|{_client(request)}"
+        if limiter.blocked(key):
+            raise ApiError(429, "too_many_attempts", "Too many wrong setup links. Try again later.")
+        if not setup_link.valid(payload.setup_code):
+            limiter.record_failure(key)
+            raise ApiError(
+                403,
+                "setup_link_invalid",
+                "This setup link is not valid any more. Make a new one on the computer RecallSpring runs on: "
+                "recallspring setup-link",
+            )
+        with_code = True
+    refusal = _first_run_refusal(request, with_code)
     if refusal == "disabled":
         raise ApiError(403, "first_run_disabled", "Create the account with the command line on this server.")
-    if refusal == "not_local" or _cross_site(request):
+    if refusal == "needs_code":
+        raise ApiError(403, "setup_link_needed", "Open the setup link the install printed to create the account.")
+    if refusal == "not_local" or _cross_site(request, same_origin_ok=with_code):
         raise ApiError(
             403, "first_run_not_local", "Open RecallSpring on this computer (http://127.0.0.1:4318) to set it up."
         )
@@ -387,6 +416,8 @@ def first_run(payload: FirstRunIn, request: Request, db: Session = Depends(get_d
         action="user.created",
         target_type="user",
         target_id=user.id,
-        details={"via": "first_run", "timezone": payload.timezone},
+        details={"via": "setup_link" if with_code else "first_run", "timezone": payload.timezone},
     )
-    return _signed_in(db, user, 201)
+    response = _signed_in(db, user, 201)
+    setup_link.clear()
+    return response

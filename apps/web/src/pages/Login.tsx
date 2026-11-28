@@ -9,9 +9,20 @@ import { keys } from "../queries";
 import type { SessionInfo } from "../types";
 import { FirstRunForm } from "./Welcome";
 
+type Refusal = "disabled" | "not_local" | "needs_code";
+
 interface SetupStatus {
   needs_setup: boolean;
-  refusal: "disabled" | "not_local" | null;
+  refusal: Refusal | null;
+}
+
+/** The code of a setup link (`/login#setup=K7QF-2MXD-91PA`, printed by the Docker install). It is read once and taken
+ * out of the address bar; after `#` it never reached the server's log. */
+export function takeSetupCode(): string | null {
+  const match = /(?:^#|&)setup=([A-Za-z0-9 -]{1,32})(?:&|$)/.exec(window.location.hash);
+  if (!match?.[1]) return null;
+  window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+  return decodeURIComponent(match[1]);
 }
 
 export function safeNext(next: string | null): string {
@@ -20,7 +31,8 @@ export function safeNext(next: string | null): string {
 }
 
 export function LoginPage() {
-  // A new install has no account yet: the first visit (on this computer) creates it instead of signing in.
+  // A new install has no account yet: the first visit (on this computer, or with a setup link) creates it.
+  const [setupCode] = useState(takeSetupCode);
   const setup = useQuery({ queryKey: ["auth-setup"], queryFn: () => get<SetupStatus>("/auth/setup"), retry: false, staleTime: 30_000 });
   if (setup.isPending) {
     return (
@@ -30,7 +42,8 @@ export function LoginPage() {
     );
   }
   if (setup.data?.needs_setup) {
-    return <main className="login">{setup.data.refusal ? <SetupElsewhere refusal={setup.data.refusal} /> : <FirstRunForm />}</main>;
+    const refusal = setupCode && setup.data.refusal === "needs_code" ? null : setup.data.refusal;
+    return <main className="login">{refusal ? <SetupElsewhere refusal={refusal} /> : <FirstRunForm setupCode={setupCode} />}</main>;
   }
   return <SignIn />;
 }
@@ -94,11 +107,16 @@ function usePasskeySignIn(done: (s: SessionInfo) => void) {
   return { where, busy, error, autofill, start };
 }
 
-function SetupElsewhere({ refusal }: { refusal: "disabled" | "not_local" }) {
+function SetupElsewhere({ refusal }: { refusal: Refusal }) {
   return (
     <div className="card stack" role="status">
       <h1 style={{ fontSize: "1.3rem" }}>RecallSpring has no account yet</h1>
-      {refusal === "not_local" ? (
+      {refusal === "needs_code" ? (
+        <p className="small">
+          Open the setup link the install printed. Lost it? On the computer RecallSpring runs on, run{" "}
+          <span className="mono">recallspring setup-link</span> (in Docker: <span className="mono">~/RecallSpring/recallspring setup-link</span>).
+        </p>
+      ) : refusal === "not_local" ? (
         <p className="small">
           For safety, the first account can only be created on the computer RecallSpring runs on. Open{" "}
           <span className="mono">http://127.0.0.1:4318/</span> there.
