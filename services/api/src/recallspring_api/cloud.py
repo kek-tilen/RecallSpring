@@ -13,6 +13,8 @@ folder removed, so the cloud keeps the same backups (7 daily and 4 weekly, or th
   pastes back (PKCE, no app secret; RS_CLOUD_DROPBOX_APP_KEY). Details in cloud_dropbox.py.
 - OneDrive: the same copy into OneDrive/Apps/<app name>/Backups; the same device-code sign-in as Google, at
   microsoft.com/devicelogin (no secret; RS_CLOUD_ONEDRIVE_CLIENT_ID). Details in cloud_onedrive.py.
+- A synced folder (iCloud Drive or any other sync app): the same copy into a folder on this computer, no sign-in.
+  Details in cloud_folder.py.
 - Only the refresh token is kept, protected like the ChatGPT sign-in (``secrets_dir``: DPAPI on Windows, 0600
   elsewhere); never in the database, a backup, History, logs or the browser. No account details are stored.
 - Only encrypted backups leave the computer: a snapshot whose manifest is not encrypted is never uploaded, and
@@ -46,8 +48,8 @@ from .config import get_settings
 
 log = logging.getLogger(__name__)
 
-PROVIDERS = ("google", "dropbox", "onedrive")
-LABELS = {"google": "Google Drive", "dropbox": "Dropbox", "onedrive": "OneDrive"}
+PROVIDERS = ("google", "dropbox", "onedrive", "folder")
+LABELS = {"google": "Google Drive", "dropbox": "Dropbox", "onedrive": "OneDrive", "folder": "synced folder"}
 DEVICE_PROVIDERS = ("google", "onedrive")  # sign-in with a code typed at the provider (device authorization)
 COMPANY = {"google": "Google", "onedrive": "Microsoft"}
 DROPBOX_PENDING = timedelta(minutes=30)  # how long a Dropbox sign-in waits for its code
@@ -121,9 +123,11 @@ def _update_status(**changes: Any) -> dict[str, Any]:
 def connection() -> dict[str, Any] | None:
     """{"provider", "folder_id", "connected_at"} while connected (the folder id is not a secret)."""
     value = backup.read_config().get("cloud")
-    if isinstance(value, dict) and value.get("provider") in PROVIDERS and _token_path(value["provider"]).exists():
-        return value
-    return None
+    if not isinstance(value, dict) or value.get("provider") not in PROVIDERS:
+        return None
+    if value["provider"] == "folder":  # no sign-in: the folder is the connection
+        return value if isinstance(value.get("path"), str) and Path(value["path"]).is_absolute() else None
+    return value if _token_path(value["provider"]).exists() else None
 
 
 def _save_connection(value: dict[str, Any] | None) -> None:
@@ -141,6 +145,8 @@ def configured(provider: str = "google") -> bool:
         return bool(s.cloud_dropbox_app_key)
     if provider == "onedrive":
         return bool(s.cloud_onedrive_client_id)
+    if provider == "folder":
+        return bool(s.backup_settings_from_web or s.cloud_folder_dir)
     return bool(s.cloud_google_client_id and s.cloud_google_client_secret)
 
 
@@ -165,8 +171,16 @@ def _onedrive_id() -> str:
     return client_id
 
 
-def provider(name: str) -> Any:
-    """The storage calls for one run: Google Drive, Dropbox or OneDrive (the same methods; a new object per run)."""
+def provider(name: str, conn: dict[str, Any] | None = None) -> Any:
+    """The storage calls for one run: Google Drive, Dropbox, OneDrive or a synced folder (the same methods; a new
+    object per run). A synced folder needs its connection (the folder chosen)."""
+    if name == "folder":
+        from .cloud_folder import Folder
+
+        chosen = Path(str((conn or connection() or {}).get("path") or ""))
+        if not chosen.is_absolute():
+            raise CloudError("not_configured", "No synced folder is chosen for the cloud copy.")
+        return Folder(chosen.parent, backup_root=chosen.name)
     if name == "dropbox":
         from .cloud_dropbox import Dropbox
 
@@ -688,7 +702,7 @@ def copy(
 def _copy_locked(conn: dict[str, Any], started: datetime, reason: str) -> dict[str, Any]:
     snaps, sealed = _local()
     _update_status(state="copying", last_attempt_at=started.isoformat(), progress=None)
-    p = provider(conn["provider"])
+    p = provider(conn["provider"], conn)
     with _http() as http:
         token = p.access_token(http, _token_path(p.name))
         root = conn["folder_id"]
@@ -859,7 +873,11 @@ def disconnect(delete_files: bool, *, actor_id: uuid.UUID | None = None, request
     name = conn["provider"] if conn else "google"
     token_file = _token_path(name)
     deleted = False
-    if conn is not None and _read_secret(token_file):
+    if conn is not None and name == "folder":
+        if delete_files:
+            provider(name, conn).delete(None, "", conn["folder_id"])
+            deleted = True
+    elif conn is not None and _read_secret(token_file):
         p = provider(name)
         with _http() as http:
             if delete_files:
@@ -884,15 +902,62 @@ def disconnect(delete_files: bool, *, actor_id: uuid.UUID | None = None, request
     )
 
 
+# ---------------------------------------------------------------- a synced folder (cloud_folder.py, 2026-11-28)
+
+
+def connect_folder(
+    raw: str | None, *, actor_id: uuid.UUID | None = None, request_id: str | None = None
+) -> dict[str, Any]:
+    """Copy the encrypted backups into a folder a sync app uploads. The folder is checked first; RecallSpring makes
+    only its last part. From the server settings (RS_CLOUD_FOLDER_DIR) when the folder may not be chosen here."""
+    from . import cloud_folder
+
+    if backup.encryption() is None:
+        raise CloudError("needs_encryption", "Turn on encryption first: only encrypted backups leave this computer.")
+    if connection() is not None:
+        raise CloudError("connected", "A cloud copy is connected already. Disconnect it first.")
+    if not cloud_folder.from_web():
+        server = cloud_folder.server_copy_dir()
+        if server is None:
+            raise CloudError("folder_locked", "The folder is set in the server settings here (RS_CLOUD_FOLDER_DIR).")
+        raw = str(server)
+    chosen = cloud_folder.prepare(raw, "copy")
+    cancel()
+    _save_connection(
+        {"provider": "folder", "folder_id": chosen.name, "path": str(chosen), "connected_at": clock.now().isoformat()}
+    )
+    backup._write_json(_status_path(), {"state": "waiting"})
+    backup._audit(
+        actor_id,
+        "backup.cloud_connected",
+        {"provider": "folder", "folder": str(chosen), "sync": cloud_folder.app_of(chosen)},
+        request_id,
+    )
+    return view()
+
+
 # ---------------------------------------------------------------- views
 
 
 def view() -> dict[str, Any]:
     """What Settings shows. No token, no device code, no account details."""
+    from . import cloud_folder
+
     conn = connection()
     st = read_status() if conn else {}
+    folder: dict[str, Any] | None = None
+    if conn is not None and conn["provider"] == "folder":
+        chosen = Path(conn["path"])
+        folder = {"path": str(chosen), "where": cloud_folder.display(chosen), "sync": cloud_folder.app_of(chosen)}
+    elif conn is None and configured("folder"):
+        server = None if cloud_folder.from_web() else cloud_folder.server_copy_dir()
+        folder = {
+            "from_server": str(server) if server else None,
+            "suggestions": cloud_folder.suggestions() if cloud_folder.from_web() else [],
+        }
     return {
         "available": {name: configured(name) for name in PROVIDERS},
+        "folder": folder,
         "provider": conn["provider"] if conn else None,
         "connected_at": conn.get("connected_at") if conn else None,
         "state": st.get("state", "waiting") if conn else "off",
@@ -914,6 +979,8 @@ def attention_item() -> dict[str, Any] | None:
     st = read_status()
     error = st.get("error") or {}
     item: dict[str, Any] = {"kind": "cloud", "id": None, "course_id": None}
+    if st.get("state") == "failing" and error.get("code") == "folder_missing":  # at once: nothing is copied meanwhile
+        return item | {"title": "Cloud copy is waiting for its folder", "text": str(error.get("message", "")).strip()}
     if st.get("state") == "revoked":
         label = LABELS.get(str((connection() or {}).get("provider")), "The cloud storage")
         return item | {

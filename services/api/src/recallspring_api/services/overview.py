@@ -52,6 +52,7 @@ CLOUD_FAILURE = {
     "unreachable": "could not reach the provider",
     "mismatch": "a file did not match",
     "missing": "a folder was gone",
+    "folder_missing": "the synced folder was not there",
     "unexpected": "unexpected error",
 }
 
@@ -422,6 +423,7 @@ _EVENT_TEXT = {
     "drive.disconnected": "Your cloud folder disconnected",
     "drive.failed": "Copying to your cloud folder failed",
     "drive.copy_existing": "Copying earlier material to your cloud folder",
+    "drive.folder_changed": "Synced folder for learners changed",
     "auth.passkey_added": "Passkey added",
     "auth.passkey_renamed": "Passkey renamed",
     "auth.passkey_removed": "Passkey removed",
@@ -487,7 +489,11 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
     if event_type in ("backup.encryption_on", "backup.key_replaced"):
         return f"key {payload.get('key_id')}"
     if event_type in ("backup.cloud_connected", "backup.cloud_files_deleted", "drive.connected"):
+        if payload.get("provider") == "folder":
+            return f"Synced folder ({payload['sync']})" if payload.get("sync") else "Synced folder"
         return cloud.LABELS.get(str(payload.get("provider")), str(payload.get("provider")))
+    if event_type == "drive.folder_changed":
+        return f"{payload.get('from') or 'none'} → {payload.get('to') or 'none'}"
     if event_type == "backup.cloud_disconnected":
         return f"{cloud.LABELS.get(str(payload.get('provider')), 'Google Drive')}, files {payload.get('files')}"
     if event_type == "backup.cloud_failed":

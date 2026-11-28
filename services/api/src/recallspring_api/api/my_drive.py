@@ -1,5 +1,5 @@
-"""Your cloud folder (BYOS step 2, 2026-11-27; Dropbox and OneDrive 2026-11-28): each learner's own readable copy of
-their material in Google Drive, Dropbox or OneDrive (services/my_drive.py)."""
+"""Your cloud folder (BYOS step 2, 2026-11-27; Dropbox, OneDrive and a synced folder 2026-11-28): each learner's own
+readable copy of their material in Google Drive, Dropbox, OneDrive or a synced folder (services/my_drive.py)."""
 
 from __future__ import annotations
 
@@ -28,6 +28,10 @@ STATUS = {
     "bad_code": 422,
     "expired": 409,
     "not_supported": 409,
+    "folder_missing": 409,
+    "folder_refused": 422,
+    "conflict": 409,
+    "missing": 409,
 }
 
 
@@ -46,6 +50,10 @@ class DriveDisconnectIn(BaseModel):
 
 class DropboxCodeIn(BaseModel):
     code: str = Field(min_length=8, max_length=200)
+
+
+class FolderIn(BaseModel):
+    path: str | None = Field(default=None, max_length=1000)
 
 
 @router.get("/drive")
@@ -109,6 +117,38 @@ def drive_poll(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> d
     if state == "connected":
         my_drive.sync_in_background(ctx.user.id)
     return {"state": state, "drive": my_drive.view(db, ctx.user)}
+
+
+@router.post("/drive/folder/check")
+def drive_folder_check(
+    payload: FolderIn, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """The first account tries the synced folder for learners' copies (nothing is saved or created)."""
+    return my_drive.folder_check(db, ctx.user, payload.path)
+
+
+@router.put("/drive/folder")
+def drive_folder_set(payload: FolderIn, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """The first account chooses the synced folder (path null: stop offering it). Audited as drive.folder_changed."""
+    my_drive.set_folder(db, ctx.user, payload.path, ctx.request_id)
+    db.commit()
+    return my_drive.view(db, ctx.user)
+
+
+@router.post("/drive/folder/connect")
+def drive_folder_connect(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Use the synced folder: the learner's own subfolder in it. No sign-in; the first copy starts in the
+    background. Audited as drive.connected."""
+    conn = my_drive.connection(db, ctx.user.id)
+    if conn is not None and conn.state != "revoked":
+        raise ApiError(409, "drive_connected", "Your cloud folder is connected already. Disconnect it first.")
+    try:
+        my_drive.connect_folder(db, ctx.user, ctx.request_id)
+    except CloudError as exc:
+        raise _error(exc) from exc
+    db.commit()
+    my_drive.sync_in_background(ctx.user.id)
+    return {"state": "connected", "drive": my_drive.view(db, ctx.user)}
 
 
 @router.post("/drive/cancel")

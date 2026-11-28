@@ -221,7 +221,7 @@ def test_needs_an_app_id_and_encryption(
     owner_api: Api, google: FakeGoogle, settings: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     view = owner_api.get("/settings/backup").json()["cloud"]
-    assert view["available"] == {"google": True, "dropbox": False, "onedrive": False}
+    assert view["available"] == {"google": True, "dropbox": False, "onedrive": False, "folder": True}
     assert view["state"] == "off" and view["provider"] is None
     r = owner_api.post("/settings/backup/cloud/google/start")
     assert r.status_code == 409 and r.json()["code"] == "cloud_needs_encryption"

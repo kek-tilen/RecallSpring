@@ -319,7 +319,7 @@ def test_backups_go_to_the_onedrive_app_folder_after_a_code(
     owner_api: Api, od: FakeOneDrive, settings: Any, frozen: FrozenClock
 ) -> None:
     view = owner_api.get("/settings/backup").json()["cloud"]
-    assert view["available"] == {"google": False, "dropbox": False, "onedrive": True}
+    assert view["available"] == {"google": False, "dropbox": False, "onedrive": True, "folder": True}
     assert owner_api.post("/settings/backup/cloud/onedrive/start").json()["code"] == "cloud_needs_encryption"
     _encryption_on()
     _snapshot("20261120-030000", [_sealed("a"), _sealed("b"), _sealed("c")], size=200 * 1024)  # an upload session
@@ -414,7 +414,10 @@ def test_material_goes_to_onedrive_by_course_with_safe_names(
 ) -> None:
     cid = owner_api.post("/courses", {"title": "Biology"}).json()["id"]
     off = owner_api.get("/drive").json()
-    assert off["available"] == {"google": False, "dropbox": False, "onedrive": True} and off["provider"] is None
+    assert (
+        off["available"] == {"google": False, "dropbox": False, "onedrive": True, "folder": False}
+        and off["provider"] is None
+    )
     v = _connect_folder(owner_api, od, frozen)
     assert v["provider"] == "onedrive" and v["folder"] == "OneDrive › Apps › RecallSpring › Material"
     assert owner_api.post("/drive/dropbox/start").json()["code"] == "drive_connected"  # one at a time

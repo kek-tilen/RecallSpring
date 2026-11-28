@@ -130,6 +130,10 @@ class Settings(BaseSettings):
     # OneDrive (cloud_onedrive.py, 2026-11-28): the Application (client) ID of a Microsoft Entra app for personal and
     # school or work accounts, with public client flows on. Device-code sign-in, no secret. Never from Git.
     cloud_onedrive_client_id: str | None = None
+    # A synced folder (cloud_folder.py, 2026-11-28): chosen in Settings, or here when backup_settings_from_web is
+    # off. cloud_folder_dir takes the encrypted cloud copy; drive_folder_dir holds a subfolder per learner.
+    cloud_folder_dir: Path | None = None
+    drive_folder_dir: Path | None = None
     # Small runtime files, e.g. the worker heartbeat the API reads (runtime.py); never learner data.
     run_dir: Path = _REPO_ROOT / "local-data" / "run"
     ai_evaluation_lease_seconds: int = 180

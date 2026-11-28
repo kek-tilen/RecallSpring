@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import backup, clock, cloud
+from .. import backup, clock, cloud, cloud_folder
 from ..ai import siwc
 from ..config import get_settings
 from ..connector_auth import daily_limit, new_token, used_today
@@ -229,6 +229,10 @@ CLOUD_STATUS = {
     "bad_code": 422,
     "expired": 409,
     "not_supported": 409,
+    "connected": 409,
+    "folder_refused": 422,
+    "folder_locked": 409,
+    "folder_missing": 409,
 }
 
 
@@ -313,6 +317,31 @@ def cloud_google_poll(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db
     if state == "connected":
         cloud.copy_in_background(actor_id=ctx.user.id, request_id=ctx.request_id)
     return {"state": state, "backup": _backup_view(db, ctx.user)}
+
+
+@router.post("/settings/backup/cloud/folder/check")
+def cloud_folder_check(
+    payload: BackupFolderIn, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Try a synced folder for the cloud copy before using it (nothing is saved or created)."""
+    _require_backup_owner(db, ctx.user)
+    return cloud_folder.check(payload.path, "copy")
+
+
+@router.post("/settings/backup/cloud/folder/connect")
+def cloud_folder_connect(
+    payload: BackupFolderIn, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Copy the encrypted backups into a synced folder (no sign-in). Checked again here; RecallSpring makes only the
+    last folder. The first copy starts in the background. Audited as backup.cloud_connected."""
+    _require_backup_owner(db, ctx.user)
+    db.rollback()
+    try:
+        cloud.connect_folder(payload.path, actor_id=ctx.user.id, request_id=ctx.request_id)
+    except cloud.CloudError as exc:
+        raise _cloud_error(exc) from exc
+    cloud.copy_in_background(actor_id=ctx.user.id, request_id=ctx.request_id)
+    return _backup_view(db, ctx.user)
 
 
 @router.post("/settings/backup/cloud/cancel")

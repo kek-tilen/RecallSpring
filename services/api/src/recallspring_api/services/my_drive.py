@@ -9,6 +9,10 @@ token is kept per learner in
 ``secrets_dir/drive-<user id>.bin`` (DPAPI on Windows, 0600 elsewhere), never in the database, a backup, History, logs
 or the browser. No account name or address is stored.
 
+A synced folder (cloud_folder.py, 2026-11-28; iCloud Drive or any other sync app): the first account chooses one
+folder on the computer RecallSpring runs on, and each learner who uses it gets a subfolder named by their sign-in name.
+No sign-in and no token; the folder syncs to the account of whoever runs RecallSpring, and the page says so.
+
 Copying is one way and never blocks uploads, extraction or grading. RecallSpring keeps working from its own copy.
 Material deleted in RecallSpring stays in Drive (it is the learner's copy); Disconnect can delete everything
 RecallSpring made there, after asking.
@@ -29,9 +33,10 @@ from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from .. import backup, clock, cloud
+from .. import backup, clock, cloud, cloud_folder
 from ..ai import siwc_store as store
 from ..cloud import CloudError
+from ..config import get_settings
 from ..db import new_session
 from ..errors import ApiError
 from ..ingest.storage import blob_path
@@ -66,7 +71,25 @@ def _label(provider: str | None) -> str:
 
 
 def _error(exc: CloudError, provider: str | None = "google") -> CloudError:
+    if provider == "folder" and exc.code not in ("busy", "missing"):
+        return exc  # the folder's own message names the folder
     return CloudError(exc.code, _messages(_label(provider)).get(exc.code, exc.message))
+
+
+FOLDER_REMOVED = (
+    "Whoever runs this RecallSpring no longer offers the synced folder. Your material is safe here; disconnect and "
+    "choose another cloud folder."
+)
+
+
+def _provider(name: str, root: str | None = None) -> Any:
+    """The storage calls for one learner's run; a synced folder needs the folder the first account chose."""
+    if name != "folder":
+        return cloud.provider(name)
+    base = cloud_folder.drive_base()
+    if base is None:
+        raise CloudError("folder_missing", FOLDER_REMOVED)
+    return cloud_folder.Folder(base, drive_root=root or "")
 
 
 # ---------------------------------------------------------------- secrets
@@ -82,6 +105,8 @@ def _pending_path(user_id: uuid.UUID) -> Path:
 
 def connection(db: Session, user_id: uuid.UUID) -> DriveConnection | None:
     row = db.get(DriveConnection, user_id)
+    if row is not None and row.provider == "folder":
+        return row  # no sign-in to keep
     return row if row is not None and _token_path(user_id).exists() else None
 
 
@@ -141,6 +166,10 @@ def _connected(db: Session, user: User, name: str, token: dict[str, Any], access
     except CloudError:
         _token_path(user.id).unlink(missing_ok=True)
         raise
+    _remember(db, user, name, root, request_id, {"provider": name})
+
+
+def _remember(db: Session, user: User, name: str, root: str, request_id: str | None, details: dict[str, Any]) -> None:
     old = db.get(DriveConnection, user.id)
     if old is not None and old.provider != name:  # another provider than before: start over there
         for item in db.scalars(select(DriveItem).where(DriveItem.user_id == user.id)):
@@ -154,7 +183,88 @@ def _connected(db: Session, user: User, name: str, token: dict[str, Any], access
     else:
         # copy_from by the database clock, as Source.uploaded_at
         db.add(DriveConnection(user_id=user.id, provider=name, root_id=root, copy_from=func.now(), state="ok"))
-    audit(db, actor_id=user.id, action="drive.connected", details={"provider": name}, request_id=request_id)
+    audit(db, actor_id=user.id, action="drive.connected", details=details, request_id=request_id)
+
+
+# ---------------------------------------------------------------- a synced folder (cloud_folder.py, 2026-11-28)
+
+
+def _is_first(db: Session, user: User) -> bool:
+    """The first account chooses the folder: it is on the computer RecallSpring runs on."""
+    return db.scalar(select(User.id).order_by(User.created_at, User.id).limit(1)) == user.id
+
+
+def _subfolder(user: User) -> str:
+    """The learner's sign-in name, made safe (connect_folder numbers it when another learner's folder has the same
+    name regardless of letter case: two learners never share a folder)."""
+    return safe_name(user.username, "learner", 64)
+
+
+def folder_check(db: Session, user: User, raw: str | None) -> dict[str, Any]:
+    if not _is_first(db, user):
+        raise ApiError(403, "not_backup_owner", "Only the first account on this RecallSpring chooses the folder.")
+    return cloud_folder.check(raw, "drive")
+
+
+def set_folder(db: Session, user: User, raw: str | None, request_id: str | None) -> None:
+    """The first account chooses (or, with None, stops offering) the synced folder learners' copies go under.
+    Learners already using it keep their files; their copying stops with a plain message. Audited."""
+    if not _is_first(db, user):
+        raise ApiError(403, "not_backup_owner", "Only the first account on this RecallSpring chooses the folder.")
+    if not cloud_folder.from_web():
+        raise ApiError(
+            409, "drive_folder_locked", "The folder is set in the server settings here (RS_DRIVE_FOLDER_DIR)."
+        )
+    config = backup.read_config()
+    old = config.get("drive_folder")
+    if raw is None:
+        config.pop("drive_folder", None)
+        new: str | None = None
+    else:
+        try:
+            new = str(cloud_folder.prepare(raw, "drive"))
+        except CloudError as exc:
+            raise ApiError(422, f"drive_{exc.code}", exc.message) from exc
+        config["drive_folder"] = new
+    backup._write_json(get_settings().backup_settings_file, config)
+    audit(
+        db,
+        actor_id=user.id,
+        action="drive.folder_changed",
+        details={"from": old, "to": new, "sync": cloud_folder.app_of(Path(new)) if new else None},
+        request_id=request_id,
+    )
+
+
+def connect_folder(db: Session, user: User, request_id: str | None) -> None:
+    """Use the synced folder: the learner's own subfolder in it, made now (never the folder above it)."""
+    base = cloud_folder.drive_base()
+    if base is None:
+        raise CloudError("folder_missing", "Whoever runs this RecallSpring has not chosen a synced folder yet.")
+    name = _subfolder(user)
+    others = {
+        r.lower()
+        for r in db.scalars(
+            select(DriveConnection.root_id).where(
+                DriveConnection.provider == "folder", DriveConnection.user_id != user.id
+            )
+        )
+    }
+    p = cloud_folder.Folder(base)
+    if name.lower() in others:
+        root = p.new_folder(None, "", name, "")  # numbered: "maja (1)"
+    else:
+        root = p.ensure_folder(None, "", name, None)
+    cancel(user.id)
+    _token_path(user.id).unlink(missing_ok=True)  # a sign-in kept from before (access withdrawn) is not needed now
+    _remember(
+        db,
+        user,
+        "folder",
+        root,
+        request_id,
+        {"provider": "folder", "folder": str(base / root), "sync": cloud_folder.app_of(base)},
+    )
 
 
 def cancel(user_id: uuid.UUID) -> None:
@@ -259,7 +369,10 @@ class _Run:
                 self.db.flush()
                 item = None
             elif item.name != name:  # renamed in RecallSpring: rename in the cloud too
-                self.p.rename(self.http, self.token, item.drive_id, name)
+                moved = self.p.rename(self.http, self.token, item.drive_id, name)
+                if isinstance(moved, str) and moved != item.drive_id:  # a synced folder: refs are paths
+                    self._moved(item.drive_id, moved)
+                    item.drive_id = moved
                 item.name = name
         if item is None:
             item = DriveItem(
@@ -273,6 +386,15 @@ class _Run:
             self.db.flush()
         self.checked[key] = item.drive_id
         return item.drive_id
+
+    def _moved(self, old: str, new: str) -> None:
+        """What was copied under a renamed folder keeps its place (path references change with the folder)."""
+        under = select(DriveItem).where(
+            DriveItem.user_id == self.conn.user_id, DriveItem.drive_id.startswith(old + "/", autoescape=True)
+        )
+        for row in self.db.scalars(under):
+            row.drive_id = new + row.drive_id[len(old) :]
+        self.checked = {k: (new + v[len(old) :] if v.startswith(old + "/") else v) for k, v in self.checked.items()}
 
     def course(self, course: Course) -> str:
         return self.folder("course", course.id, safe_name(course.title, "course"), self.root())
@@ -405,7 +527,7 @@ def _sync(user_id: uuid.UUID) -> str:
         db.commit()
         done = {"bytes": 0}
         with cloud._http() as http:
-            p = cloud.provider(conn.provider)
+            p = _provider(conn.provider, conn.root_id)
             token = p.access_token(http, _token_path(user_id))
             run = _Run(db, http, p, token, conn)
             free = p.free_bytes(http, token)
@@ -506,7 +628,7 @@ def send_export(export_id: uuid.UUID) -> str | None:
             if conn is None or conn.state == "revoked":
                 return "revoked"
             with _locked(row.user_id), cloud._http() as http:
-                p = cloud.provider(conn.provider)
+                p = _provider(conn.provider, conn.root_id)
                 token = p.access_token(http, _token_path(row.user_id))
                 run = _Run(db, http, p, token, conn)
                 folder = run.folder("exports", None, EXPORTS_NAME, run.root())
@@ -568,7 +690,16 @@ def disconnect(db: Session, user: User, delete_files: bool, request_id: str | No
     token = cloud._read_secret(_token_path(user.id))
     name = conn.provider if conn is not None else "google"
     deleted = False
-    if conn is not None and token:
+    if conn is not None and name == "folder":
+        if delete_files:
+            try:
+                _provider(name, conn.root_id).delete(None, "", conn.root_id)
+            except CloudError as exc:
+                raise ApiError(
+                    502, "drive_unreachable", f"Could not delete the files in the synced folder: {exc.message}"
+                ) from exc
+            deleted = True
+    elif conn is not None and token:
         try:
             p = cloud.provider(name)
             with cloud._http() as http:
@@ -606,15 +737,31 @@ def disconnect(db: Session, user: User, delete_files: bool, request_id: str | No
 def view(db: Session, user: User) -> dict[str, Any]:
     """What Settings shows. No token, no device code, no account details."""
     conn = connection(db, user.id)
+    chosen = cloud_folder.drive_base()
+    first = _is_first(db, user)
+    can_choose = first and cloud_folder.from_web()
     base: dict[str, Any] = {
-        "available": {name: cloud.configured(name) for name in cloud.PROVIDERS},
+        "available": {name: cloud.configured(name) for name in cloud.PROVIDERS} | {"folder": chosen is not None},
         "state": "off",
         "provider": None,
         "pending": None,
+        "synced_folder": {
+            "path": str(chosen) if chosen and first else None,  # the server's own path: only for the first account
+            "where": cloud_folder.display(chosen) if chosen else None,
+            "mine": cloud_folder.display(chosen / _subfolder(user)) if chosen else None,
+            "sync": cloud_folder.app_of(chosen) if chosen else None,
+            "can_choose": can_choose,
+            "suggestions": cloud_folder.suggestions() if can_choose and chosen is None else [],
+        },
     }
     if conn is None:
         return base | {"pending": pending(user.id)}
-    p = cloud.provider(conn.provider) if cloud.configured(conn.provider) else None
+    if conn.provider == "folder":
+        p = None
+        where = cloud_folder.display(chosen / conn.root_id) if chosen else None
+    else:
+        p = cloud.provider(conn.provider) if cloud.configured(conn.provider) else None
+        where = p.where + (f" › {p.drive_root}" if conn.provider != "google" else "") if p else None
     files, size = db.execute(
         select(func.count(), func.coalesce(func.sum(DriveItem.byte_size), 0)).where(
             DriveItem.user_id == user.id, DriveItem.local_kind == "source"
@@ -625,7 +772,7 @@ def view(db: Session, user: User) -> dict[str, Any]:
         "state": conn.state,
         "provider": conn.provider,
         "connected_at": conn.connected_at.isoformat(),
-        "folder": p.where + (f" › {p.drive_root}" if conn.provider != "google" else "") if p else None,
+        "folder": where,
         "mirror": conn.mirror,
         "exports": conn.exports,
         "files": int(files),
@@ -645,6 +792,8 @@ def attention_item(db: Session, user: User) -> dict[str, Any] | None:
         return None
     item: dict[str, Any] = {"kind": "drive", "id": None, "course_id": None}
     label = _label(conn.provider)
+    if conn.state == "failing" and (conn.error or {}).get("code") == "folder_missing":  # at once: nothing is copied
+        return item | {"title": "Your synced folder copy is waiting", "text": str((conn.error or {}).get("message"))}
     if conn.state == "revoked":
         return item | {"title": f"Your {label} copy stopped", "text": _messages(label)["revoked"]}
     if conn.state == "failing" and conn.failing_since and clock.now() - conn.failing_since >= cloud.ATTENTION_AFTER:

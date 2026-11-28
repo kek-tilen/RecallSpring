@@ -295,7 +295,7 @@ def test_backups_go_to_the_app_folder_after_a_pasted_code(
     owner_api: Api, dbx: FakeDropbox, settings: Any, frozen: FrozenClock
 ) -> None:
     view = owner_api.get("/settings/backup").json()["cloud"]
-    assert view["available"] == {"google": False, "dropbox": True, "onedrive": False}
+    assert view["available"] == {"google": False, "dropbox": True, "onedrive": False, "folder": True}
     assert owner_api.post("/settings/backup/cloud/dropbox/start").json()["code"] == "cloud_needs_encryption"
     _encryption_on()
     _snapshot("20261120-030000", [_sealed("a")], size=200 * 1024)  # bigger than a piece: an upload session
@@ -385,7 +385,10 @@ def test_disconnect_deletes_only_what_recallspring_made(owner_api: Api, dbx: Fak
 def test_material_goes_to_dropbox_by_course_and_follows_renames(owner_api: Api, dbx: FakeDropbox) -> None:
     cid = owner_api.post("/courses", {"title": "Biology"}).json()["id"]
     off = owner_api.get("/drive").json()
-    assert off["available"] == {"google": False, "dropbox": True, "onedrive": False} and off["provider"] is None
+    assert (
+        off["available"] == {"google": False, "dropbox": True, "onedrive": False, "folder": False}
+        and off["provider"] is None
+    )
     v = _connect_folder(owner_api, dbx)
     assert v["provider"] == "dropbox" and v["folder"] == "Dropbox › Apps › RecallSpring › Material"
     assert owner_api.post("/drive/start").json()["code"] == "drive_connected"  # one at a time

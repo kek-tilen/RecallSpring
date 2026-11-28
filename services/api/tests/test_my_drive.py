@@ -61,6 +61,7 @@ def drive(settings: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Ite
     fake = FakeDrive()
     monkeypatch.setattr(settings, "run_dir", tmp_path / "run")
     monkeypatch.setattr(settings, "secrets_dir", tmp_path / "secrets")
+    monkeypatch.setattr(settings, "backup_settings_file", tmp_path / "backup-settings.json")  # no synced folder chosen
     monkeypatch.setattr(settings, "cloud_google_client_id", "test-client.apps.googleusercontent.com")
     monkeypatch.setattr(settings, "cloud_google_client_secret", SecretStr("test-secret"))
     monkeypatch.setattr(cloud, "_transport", httpx.MockTransport(fake.handler))
@@ -102,7 +103,7 @@ def test_new_material_is_copied_by_course_and_earlier_only_when_asked(owner_api:
     off = owner_api.get("/drive").json()
     assert (
         off["state"] == "off"
-        and off["available"] == {"google": True, "dropbox": False, "onedrive": False}
+        and off["available"] == {"google": True, "dropbox": False, "onedrive": False, "folder": False}
         and off["pending"] is None
     )
 
