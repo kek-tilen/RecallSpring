@@ -858,9 +858,9 @@ class Export(Base):
 
 
 class DriveConnection(Base):
-    """A learner's own cloud folder (BYOS step 2, migration 0040, 2026-11-27; Dropbox migration 0041, 2026-11-28): a
-    readable copy of their material in Google Drive or Dropbox. The refresh token is in secrets_dir
-    (drive-<user id>.bin), never here."""
+    """A learner's own cloud folder (BYOS step 2, migration 0040, 2026-11-27; Dropbox 0041 and OneDrive 0042,
+    2026-11-28): a readable copy of their material in Google Drive, Dropbox or OneDrive. The refresh token is in
+    secrets_dir (drive-<user id>.bin), never here."""
 
     __tablename__ = "drive_connections"
 
@@ -882,7 +882,7 @@ class DriveConnection(Base):
     connected_at: Mapped[datetime] = _created()
 
     __table_args__ = (
-        CheckConstraint("provider IN ('google','dropbox')", name="provider"),
+        CheckConstraint("provider IN ('google','dropbox','onedrive')", name="provider"),
         CheckConstraint("state IN ('ok','copying','failing','revoked')", name="state"),
     )
 
