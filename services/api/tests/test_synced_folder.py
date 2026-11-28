@@ -156,12 +156,17 @@ def test_the_server_settings_can_give_the_folder(
 ) -> None:
     _encryption_on()
     monkeypatch.setattr(settings, "backup_settings_from_web", False)
-    assert owner_api.get("/settings/backup").json()["cloud"]["available"]["folder"] is False
-    monkeypatch.setattr(settings, "cloud_folder_dir", synced / "Server copy")
     view = owner_api.get("/settings/backup").json()["cloud"]
-    assert view["folder"] == {"from_server": str(synced / "Server copy"), "suggestions": []}
+    assert view["available"]["folder"] is False and view["folder"] is None and view["state"] == "off"
+    monkeypatch.setattr(settings, "cloud_folder_dir", synced / "Server copy")
+    view = owner_api.get("/settings/backup").json()["cloud"]  # the server settings turn it on; nothing to connect
+    assert view["provider"] == "folder" and view["folder"]["path"] == str(synced / "Server copy")
+    assert view["folder"]["from_server"] is True and view["folder"]["sync"] == "iCloud Drive"
     r = owner_api.post("/settings/backup/cloud/folder/connect", {"path": str(synced / "Somewhere else")})
-    assert r.status_code == 200 and r.json()["cloud"]["folder"]["path"] == str(synced / "Server copy")
+    assert r.status_code == 403 and r.json()["code"] == "backup_folder_locked"
+    _snapshot("20261120-030000", [])
+    assert cloud.copy_if_due() and owner_api.get("/settings/backup").json()["cloud"]["state"] == "ok"
+    assert (synced / "Server copy").is_dir() and not (synced / "Somewhere else").exists()
     r = owner_api.put("/drive/folder", {"path": str(synced / "Learners")})
     assert r.status_code == 409 and r.json()["code"] == "drive_folder_locked"
 
@@ -188,15 +193,15 @@ def test_each_learner_gets_a_subfolder(owner_api: Api, synced: Path) -> None:
     assert owner_api.post("/drive/onedrive/start").json()["code"] == "drive_connected"  # one at a time
     _upload(owner_api, cid, "Mitoza: povzetek.txt", b"Prophase.", "Week 1")
     _upload(owner_api, cid, "mitoza- POVZETEK.txt", b"Other case.", "Week 1")
-    _upload(owner_api, cid, "big.bin", b"x" * 300_000, "Week 1")
+    _upload(owner_api, cid, "big.txt", b"x" * 300_000, "Week 1")
     assert my_drive.sync_all() == 1
     mine = base / "owner"
     assert _files(mine) == {
         "Biology/Week 1/Mitoza- povzetek.txt",
         "Biology/Week 1/mitoza- POVZETEK (1).txt",
-        "Biology/Week 1/big.bin",
+        "Biology/Week 1/big.txt",
     }
-    assert (mine / "Biology/Week 1/big.bin").read_bytes() == b"x" * 300_000
+    assert (mine / "Biology/Week 1/big.txt").read_bytes() == b"x" * 300_000
 
     with new_session() as db:  # renamed in RecallSpring: renamed in the folder, and what is in it stays found
         course = db.get(Course, uuid.UUID(cid))

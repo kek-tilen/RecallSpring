@@ -67,12 +67,6 @@ def drive_base() -> Path | None:
     return Path(value) if isinstance(value, str) and value and Path(value).is_absolute() else None
 
 
-def server_copy_dir() -> Path | None:
-    """The cloud copy folder from the server settings (used when the folder is not chosen in Settings)."""
-    value = get_settings().cloud_folder_dir
-    return Path(value) if value else None
-
-
 def app_of(path: Path) -> str | None:
     return backup.sync_provider(path)
 

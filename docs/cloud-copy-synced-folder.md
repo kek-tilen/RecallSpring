@@ -49,8 +49,9 @@ their copying stops with a plain message.
 
 ## Server settings
 
-With `RS_BACKUP_SETTINGS_FROM_WEB=false` (a hosted server) folders cannot be chosen in Settings; they come from the
-server settings instead:
+With `RS_BACKUP_SETTINGS_FROM_WEB=false` (a hosted server) nothing about backups can be changed in Settings, so the
+folders come from the server settings instead. `RS_CLOUD_FOLDER_DIR` turns the cloud copy on by itself once
+encryption is on (Settings shows it, with "set in the server settings"); remove it to stop the copy.
 
 ```
 RS_CLOUD_FOLDER_DIR=<folder for the encrypted cloud copy>

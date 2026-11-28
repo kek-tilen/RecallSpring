@@ -108,7 +108,7 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
     onSuccess: setView,
   });
   const connectFolder = useMutation({
-    mutationFn: (path: string | null) => request<BackupStatus>("/settings/backup/cloud/folder/connect", { method: "POST", json: { path } }),
+    mutationFn: (path: string) => request<BackupStatus>("/settings/backup/cloud/folder/connect", { method: "POST", json: { path } }),
     onSuccess: (v) => {
       setView(v);
       setStep("connected");
@@ -197,7 +197,10 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
       <div className="settings-row">
         <span style={{ minWidth: 0 }}>
           <h3 className="settings-row-title">Cloud copy</h3>
-          <span className={`small ${warn ? "warn-text" : "muted"}`}>{summary(c)}</span>
+          <span className={`small ${warn ? "warn-text" : "muted"}`}>
+            {summary(c)}
+            {c.folder?.from_server && " · set in the server settings"}
+          </span>
         </span>
         {b.can_change &&
           (!on && !encrypted ? (
@@ -272,44 +275,24 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
         </div>
       )}
 
-      {step === "folder" &&
-        (c.folder?.from_server ? (
-          <section className="assistant-steps stack" style={{ gap: 10 }} aria-labelledby="cloud-folder-h">
-            <h4 id="cloud-folder-h" className="backup-key-title">
-              A synced folder
-            </h4>
-            <p className="small" style={{ margin: 0 }}>
-              The server settings give the folder: <span className="backup-path">{c.folder.from_server}</span>. RecallSpring puts the encrypted
-              backups there; the local backup folder stays the main copy.
-            </p>
-            {connectFolder.error && <ErrorNote error={connectFolder.error} />}
-            <div className="row">
-              <button type="button" className="btn primary small" disabled={connectFolder.isPending} onClick={() => connectFolder.mutate(null)}>
-                Use this folder
-              </button>
-              <button type="button" className="btn small" onClick={() => setStep("choose")}>
-                Back
-              </button>
-            </div>
-          </section>
-        ) : (
-          <SyncedFolderStep
-            id="cloud-folder-h"
-            intro={
-              <>
-                RecallSpring puts the <strong>encrypted</strong> backups in a folder that a sync app uploads to your cloud. The local backup folder
-                stays the main copy.
-              </>
-            }
-            checkUrl="/settings/backup/cloud/folder/check"
-            suggestions={c.folder?.suggestions ?? []}
-            name="RecallSpring backups"
-            busy={connectFolder.isPending}
-            error={connectFolder.error}
-            onUse={(path) => connectFolder.mutate(path)}
-            onCancel={() => setStep("choose")}
-          />
-        ))}
+      {step === "folder" && (
+        <SyncedFolderStep
+          id="cloud-folder-h"
+          intro={
+            <>
+              RecallSpring puts the <strong>encrypted</strong> backups in a folder that a sync app uploads to your cloud. The local backup folder
+              stays the main copy.
+            </>
+          }
+          checkUrl="/settings/backup/cloud/folder/check"
+          suggestions={c.folder?.suggestions ?? []}
+          name="RecallSpring backups"
+          busy={connectFolder.isPending}
+          error={connectFolder.error}
+          onUse={(path) => connectFolder.mutate(path)}
+          onCancel={() => setStep("choose")}
+        />
+      )}
 
       {step === "code" && (
         <DeviceSignIn

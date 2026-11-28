@@ -857,12 +857,13 @@ export interface CloudView {
   next_try_at: string | null;
   progress: { done_files: number; total_files: number; done_bytes: number; total_bytes: number } | null;
   pending: CloudPending | null;
-  /** Connected to a synced folder: where it is. Not connected: the server's folder, or folders found to pick from. */
+  /** Connected to a synced folder: where it is, and whether the server settings give it. Not connected: folders found
+   * to pick from. */
   folder?: {
     path?: string;
     where?: string;
     sync?: string | null;
-    from_server?: string | null;
+    from_server?: boolean;
     suggestions?: FolderSuggestion[];
   } | null;
 }

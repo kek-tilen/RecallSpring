@@ -130,8 +130,22 @@ describe("Cloud copy", () => {
     expect(screen.getByText("Not offered on this server")).toBeTruthy();
   });
 
+  it("shows a synced folder the server settings give, without anything to change", async () => {
+    const server: CloudView = {
+      ...connected,
+      provider: "folder",
+      connected_at: null,
+      folder: { path: "/srv/sync/RecallSpring", where: "/srv/sync/RecallSpring", sync: "Nextcloud", from_server: true },
+    };
+    setup({ ...status(server), can_change: false });
+    await screen.findByRole("heading", { level: 3, name: "Cloud copy" });
+    expect(await within(row()).findByText(/^Nextcloud · handed over/)).toBeTruthy();
+    expect(within(row()).getByText(/set in the server settings/)).toBeTruthy();
+    expect(within(row()).queryByRole("button")).toBeNull();
+  });
+
   it("copies to a synced folder after checking it", async () => {
-    const folderOff = { ...off, folder: { from_server: null, suggestions: [{ app: "iCloud Drive", path: "C:\\Users\\ana\\iCloudDrive" }] } };
+    const folderOff = { ...off, folder: { suggestions: [{ app: "iCloud Drive", path: "C:\\Users\\ana\\iCloudDrive" }] } };
     const done: CloudView = {
       ...connected,
       provider: "folder",

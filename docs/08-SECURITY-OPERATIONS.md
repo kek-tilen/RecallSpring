@@ -226,7 +226,8 @@ stays the main copy.
   disk (`folder_missing`: Today says so at once, retries as usual). Each file is written as a hidden `.part` file
   and renamed when complete; the size is read back; room is the free space on that disk. RecallSpring cannot see
   whether the sync app has uploaded it, and Settings says "handed over", not "copied". The folder is kept in the
-  backup settings file (`cloud`), or comes from `RS_CLOUD_FOLDER_DIR` when `RS_BACKUP_SETTINGS_FROM_WEB=false`.
+  backup settings file (`cloud`); when `RS_BACKUP_SETTINGS_FROM_WEB=false`, `RS_CLOUD_FOLDER_DIR` turns the copy on
+  by itself (Settings cannot connect anything there) and removing it stops the copy.
 - **Secrets:** only the refresh token is kept, in `secrets_dir` (`cloud-<provider>.bin`, DPAPI on
   Windows, 0600 elsewhere), like the ChatGPT sign-in; the device code or the PKCE verifier waits there while the
   learner signs in (`cloud-<provider>-pending.bin`). Neither reaches the database, a backup, History, logs or the

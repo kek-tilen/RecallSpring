@@ -231,6 +231,7 @@ def test_needs_an_app_id_and_encryption(
         "google": False,
         "dropbox": False,
         "onedrive": False,
+        "folder": True,
     }
     r = owner_api.post("/settings/backup/cloud/google/start")
     assert r.status_code == 409 and r.json()["code"] == "cloud_not_configured"

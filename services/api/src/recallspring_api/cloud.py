@@ -121,7 +121,13 @@ def _update_status(**changes: Any) -> dict[str, Any]:
 
 
 def connection() -> dict[str, Any] | None:
-    """{"provider", "folder_id", "connected_at"} while connected (the folder id is not a secret)."""
+    """{"provider", "folder_id", "connected_at"} while connected (the folder id is not a secret). Where backups are
+    set in the server settings (RS_BACKUP_SETTINGS_FROM_WEB=false), RS_CLOUD_FOLDER_DIR turns the copy on by itself:
+    nothing can be connected from Settings there."""
+    s = get_settings()
+    if not s.backup_settings_from_web and s.cloud_folder_dir is not None and s.cloud_folder_dir.is_absolute():
+        server = s.cloud_folder_dir
+        return {"provider": "folder", "folder_id": server.name, "path": str(server), "connected_at": None}
     value = backup.read_config().get("cloud")
     if not isinstance(value, dict) or value.get("provider") not in PROVIDERS:
         return None
@@ -909,18 +915,15 @@ def connect_folder(
     raw: str | None, *, actor_id: uuid.UUID | None = None, request_id: str | None = None
 ) -> dict[str, Any]:
     """Copy the encrypted backups into a folder a sync app uploads. The folder is checked first; RecallSpring makes
-    only its last part. From the server settings (RS_CLOUD_FOLDER_DIR) when the folder may not be chosen here."""
+    only its last part. Where backups are set in the server settings, RS_CLOUD_FOLDER_DIR does this instead."""
     from . import cloud_folder
 
+    if not cloud_folder.from_web():
+        raise CloudError("folder_locked", "The folder is set in the server settings here (RS_CLOUD_FOLDER_DIR).")
     if backup.encryption() is None:
         raise CloudError("needs_encryption", "Turn on encryption first: only encrypted backups leave this computer.")
     if connection() is not None:
         raise CloudError("connected", "A cloud copy is connected already. Disconnect it first.")
-    if not cloud_folder.from_web():
-        server = cloud_folder.server_copy_dir()
-        if server is None:
-            raise CloudError("folder_locked", "The folder is set in the server settings here (RS_CLOUD_FOLDER_DIR).")
-        raw = str(server)
     chosen = cloud_folder.prepare(raw, "copy")
     cancel()
     _save_connection(
@@ -949,12 +952,9 @@ def view() -> dict[str, Any]:
     if conn is not None and conn["provider"] == "folder":
         chosen = Path(conn["path"])
         folder = {"path": str(chosen), "where": cloud_folder.display(chosen), "sync": cloud_folder.app_of(chosen)}
-    elif conn is None and configured("folder"):
-        server = None if cloud_folder.from_web() else cloud_folder.server_copy_dir()
-        folder = {
-            "from_server": str(server) if server else None,
-            "suggestions": cloud_folder.suggestions() if cloud_folder.from_web() else [],
-        }
+        folder["from_server"] = not cloud_folder.from_web()
+    elif conn is None and cloud_folder.from_web():
+        folder = {"suggestions": cloud_folder.suggestions()}
     return {
         "available": {name: configured(name) for name in PROVIDERS},
         "folder": folder,
