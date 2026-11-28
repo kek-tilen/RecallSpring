@@ -41,7 +41,7 @@
   questions come after. Spaced repetition runs by itself: reviews are scheduled from your graded answers and planned
   around your exam dates.
 - **Your data stays yours.** It runs on your own computer. Export everything as plain files, keep a readable copy in
-  your own Google Drive, Dropbox or OneDrive, and back up encrypted.
+  your own Google Drive, Dropbox, OneDrive or a synced folder such as iCloud Drive, and back up encrypted.
 
 ## How it works
 
@@ -87,7 +87,7 @@
 - **Private by default.** Runs on `127.0.0.1`; nothing is sent to the RecallSpring authors.
 - **Export** your material by course, notes as Markdown, and answers and grades as CSV and JSON.
 - **Your cloud folder:** a readable copy of your material, by course, in your own Google Drive, Dropbox or
-  OneDrive.
+  OneDrive, or a synced folder (iCloud Drive and other sync apps).
 - **Backups** every night, checked by a test restore, optionally encrypted and copied to the cloud.
 - **Nothing is lost by accident.** Deleting can be undone for 30 days, and History shows every change.
 

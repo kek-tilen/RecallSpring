@@ -193,7 +193,7 @@ folder: 36 tables, every row count equal to the manifest, Alembic revision match
 checksums, that day's answers and notes present, and the API started and answered `ready` on the copy. The throwaway
 database and folder were then removed.
 
-### Cloud copy to Google Drive, Dropbox or OneDrive (`cloud.py`, 2026-11-27; `cloud_dropbox.py`, `cloud_onedrive.py`, 2026-11-28)
+### Cloud copy to Google Drive, Dropbox, OneDrive or a synced folder (`cloud.py`, 2026-11-27; `cloud_dropbox.py`, `cloud_onedrive.py`, `cloud_folder.py`, 2026-11-28)
 
 Settings → Data & backups → *Cloud copy* uploads the **encrypted** backups to a folder RecallSpring creates in the
 learner's Google Drive (`My Drive › RecallSpring backups`), Dropbox (`Dropbox › Apps › RecallSpring › Backups`) or
@@ -219,6 +219,14 @@ stays the main copy.
   A school that blocks code sign-in (Conditional Access, AADSTS53003) is shown as *blocked*, a school whose OneDrive
   refuses the app folder as *not supported*; nothing is connected and wider access is never asked for. Microsoft
   rotates the refresh token on each use and the newest replaces the old one.
+- **A synced folder** (iCloud Drive or any other sync app, docs/cloud-copy-synced-folder.md): no sign-in; the
+  encrypted backups go into a folder on this computer that a sync app uploads. *Check folder* refuses what
+  *Where backups go* refuses, and the backup folder itself or a folder inside it; RecallSpring makes only the last
+  folder, the one above must exist, so a missing sync folder or drive is never replaced by a folder on the local
+  disk (`folder_missing`: Today says so at once, retries as usual). Each file is written as a hidden `.part` file
+  and renamed when complete; the size is read back; room is the free space on that disk. RecallSpring cannot see
+  whether the sync app has uploaded it, and Settings says "handed over", not "copied". The folder is kept in the
+  backup settings file (`cloud`), or comes from `RS_CLOUD_FOLDER_DIR` when `RS_BACKUP_SETTINGS_FROM_WEB=false`.
 - **Secrets:** only the refresh token is kept, in `secrets_dir` (`cloud-<provider>.bin`, DPAPI on
   Windows, 0600 elsewhere), like the ChatGPT sign-in; the device code or the PKCE verifier waits there while the
   learner signs in (`cloud-<provider>-pending.bin`). Neither reaches the database, a backup, History, logs or the
@@ -242,7 +250,7 @@ stays the main copy.
   delete them too (asked once more; Dropbox and OneDrive keep deleted files in their own bin for a while).
 - **Audited:** `backup.cloud_connected`, `backup.cloud_disconnected` (files kept or deleted), `backup.cloud_failed`
   (once per run of failures), `backup.cloud_files_deleted`. Only the first account may connect or disconnect.
-- **Not yet:** iCloud Drive (no API; only through a synced folder); a restore command that downloads by itself.
+- **Not yet:** a restore command that downloads by itself; telling whether a sync app has finished uploading.
 
 ### Export (`services/exports.py`, 2026-11-27)
 
@@ -259,7 +267,7 @@ and any of the three parts.
   session (`Cache-Control: no-store`). Today shows a ready export until it is downloaded, and a failed one.
 - History: `export.created`, `export.downloaded`, `export.sent_to_drive`.
 
-### Your cloud folder (`services/my_drive.py`, migration 0040, 2026-11-27; Dropbox 0041, OneDrive 0042, 2026-11-28)
+### Your cloud folder (`services/my_drive.py`, migration 0040, 2026-11-27; Dropbox 0041, OneDrive 0042, a synced folder 0043, 2026-11-28)
 
 Settings → Data & backups → *Your cloud folder* (called *Your Google Drive* until 2026-11-28) keeps a **readable**
 copy of each learner's own material in their own Google Drive, in `My Drive › RecallSpring › <course>/<their
@@ -278,6 +286,15 @@ RecallSpring keeps working from its own copy.
   their own account (docs/cloud-copy-onedrive.md). Names OneDrive refuses (`" * : < > ? / \ |`, a trailing dot or
   space, `CON`, `desktop.ini` and the like) are made safe with `_`; a clash regardless of case gets " 1"; uploads
   are 10 MiB pieces.
+  A synced folder (docs/cloud-copy-synced-folder.md): the first account chooses one folder on the server
+  (`drive_folder` in the backup settings file, or `RS_DRIVE_FOLDER_DIR`); each learner who uses it gets
+  `<folder>/<sign-in name>/<course>/…`, numbered when another learner's subfolder has the same name regardless of
+  case, so two learners never share one. A learner cannot type a path (it would write anywhere on the server's
+  disk), and only the first account sees the server's own path. The folder syncs to the account of whoever runs
+  RecallSpring, and Settings tells both sides so. Items are referred to by their path inside the folder; a renamed
+  course or folder renames it there and updates the references under it. *Stop offering the synced folder* leaves
+  learners' files in place; their copying stops with a plain message (Today at once). Audited as
+  `drive.folder_changed`.
 - **Secrets:** each learner's refresh token is kept in `secrets_dir/drive-<user id>.bin` (DPAPI on Windows, 0600
   elsewhere); the device code waits in `drive-<user id>-pending.bin`. Neither reaches the database, a backup,
   History, logs or the browser. No account name or address is stored. The database keeps only the connection state
@@ -297,7 +314,9 @@ RecallSpring keeps working from its own copy.
   the RecallSpring folder.
 - History: `drive.connected`, `drive.copy_existing`, `drive.failed` (once per failing streak), `drive.disconnected`
   (files kept or deleted).
-- Rollback: migration 0042 only widens `drive_connections.provider` to allow `onedrive` (`alembic downgrade 0041` is
+- Rollback: migration 0043 only widens `drive_connections.provider` to allow `folder` and makes `root_id` and
+  `drive_items.drive_id` text (paths are longer than cloud ids; `alembic downgrade 0042` is refused while a learner
+  uses a synced folder, so disconnect first); migration 0042 only widens `drive_connections.provider` to allow `onedrive` (`alembic downgrade 0041` is
   refused while a learner has OneDrive connected, so disconnect first); migration 0041 only widens
   `drive_connections.provider` to allow `dropbox` (`alembic downgrade 0040`
   is refused while a learner has Dropbox connected, so disconnect first); migration 0040 only adds the two tables
