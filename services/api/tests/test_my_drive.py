@@ -100,7 +100,7 @@ def test_new_material_is_copied_by_course_and_earlier_only_when_asked(owner_api:
     cid = owner_api.post("/courses", {"title": "Biology"}).json()["id"]
     _upload(owner_api, cid, "Before.txt", b"old")
     off = owner_api.get("/drive").json()
-    assert off["state"] == "off" and off["available"] is True and off["pending"] is None
+    assert off["state"] == "off" and off["available"] == {"google": True, "dropbox": False} and off["pending"] is None
 
     v = _connect(owner_api, drive)
     assert v["state"] == "ok" and v["folder"] == "My Drive › RecallSpring"

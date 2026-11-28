@@ -1,6 +1,7 @@
-"""Cloud copy of the encrypted backups (docs/08 -> Backups -> Cloud copy, decided 2026-11-27). Google Drive first.
+"""Cloud copy of the encrypted backups (docs/08 -> Backups -> Cloud copy, decided 2026-11-27): Google Drive, and
+Dropbox since 2026-11-28 (cloud_dropbox.py). One of them at a time.
 
-RecallSpring uploads its own encrypted backups to a folder it creates in the learner's Google Drive, with no sync app.
+RecallSpring uploads its own encrypted backups to a folder it creates in the learner's cloud storage, with no sync app.
 The local backup folder stays the main copy; the cloud copy follows it after every backup and removes what the local
 folder removed, so the cloud keeps the same backups (7 daily and 4 weekly, or the last 7).
 
@@ -8,6 +9,8 @@ folder removed, so the cloud keeps the same backups (7 daily and 4 weekly, or th
   at google.com/device on any device; no return address is needed. Scope ``drive.file`` only: RecallSpring sees only
   the files it created. The app ID and its (installed-app, not confidential) secret come from the server settings
   (RS_CLOUD_GOOGLE_CLIENT_ID / RS_CLOUD_GOOGLE_CLIENT_SECRET), never from Git (2026-11-27).
+- Dropbox: the same copy into Dropbox/Apps/<app name>/Backups; sign-in with a code Dropbox shows and the learner
+  pastes back (PKCE, no app secret; RS_CLOUD_DROPBOX_APP_KEY). Details in cloud_dropbox.py.
 - Only the refresh token is kept, protected like the ChatGPT sign-in (``secrets_dir``: DPAPI on Windows, 0600
   elsewhere); never in the database, a backup, History, logs or the browser. No account details are stored.
 - Only encrypted backups leave the computer: a snapshot whose manifest is not encrypted is never uploaded, and
@@ -41,7 +44,9 @@ from .config import get_settings
 
 log = logging.getLogger(__name__)
 
-PROVIDERS = ("google",)
+PROVIDERS = ("google", "dropbox")
+LABELS = {"google": "Google Drive", "dropbox": "Dropbox"}
+DROPBOX_PENDING = timedelta(minutes=30)  # how long a Dropbox sign-in waits for its code
 GOOGLE_DEVICE = "https://oauth2.googleapis.com/device/code"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
 GOOGLE_REVOKE = "https://oauth2.googleapis.com/revoke"
@@ -71,12 +76,12 @@ class CloudError(Exception):
 # ---------------------------------------------------------------- state
 
 
-def _token_path() -> Path:
-    return store._dir() / "cloud-google.bin"
+def _token_path(provider: str = "google") -> Path:
+    return store._dir() / f"cloud-{provider}.bin"
 
 
-def _pending_path() -> Path:
-    return store._dir() / "cloud-google-pending.bin"
+def _pending_path(provider: str = "google") -> Path:
+    return store._dir() / f"cloud-{provider}-pending.bin"
 
 
 def _read_secret(path: Path) -> dict[str, Any] | None:
@@ -112,7 +117,7 @@ def _update_status(**changes: Any) -> dict[str, Any]:
 def connection() -> dict[str, Any] | None:
     """{"provider", "folder_id", "connected_at"} while connected (the folder id is not a secret)."""
     value = backup.read_config().get("cloud")
-    if isinstance(value, dict) and value.get("provider") in PROVIDERS and _token_path().exists():
+    if isinstance(value, dict) and value.get("provider") in PROVIDERS and _token_path(value["provider"]).exists():
         return value
     return None
 
@@ -126,9 +131,30 @@ def _save_connection(value: dict[str, Any] | None) -> None:
     backup._write_json(get_settings().backup_settings_file, config)
 
 
-def configured() -> bool:
+def configured(provider: str = "google") -> bool:
     s = get_settings()
+    if provider == "dropbox":
+        return bool(s.cloud_dropbox_app_key)
     return bool(s.cloud_google_client_id and s.cloud_google_client_secret)
+
+
+def _dropbox_key() -> str:
+    key = get_settings().cloud_dropbox_app_key
+    if not key:
+        raise CloudError(
+            "not_configured",
+            "Dropbox needs an App key in the server settings (RS_CLOUD_DROPBOX_APP_KEY); docs/cloud-copy-dropbox.md.",
+        )
+    return key
+
+
+def provider(name: str) -> Any:
+    """The storage calls for one run: Google Drive or Dropbox (the same methods; a new object per run)."""
+    if name == "dropbox":
+        from .cloud_dropbox import Dropbox
+
+        return Dropbox(_dropbox_key())
+    return Google()
 
 
 def _client() -> tuple[str, str]:
@@ -176,23 +202,86 @@ def start_google() -> dict[str, Any]:
         "interval": max(5, int(body.get("interval", 5))),
         "next_poll_at": now.isoformat(),
     }
+    cancel()
     _write_secret(_pending_path(), pending)
     return _pending_view(pending)
 
 
 def _pending_view(p: dict[str, Any]) -> dict[str, Any]:
-    return {k: p[k] for k in ("user_code", "verification_url", "expires_at", "interval")}
+    """What the page needs to continue a sign-in: Google's code to type, or the Dropbox page to open. Never the
+    device code or the PKCE verifier."""
+    if p.get("provider") == "dropbox":
+        return {"provider": "dropbox", "authorize_url": p["authorize_url"], "expires_at": p["expires_at"]}
+    return {"provider": "google"} | {k: p[k] for k in ("user_code", "verification_url", "expires_at", "interval")}
+
+
+def _live(p: dict[str, Any] | None) -> bool:
+    return p is not None and (backup._parse(p.get("expires_at")) or clock.now()) > clock.now()
 
 
 def pending() -> dict[str, Any] | None:
-    p = _read_secret(_pending_path())
-    if p is None or (backup._parse(p.get("expires_at")) or clock.now()) <= clock.now():
-        return None
-    return _pending_view(p)
+    for name in PROVIDERS:
+        p = _read_secret(_pending_path(name))
+        if p is not None and _live(p):
+            return _pending_view(p | {"provider": name})
+    return None
 
 
 def cancel() -> None:
-    _pending_path().unlink(missing_ok=True)
+    for name in PROVIDERS:
+        _pending_path(name).unlink(missing_ok=True)
+
+
+def _connected(
+    name: str, token: dict[str, Any], access: str, actor_id: uuid.UUID | None, request_id: str | None
+) -> None:
+    """Keep the refresh token, find or make the folder, remember the connection and say so in History."""
+    cancel()
+    _write_secret(_token_path(name), token)
+    try:
+        p = provider(name)
+        with _http() as http:
+            folder = p.ensure_folder(http, access, p.backup_root, None)
+    except CloudError:
+        _token_path(name).unlink(missing_ok=True)
+        raise
+    _save_connection({"provider": name, "folder_id": folder, "connected_at": clock.now().isoformat()})
+    backup._write_json(_status_path(), {"state": "waiting"})
+    backup._audit(actor_id, "backup.cloud_connected", {"provider": name}, request_id)
+
+
+# ---------------------------------------------------------------- sign-in (Dropbox: a code Dropbox shows)
+
+
+def start_dropbox() -> dict[str, Any]:
+    """The Dropbox page to open; it shows a code to paste back. The PKCE verifier stays on the server."""
+    from . import cloud_dropbox
+
+    if backup.encryption() is None:
+        raise CloudError("needs_encryption", "Turn on encryption first: only encrypted backups leave this computer.")
+    verifier, challenge = cloud_dropbox.new_pkce()
+    p = {
+        "provider": "dropbox",
+        "verifier": verifier,
+        "authorize_url": cloud_dropbox.authorize_url(_dropbox_key(), challenge),
+        "expires_at": (clock.now() + DROPBOX_PENDING).isoformat(),
+    }
+    cancel()
+    _write_secret(_pending_path("dropbox"), p)
+    return _pending_view(p)
+
+
+def finish_dropbox(code: str, *, actor_id: uuid.UUID | None = None, request_id: str | None = None) -> None:
+    """The code the learner pasted: connect, or CloudError (bad_code: try again; expired: start over)."""
+    from . import cloud_dropbox
+
+    p = _read_secret(_pending_path("dropbox"))
+    if p is None or not _live(p):
+        cancel()
+        raise CloudError("expired", "This sign-in has expired. Start again for a new code.")
+    with _http() as http:
+        body = cloud_dropbox.exchange(http, _dropbox_key(), code.strip(), p["verifier"])
+    _connected("dropbox", {"refresh_token": body["refresh_token"]}, body["access_token"], actor_id, request_id)
 
 
 def poll_google(*, actor_id: uuid.UUID | None = None, request_id: str | None = None) -> str:
@@ -220,17 +309,8 @@ def poll_google(*, actor_id: uuid.UUID | None = None, request_id: str | None = N
         return "pending"
     body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
     if r.status_code == 200 and body.get("refresh_token"):
-        cancel()
-        _write_secret(_token_path(), {"refresh_token": body["refresh_token"], "scope": body.get("scope", SCOPE)})
-        try:
-            with _http() as http:
-                folder = _ensure_folder(http, body["access_token"], ROOT_NAME, None)
-        except CloudError:
-            _token_path().unlink(missing_ok=True)
-            raise
-        _save_connection({"provider": "google", "folder_id": folder, "connected_at": now.isoformat()})
-        backup._write_json(_status_path(), {"state": "waiting"})
-        backup._audit(actor_id, "backup.cloud_connected", {"provider": "google"}, request_id)
+        token = {"refresh_token": body["refresh_token"], "scope": body.get("scope", SCOPE)}
+        _connected("google", token, body["access_token"], actor_id, request_id)
         return "connected"
     error = body.get("error")
     if error == "slow_down":
@@ -401,6 +481,62 @@ def _free_bytes(http: httpx.Client, token: str) -> int | None:
     return max(0, int(q["limit"]) - int(q.get("usage", 0)))
 
 
+class Google:
+    """Google Drive behind the same calls as cloud_dropbox.Dropbox (ids are Drive file ids)."""
+
+    name = "google"
+    label = "Google Drive"
+    backup_root = ROOT_NAME  # in My Drive
+    drive_root = "RecallSpring"
+    where = "My Drive › RecallSpring"
+
+    def access_token(self, http: httpx.Client, token_file: Path | None = None) -> str:
+        return _access_token(http, token_file)
+
+    def revoke(self, http: httpx.Client, token_file: Path) -> None:
+        token = _read_secret(token_file)
+        if token:
+            http.post(GOOGLE_REVOKE, data={"token": token["refresh_token"]})
+
+    def get(self, http: httpx.Client, token: str, ref: str) -> dict[str, Any] | None:
+        r = http.get(f"{DRIVE}/files/{ref}", params={"fields": "id,name,trashed"}, headers=_auth(token))
+        if r.status_code == 404:
+            return None
+        return dict(_check(r).json())
+
+    def children(self, http: httpx.Client, token: str, parent: str) -> dict[str, dict[str, Any]]:
+        return _children(http, token, parent)
+
+    def ensure_folder(self, http: httpx.Client, token: str, name: str, parent: str | None) -> str:
+        return _ensure_folder(http, token, name, parent)
+
+    def new_folder(self, http: httpx.Client, token: str, name: str, parent: str) -> str:
+        meta = {"name": name, "mimeType": FOLDER_MIME, "parents": [parent]}
+        r = http.post(f"{DRIVE}/files", json=meta, params={"fields": "id"}, headers=_auth(token))
+        return str(_check(r).json()["id"])
+
+    def rename(self, http: httpx.Client, token: str, ref: str, name: str) -> None:
+        _check(http.patch(f"{DRIVE}/files/{ref}", json={"name": name}, params={"fields": "id"}, headers=_auth(token)))
+
+    def upload(
+        self,
+        http: httpx.Client,
+        token: str,
+        path: Path,
+        parent: str,
+        on_bytes: Callable[[int], None],
+        name: str | None = None,
+        file_id: list[str] | None = None,
+    ) -> int:
+        return _upload(http, token, path, parent, on_bytes, name=name, file_id=file_id)
+
+    def delete(self, http: httpx.Client, token: str, ref: str) -> None:
+        _delete(http, token, ref)
+
+    def free_bytes(self, http: httpx.Client, token: str) -> int | None:
+        return _free_bytes(http, token)
+
+
 # ---------------------------------------------------------------- copy
 
 
@@ -470,40 +606,41 @@ def copy(
 def _copy_locked(conn: dict[str, Any], started: datetime, reason: str) -> dict[str, Any]:
     snaps, sealed = _local()
     _update_status(state="copying", last_attempt_at=started.isoformat(), progress=None)
+    p = provider(conn["provider"])
     with _http() as http:
-        token = _access_token(http)
+        token = p.access_token(http, _token_path(p.name))
         root = conn["folder_id"]
         try:
-            top = _children(http, token, root)
+            top = p.children(http, token, root)
         except CloudError as exc:
             if exc.code != "missing":
                 raise
-            root = _ensure_folder(http, token, ROOT_NAME, None)
+            root = p.ensure_folder(http, token, p.backup_root, None)
             _save_connection(conn | {"folder_id": root})
             top = {}
-        snap_folder = top["snapshots"]["id"] if "snapshots" in top else _ensure_folder(http, token, "snapshots", root)
-        sealed_folder = top["sealed"]["id"] if "sealed" in top else _ensure_folder(http, token, "sealed", root)
-        remote_sealed = _children(http, token, sealed_folder)
-        remote_snaps = _children(http, token, snap_folder)
+        snap_folder = top["snapshots"]["id"] if "snapshots" in top else p.ensure_folder(http, token, "snapshots", root)
+        sealed_folder = top["sealed"]["id"] if "sealed" in top else p.ensure_folder(http, token, "sealed", root)
+        remote_sealed = p.children(http, token, sealed_folder)
+        remote_snaps = p.children(http, token, snap_folder)
         # What is missing: sealed files first, then each snapshot with its manifest last.
         todo: list[tuple[Path, str | None, str]] = []  # (file, parent id or None = the snapshot's folder, snapshot)
         for name, f in sealed.items():
             if remote_sealed.get(name, {}).get("size") != f.stat().st_size:
                 todo.append((f, sealed_folder, ""))
         per_snap: dict[str, dict[str, dict[str, Any]]] = {}
-        for p in snaps:
-            have = _children(http, token, remote_snaps[p.name]["id"]) if p.name in remote_snaps else {}
-            per_snap[p.name] = have
+        for s in snaps:
+            have = p.children(http, token, remote_snaps[s.name]["id"]) if s.name in remote_snaps else {}
+            per_snap[s.name] = have
             for n in SNAPSHOT_FILES:
-                f = p / n
+                f = s / n
                 if f.is_file() and have.get(n, {}).get("size") != f.stat().st_size:
-                    todo.append((f, None, p.name))
+                    todo.append((f, None, s.name))
         need = sum(f.stat().st_size for f, _, _ in todo)
-        free = _free_bytes(http, token)
+        free = p.free_bytes(http, token)
         if free is not None and need > free:
             raise CloudError(
                 "no_room",
-                f"Not enough room in your Google Drive for the new backup (needs {_human(need)}, {_human(free)} "
+                f"Not enough room in your {p.label} for the new backup (needs {_human(need)}, {_human(free)} "
                 "free). RecallSpring tries again tomorrow.",
             )
         done = {"files": 0, "bytes": 0}
@@ -524,30 +661,31 @@ def _copy_locked(conn: dict[str, Any], started: datetime, reason: str) -> dict[s
         for f, parent, snap in todo:
             if parent is None:
                 if snap not in folders:
-                    folders[snap] = _ensure_folder(http, token, snap, snap_folder)
+                    folders[snap] = p.ensure_folder(http, token, snap, snap_folder)
                 parent = folders[snap]
                 stale = per_snap.get(snap, {}).get(f.name)
             else:
                 stale = remote_sealed.get(f.name)
             if stale:  # a partial or different file from an earlier try
-                _delete(http, token, stale["id"])
-            got = _upload(http, token, f, parent, progress)
+                p.delete(http, token, stale["id"])
+            got = p.upload(http, token, f, parent, progress)
             if got != f.stat().st_size:
                 raise CloudError(
-                    "mismatch", "A file in Google Drive does not match its backup. RecallSpring tries again later."
+                    "mismatch", f"A file in {p.label} does not match its backup. RecallSpring tries again later."
                 )
             done["files"] += 1
-        # Tidy: the cloud keeps what the local folder keeps. Only RecallSpring's own files are visible (drive.file).
-        local_names = {p.name for p in snaps}
+        # Tidy: the cloud keeps what the local folder keeps. Only RecallSpring's own files are visible (drive.file,
+        # or Dropbox's app folder).
+        local_names = {s.name for s in snaps}
         for name, v in remote_snaps.items():
             if name not in local_names and backup.SNAPSHOT_RE.match(name):
-                _delete(http, token, v["id"])
+                p.delete(http, token, v["id"])
         for name, v in remote_sealed.items():
             if name not in sealed and backup.SEALED_RE.match(name):
-                _delete(http, token, v["id"])
-        free = _free_bytes(http, token)
+                p.delete(http, token, v["id"])
+        free = p.free_bytes(http, token)
     copied_bytes = sum(f.stat().st_size for f in sealed.values()) + sum(
-        (p / n).stat().st_size for p in snaps for n in SNAPSHOT_FILES if (p / n).is_file()
+        (s / n).stat().st_size for s in snaps for n in SNAPSHOT_FILES if (s / n).is_file()
     )
     now = clock.now()
     st = read_status()
@@ -591,7 +729,8 @@ def _record_failure(
     )
     backup._write_json(_status_path(), st)
     if first:
-        backup._audit(actor_id, "backup.cloud_failed", {"provider": "google", "code": exc.code}, request_id)
+        name = (connection() or {}).get("provider", "google")
+        backup._audit(actor_id, "backup.cloud_failed", {"provider": name, "code": exc.code}, request_id)
     log.warning("cloud copy failed (%s)", exc.code)
     return st
 
@@ -635,28 +774,30 @@ def disconnect(delete_files: bool, *, actor_id: uuid.UUID | None = None, request
     """Forget the sign-in and ask Google to withdraw it. The files in Drive stay unless delete_files (the page asked
     once more); deleting removes only the folder RecallSpring made."""
     conn = connection()
-    token = _read_secret(_token_path())
+    name = conn["provider"] if conn else "google"
+    token_file = _token_path(name)
     deleted = False
-    if conn is not None and token:
+    if conn is not None and _read_secret(token_file):
+        p = provider(name)
         with _http() as http:
             if delete_files:
-                access = _access_token(http)
-                _delete(http, access, conn["folder_id"])
+                access = p.access_token(http, token_file)
+                p.delete(http, access, conn["folder_id"])
                 deleted = True
             try:
-                http.post(GOOGLE_REVOKE, data={"token": token["refresh_token"]})
-            except httpx.HTTPError:
-                log.warning("could not ask Google to withdraw the sign-in; it is forgotten here")
-    _token_path().unlink(missing_ok=True)
+                p.revoke(http, token_file)
+            except (httpx.HTTPError, CloudError):
+                log.warning("could not ask %s to withdraw the sign-in; it is forgotten here", p.label)
+    token_file.unlink(missing_ok=True)
     cancel()
     _save_connection(None)
     _status_path().unlink(missing_ok=True)
     if deleted:
-        backup._audit(actor_id, "backup.cloud_files_deleted", {"provider": "google"}, request_id)
+        backup._audit(actor_id, "backup.cloud_files_deleted", {"provider": name}, request_id)
     backup._audit(
         actor_id,
         "backup.cloud_disconnected",
-        {"provider": "google", "files": "deleted" if deleted else "kept"},
+        {"provider": name, "files": "deleted" if deleted else "kept"},
         request_id,
     )
 
@@ -669,7 +810,7 @@ def view() -> dict[str, Any]:
     conn = connection()
     st = read_status() if conn else {}
     return {
-        "available": {"google": configured()},
+        "available": {name: configured(name) for name in PROVIDERS},
         "provider": conn["provider"] if conn else None,
         "connected_at": conn.get("connected_at") if conn else None,
         "state": st.get("state", "waiting") if conn else "off",
@@ -692,9 +833,10 @@ def attention_item() -> dict[str, Any] | None:
     error = st.get("error") or {}
     item: dict[str, Any] = {"kind": "cloud", "id": None, "course_id": None}
     if st.get("state") == "revoked":
+        label = LABELS.get(str((connection() or {}).get("provider")), "The cloud storage")
         return item | {
             "title": "Cloud copy stopped",
-            "text": "Google Drive no longer allows RecallSpring. Your backups are still made on this computer. "
+            "text": f"{label} no longer allows RecallSpring. Your backups are still made on this computer. "
             "Connect it again in Settings → Data & backups.",
         }
     since = backup._parse(st.get("failing_since"))

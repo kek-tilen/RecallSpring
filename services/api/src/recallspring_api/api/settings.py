@@ -220,7 +220,15 @@ def backup_encryption_set(
 
 # ---------------------------------------------------------------- cloud copy (cloud.py, 2026-11-27)
 
-CLOUD_STATUS = {"not_configured": 409, "needs_encryption": 409, "unreachable": 503, "refused": 502, "revoked": 409}
+CLOUD_STATUS = {
+    "not_configured": 409,
+    "needs_encryption": 409,
+    "unreachable": 503,
+    "refused": 502,
+    "revoked": 409,
+    "bad_code": 422,
+    "expired": 409,
+}
 
 
 def _cloud_error(exc: cloud.CloudError) -> ApiError:
@@ -229,6 +237,10 @@ def _cloud_error(exc: cloud.CloudError) -> ApiError:
 
 class CloudDisconnectIn(BaseModel):
     delete_files: bool = False
+
+
+class CloudCodeIn(BaseModel):
+    code: str = Field(min_length=8, max_length=200)
 
 
 @router.post("/settings/backup/cloud/google/start")
@@ -242,6 +254,34 @@ def cloud_google_start(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_d
     except cloud.CloudError as exc:
         raise _cloud_error(exc) from exc
     return JSONResponse(body, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/settings/backup/cloud/dropbox/start")
+def cloud_dropbox_start(ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)) -> JSONResponse:
+    """The Dropbox page to open; Dropbox shows a code to paste back. The PKCE verifier stays on the server."""
+    _require_backup_owner(db, ctx.user)
+    if cloud.connection() is not None:
+        raise ApiError(409, "cloud_connected", "A cloud copy is connected already. Disconnect it first.")
+    try:
+        body = cloud.start_dropbox()
+    except cloud.CloudError as exc:
+        raise _cloud_error(exc) from exc
+    return JSONResponse(body, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/settings/backup/cloud/dropbox/finish")
+def cloud_dropbox_finish(
+    payload: CloudCodeIn, ctx: Ctx = Depends(csrf_ctx), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """The code Dropbox showed (never stored or logged). On success the first copy starts in the background."""
+    _require_backup_owner(db, ctx.user)
+    db.rollback()
+    try:
+        cloud.finish_dropbox(payload.code, actor_id=ctx.user.id, request_id=ctx.request_id)
+    except cloud.CloudError as exc:
+        raise _cloud_error(exc) from exc
+    cloud.copy_in_background(actor_id=ctx.user.id, request_id=ctx.request_id)
+    return {"state": "connected", "backup": _backup_view(db, ctx.user)}
 
 
 @router.post("/settings/backup/cloud/google/poll")
@@ -283,8 +323,8 @@ def cloud_copy_now(ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get
 def cloud_disconnect(
     payload: CloudDisconnectIn, ctx: WriteCtx = Depends(write_ctx), db: Session = Depends(get_db)
 ) -> JSONResponse:
-    """Forget the sign-in and ask Google to withdraw it; the files in Drive stay unless delete_files (the page asks
-    once more). Audited as backup.cloud_disconnected (and backup.cloud_files_deleted)."""
+    """Forget the sign-in and ask Google or Dropbox to withdraw it; the files there stay unless delete_files (the
+    page asks once more). Audited as backup.cloud_disconnected (and backup.cloud_files_deleted)."""
     if replay := replay_if_seen(db, ctx, payload):
         return replay
     _require_backup_owner(db, ctx.user)

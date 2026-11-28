@@ -1,8 +1,10 @@
-"""Your Google Drive (BYOS step 2, decided 2026-11-27): a readable copy of each learner's own material, by course,
-in My Drive › RecallSpring, and exports sent there when the learner chooses.
+"""Your cloud folder (BYOS step 2, decided 2026-11-27): a readable copy of each learner's own material, by course,
+and exports sent there when the learner chooses. Google Drive (My Drive › RecallSpring) or, since 2026-11-28, Dropbox
+(Dropbox › Apps › RecallSpring › Material); one of them at a time.
 
-Each learner signs in with their own Google account (the same device-code sign-in and Google app as the cloud copy of
-backups, cloud.py; scope ``drive.file``: only files RecallSpring made). The refresh token is kept per learner in
+Each learner signs in with their own account (the same sign-in and app as the cloud copy of backups, cloud.py: Google
+with scope ``drive.file``, only files RecallSpring made; Dropbox with an app folder, only that folder, and a code the
+learner pastes back). The refresh token is kept per learner in
 ``secrets_dir/drive-<user id>.bin`` (DPAPI on Windows, 0600 elsewhere), never in the database, a backup, History, logs
 or the browser. No account name or address is stored.
 
@@ -44,17 +46,26 @@ LOCK_ID = 727_170_003  # one copy per learner at a time (with the learner's id a
 PER_RUN = 200  # files per run; the next run continues
 CHECK_SECONDS = 60  # the worker looks for new material this often
 
-MESSAGES = {
-    "revoked": "Google Drive no longer allows RecallSpring. Your material is safe here; connect again to keep copying.",
-    "no_room": "Not enough room in your Google Drive. RecallSpring tries again tomorrow.",
-    "unreachable": "Could not reach Google Drive. RecallSpring tries again later.",
-    "missing": "A folder RecallSpring made in your Drive is gone. RecallSpring makes it again.",
-    "busy": "A copy is running right now.",
-}
+
+def _messages(label: str) -> dict[str, str]:
+    return {
+        "revoked": f"{label} no longer allows RecallSpring. Your material is safe here; connect again to keep copying.",
+        "no_room": f"Not enough room in your {label}. RecallSpring tries again tomorrow.",
+        "unreachable": f"Could not reach {label}. RecallSpring tries again later.",
+        "missing": f"A folder RecallSpring made in your {label} is gone. RecallSpring makes it again.",
+        "busy": "A copy is running right now.",
+    }
 
 
-def _error(exc: CloudError) -> CloudError:
-    return CloudError(exc.code, MESSAGES.get(exc.code, exc.message))
+MESSAGES = _messages("Google Drive")
+
+
+def _label(provider: str | None) -> str:
+    return cloud.LABELS.get(provider or "google", "cloud folder")
+
+
+def _error(exc: CloudError, provider: str | None = "google") -> CloudError:
+    return CloudError(exc.code, _messages(_label(provider)).get(exc.code, exc.message))
 
 
 # ---------------------------------------------------------------- secrets
@@ -73,10 +84,13 @@ def connection(db: Session, user_id: uuid.UUID) -> DriveConnection | None:
     return row if row is not None and _token_path(user_id).exists() else None
 
 
-# ---------------------------------------------------------------- sign-in (device authorization, as cloud.py)
+# ---------------------------------------------------------------- sign-in (as cloud.py: Google's device code, or the
+# code Dropbox shows)
 
 
-def start(user: User) -> dict[str, Any]:
+def start(user: User, provider: str = "google") -> dict[str, Any]:
+    if provider == "dropbox":
+        return _start_dropbox(user)
     client_id, _ = cloud._client()
     try:
         with cloud._http() as http:
@@ -96,16 +110,70 @@ def start(user: User) -> dict[str, Any]:
         "expires_at": (now + timedelta(seconds=int(body.get("expires_in", 1800)))).isoformat(),
         "interval": max(5, int(body.get("interval", 5))),
         "next_poll_at": now.isoformat(),
+        "provider": "google",
     }
     cloud._write_secret(_pending_path(user.id), pending)
     return cloud._pending_view(pending)
 
 
+def _start_dropbox(user: User) -> dict[str, Any]:
+    from .. import cloud_dropbox
+
+    verifier, challenge = cloud_dropbox.new_pkce()
+    p = {
+        "provider": "dropbox",
+        "verifier": verifier,
+        "authorize_url": cloud_dropbox.authorize_url(cloud._dropbox_key(), challenge),
+        "expires_at": (clock.now() + cloud.DROPBOX_PENDING).isoformat(),
+    }
+    cloud._write_secret(_pending_path(user.id), p)
+    return cloud._pending_view(p)
+
+
 def pending(user_id: uuid.UUID) -> dict[str, Any] | None:
     p = cloud._read_secret(_pending_path(user_id))
-    if p is None or (backup._parse(p.get("expires_at")) or clock.now()) <= clock.now():
+    if p is None or not cloud._live(p):
         return None
     return cloud._pending_view(p)
+
+
+def finish_dropbox(db: Session, user: User, code: str, request_id: str | None) -> None:
+    """The code the learner pasted from Dropbox: connect, or CloudError (bad_code, expired)."""
+    from .. import cloud_dropbox
+
+    p = cloud._read_secret(_pending_path(user.id))
+    if p is None or p.get("provider") != "dropbox" or not cloud._live(p):
+        cancel(user.id)
+        raise CloudError("expired", "This sign-in has expired. Start again for a new code.")
+    with cloud._http() as http:
+        body = cloud_dropbox.exchange(http, cloud._dropbox_key(), code.strip(), p["verifier"])
+    _connected(db, user, "dropbox", {"refresh_token": body["refresh_token"]}, body["access_token"], request_id)
+
+
+def _connected(db: Session, user: User, name: str, token: dict[str, Any], access: str, request_id: str | None) -> None:
+    cancel(user.id)
+    cloud._write_secret(_token_path(user.id), token | {"provider": name})
+    try:
+        p = cloud.provider(name)
+        with cloud._http() as http:
+            root = p.ensure_folder(http, access, p.drive_root, None)
+    except CloudError:
+        _token_path(user.id).unlink(missing_ok=True)
+        raise
+    old = db.get(DriveConnection, user.id)
+    if old is not None and old.provider != name:  # another provider than before: start over there
+        for item in db.scalars(select(DriveItem).where(DriveItem.user_id == user.id)):
+            db.delete(item)
+        db.delete(old)
+        db.flush()
+        old = None
+    if old is not None:  # signing in again after access was withdrawn keeps what was copied
+        old.root_id, old.state, old.error, old.failures = root, "ok", None, 0
+        old.failing_since = old.next_try_at = None
+    else:
+        # copy_from by the database clock, as Source.uploaded_at
+        db.add(DriveConnection(user_id=user.id, provider=name, root_id=root, copy_from=func.now(), state="ok"))
+    audit(db, actor_id=user.id, action="drive.connected", details={"provider": name}, request_id=request_id)
 
 
 def cancel(user_id: uuid.UUID) -> None:
@@ -115,7 +183,7 @@ def cancel(user_id: uuid.UUID) -> None:
 def poll(db: Session, user: User, request_id: str | None) -> str:
     """One check whether the learner finished signing in: pending, connected, denied or expired."""
     p = cloud._read_secret(_pending_path(user.id))
-    if p is None:
+    if p is None or p.get("provider", "google") != "google":
         return "expired"
     now = clock.now()
     if (backup._parse(p.get("expires_at")) or now) <= now:
@@ -137,24 +205,8 @@ def poll(db: Session, user: User, request_id: str | None) -> str:
         return "pending"
     body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
     if r.status_code == 200 and body.get("refresh_token"):
-        cancel(user.id)
-        cloud._write_secret(
-            _token_path(user.id), {"refresh_token": body["refresh_token"], "scope": body.get("scope", cloud.SCOPE)}
-        )
-        try:
-            with cloud._http() as http:
-                root = cloud._ensure_folder(http, body["access_token"], ROOT_NAME, None)
-        except CloudError:
-            _token_path(user.id).unlink(missing_ok=True)
-            raise
-        old = db.get(DriveConnection, user.id)
-        if old is not None:  # signing in again after access was withdrawn keeps what was copied
-            old.root_id, old.state, old.error, old.failures = root, "ok", None, 0
-            old.failing_since = old.next_try_at = None
-        else:
-            # copy_from by the database clock, as Source.uploaded_at
-            db.add(DriveConnection(user_id=user.id, root_id=root, copy_from=func.now(), state="ok"))
-        audit(db, actor_id=user.id, action="drive.connected", details={"provider": "google"}, request_id=request_id)
+        token = {"refresh_token": body["refresh_token"], "scope": body.get("scope", cloud.SCOPE)}
+        _connected(db, user, "google", token, body["access_token"], request_id)
         return "connected"
     error = body.get("error")
     if error == "slow_down":
@@ -167,36 +219,15 @@ def poll(db: Session, user: User, request_id: str | None) -> str:
     return "denied" if error == "access_denied" else "expired"
 
 
-# ---------------------------------------------------------------- Drive helpers
-
-
-def _get(http: httpx.Client, token: str, file_id: str) -> dict[str, Any] | None:
-    """The file's id, name and whether it is in the bin; None when it is gone."""
-    r = http.get(f"{cloud.DRIVE}/files/{file_id}", params={"fields": "id,name,trashed"}, headers=cloud._auth(token))
-    if r.status_code == 404:
-        return None
-    return cloud._check(r).json()
-
-
-def _rename(http: httpx.Client, token: str, file_id: str, name: str) -> None:
-    cloud._check(
-        http.patch(
-            f"{cloud.DRIVE}/files/{file_id}", json={"name": name}, params={"fields": "id"}, headers=cloud._auth(token)
-        )
-    )
-
-
-def _new_folder(http: httpx.Client, token: str, name: str, parent: str) -> str:
-    meta = {"name": name, "mimeType": cloud.FOLDER_MIME, "parents": [parent]}
-    r = http.post(f"{cloud.DRIVE}/files", json=meta, params={"fields": "id"}, headers=cloud._auth(token))
-    return str(cloud._check(r).json()["id"])
+# ---------------------------------------------------------------- copy runs
 
 
 class _Run:
-    """One copy run for one learner: folder ids are checked once per run (a folder deleted in Drive is made again)."""
+    """One copy run for one learner: folder ids are checked once per run (a folder deleted in the cloud is made
+    again)."""
 
-    def __init__(self, db: Session, http: httpx.Client, token: str, conn: DriveConnection) -> None:
-        self.db, self.http, self.token, self.conn = db, http, token, conn
+    def __init__(self, db: Session, http: httpx.Client, p: Any, token: str, conn: DriveConnection) -> None:
+        self.db, self.http, self.p, self.token, self.conn = db, http, p, token, conn
         self.checked: dict[tuple[str, uuid.UUID | None], str] = {}
 
     def _item(self, kind: str, local_id: uuid.UUID | None) -> DriveItem | None:
@@ -240,10 +271,10 @@ class _Run:
 
     def root(self) -> str:
         if ("root", None) not in self.checked:
-            found = _get(self.http, self.token, self.conn.root_id)
+            found = self.p.get(self.http, self.token, self.conn.root_id)
             if found is None or found.get("trashed"):
                 # The whole folder is gone: make it again and copy everything again.
-                self.conn.root_id = cloud._ensure_folder(self.http, self.token, ROOT_NAME, None)
+                self.conn.root_id = self.p.ensure_folder(self.http, self.token, self.p.drive_root, None)
                 for item in self.db.scalars(select(DriveItem).where(DriveItem.user_id == self.conn.user_id)):
                     self.db.delete(item)
                 self.db.flush()
@@ -256,21 +287,21 @@ class _Run:
             return self.checked[key]
         item = self._item(kind, local_id)
         if item is not None:
-            found = _get(self.http, self.token, item.drive_id)
+            found = self.p.get(self.http, self.token, item.drive_id)
             if found is None or found.get("trashed"):
                 self.db.delete(item)
                 self._forget_under(kind, local_id)
                 self.db.flush()
                 item = None
-            elif item.name != name:  # renamed in RecallSpring: rename in Drive too
-                _rename(self.http, self.token, item.drive_id, name)
+            elif item.name != name:  # renamed in RecallSpring: rename in the cloud too
+                self.p.rename(self.http, self.token, item.drive_id, name)
                 item.name = name
         if item is None:
             item = DriveItem(
                 user_id=self.conn.user_id,
                 local_kind=kind,
                 local_id=local_id,
-                drive_id=_new_folder(self.http, self.token, name, parent),
+                drive_id=self.p.new_folder(self.http, self.token, name, parent),
                 name=name,
             )
             self.db.add(item)
@@ -296,7 +327,7 @@ class _Run:
 
     def upload(self, path: Path, parent: str, name: str, kind: str, local_id: uuid.UUID, on_bytes: Any) -> None:
         ids: list[str] = []
-        size = cloud._upload(self.http, self.token, path, parent, on_bytes, name=name, file_id=ids)
+        size = self.p.upload(self.http, self.token, path, parent, on_bytes, name=name, file_id=ids)
         self.db.add(
             DriveItem(
                 user_id=self.conn.user_id,
@@ -317,13 +348,13 @@ def _locked(user_id: uuid.UUID) -> Iterator[None]:
         try:
             conn = engine.connect()
         except SQLAlchemyError as exc:
-            raise CloudError("busy", MESSAGES["busy"]) from exc
+            raise CloudError("busy", "A copy is running right now.") from exc
         with conn:
             key = {"a": LOCK_ID, "b": int.from_bytes(user_id.bytes[:4], "big", signed=True)}
             got = conn.execute(text("SELECT pg_try_advisory_lock(:a, :b)"), key).scalar_one()
             conn.commit()
             if not got:
-                raise CloudError("busy", MESSAGES["busy"])
+                raise CloudError("busy", "A copy is running right now.")
             try:
                 yield
             finally:
@@ -377,14 +408,17 @@ def _not_yet(db: Session, conn: DriveConnection) -> tuple[int, int]:
 
 def sync(user_id: uuid.UUID) -> str:
     """Copy waiting material for one learner. Returns ok, nothing, failing, revoked or busy. Never raises."""
+    with new_session() as db:
+        row = db.get(DriveConnection, user_id)
+        provider = row.provider if row is not None else "google"
     try:
         with _locked(user_id):
             return _sync(user_id)
     except CloudError as exc:
-        return "busy" if exc.code == "busy" else _failed(user_id, _error(exc))
+        return "busy" if exc.code == "busy" else _failed(user_id, _error(exc, provider))
     except Exception:  # noqa: BLE001 - the worker must keep running
         log.exception("drive copy crashed")
-        return _failed(user_id, CloudError("unreachable", MESSAGES["unreachable"]))
+        return _failed(user_id, CloudError("unreachable", _messages(_label(provider))["unreachable"]))
 
 
 def _sync(user_id: uuid.UUID) -> str:
@@ -406,11 +440,12 @@ def _sync(user_id: uuid.UUID) -> str:
         db.commit()
         done = {"bytes": 0}
         with cloud._http() as http:
-            token = cloud._access_token(http, _token_path(user_id))
-            run = _Run(db, http, token, conn)
-            free = cloud._free_bytes(http, token)
+            p = cloud.provider(conn.provider)
+            token = p.access_token(http, _token_path(user_id))
+            run = _Run(db, http, p, token, conn)
+            free = p.free_bytes(http, token)
             if free is not None and free < total_bytes:
-                raise CloudError("no_room", MESSAGES["no_room"])
+                raise CloudError("no_room", _messages(p.label)["no_room"])
             for i, source in enumerate(todo):
                 course = db.get(Course, source.course_id)
                 path = blob_path(source.storage_key)
@@ -429,7 +464,7 @@ def _sync(user_id: uuid.UUID) -> str:
                     "total_bytes": total_bytes,
                 }
                 db.commit()
-            conn.free_bytes = cloud._free_bytes(http, token)
+            conn.free_bytes = p.free_bytes(http, token)
         conn.state, conn.progress, conn.error = "ok", None, None
         conn.failures, conn.failing_since, conn.next_try_at = 0, None, None
         conn.last_success_at = clock.now()
@@ -455,7 +490,7 @@ def _failed(user_id: uuid.UUID, exc: CloudError) -> str:
         conn.next_try_at = None if exc.code == "revoked" else now + wait
         conn.progress = None
         if first:
-            audit(db, actor_id=user_id, action="drive.failed", details={"provider": "google", "code": exc.code})
+            audit(db, actor_id=user_id, action="drive.failed", details={"provider": conn.provider, "code": exc.code})
         db.commit()
     log.warning("drive copy failed (%s)", exc.code)
     return conn.state
@@ -494,7 +529,7 @@ def sync_in_background(user_id: uuid.UUID) -> None:
 
 
 def send_export(export_id: uuid.UUID) -> str | None:
-    """Upload a finished export to My Drive › RecallSpring › Exports. Returns None, or an error code."""
+    """Upload a finished export to the learner's cloud folder › Exports. Returns None, or an error code."""
     user_id: uuid.UUID | None = None
     try:
         with new_session() as db:
@@ -506,8 +541,9 @@ def send_export(export_id: uuid.UUID) -> str | None:
             if conn is None or conn.state == "revoked":
                 return "revoked"
             with _locked(row.user_id), cloud._http() as http:
-                token = cloud._access_token(http, _token_path(row.user_id))
-                run = _Run(db, http, token, conn)
+                p = cloud.provider(conn.provider)
+                token = p.access_token(http, _token_path(row.user_id))
+                run = _Run(db, http, p, token, conn)
                 folder = run.folder("exports", None, EXPORTS_NAME, run.root())
                 name = f"RecallSpring export {row.created_at:%Y-%m-%d %H%M}.zip"
                 run.upload(zip_path(row), folder, name, "export", row.id, lambda n: None)
@@ -524,7 +560,10 @@ def send_export(export_id: uuid.UUID) -> str | None:
     except CloudError as exc:
         log.warning("export to drive failed (%s)", exc.code)
         if exc.code == "revoked" and user_id is not None:
-            _failed(user_id, _error(exc))  # the Drive row and Today say so too
+            with new_session() as db:
+                row_conn = db.get(DriveConnection, user_id)
+                name = row_conn.provider if row_conn is not None else "google"
+            _failed(user_id, _error(exc, name))  # the row and Today say so too
         return exc.code
     except Exception:  # noqa: BLE001
         log.exception("export to drive crashed")
@@ -537,7 +576,7 @@ def send_export(export_id: uuid.UUID) -> str | None:
 def set_options(db: Session, user: User, *, mirror: bool | None, exports: bool | None) -> DriveConnection:
     conn = connection(db, user.id)
     if conn is None:
-        raise ApiError(409, "drive_not_connected", "Connect your Google Drive first.")
+        raise ApiError(409, "drive_not_connected", "Connect your cloud folder first.")
     if mirror is not None:
         conn.mirror = mirror
     if exports is not None:
@@ -548,7 +587,7 @@ def set_options(db: Session, user: User, *, mirror: bool | None, exports: bool |
 def copy_existing(db: Session, user: User, request_id: str | None) -> tuple[int, int]:
     conn = connection(db, user.id)
     if conn is None:
-        raise ApiError(409, "drive_not_connected", "Connect your Google Drive first.")
+        raise ApiError(409, "drive_not_connected", "Connect your cloud folder first.")
     n, size = _not_yet(db, conn)
     conn.copy_from, conn.mirror, conn.next_try_at = None, True, None
     audit(
@@ -558,25 +597,28 @@ def copy_existing(db: Session, user: User, request_id: str | None) -> tuple[int,
 
 
 def disconnect(db: Session, user: User, delete_files: bool, request_id: str | None) -> None:
-    """Forget the sign-in and ask Google to withdraw it; the files stay unless ``delete_files`` (asked once more)."""
+    """Forget the sign-in and ask the provider to withdraw it; the files stay unless ``delete_files`` (asked once
+    more)."""
     conn = db.get(DriveConnection, user.id)
     token = cloud._read_secret(_token_path(user.id))
+    name = conn.provider if conn is not None else "google"
     deleted = False
     if conn is not None and token:
         try:
+            p = cloud.provider(name)
             with cloud._http() as http:
                 if delete_files:
-                    access = cloud._access_token(http, _token_path(user.id))
-                    cloud._delete(http, access, conn.root_id)
+                    access = p.access_token(http, _token_path(user.id))
+                    p.delete(http, access, conn.root_id)
                     deleted = True
                 try:
-                    http.post(cloud.GOOGLE_REVOKE, data={"token": token["refresh_token"]})
-                except httpx.HTTPError:
-                    log.warning("could not ask Google to withdraw the sign-in; it is forgotten here")
+                    p.revoke(http, _token_path(user.id))
+                except (httpx.HTTPError, CloudError):
+                    log.warning("could not ask %s to withdraw the sign-in; it is forgotten here", p.label)
         except CloudError as exc:
             if delete_files:
                 raise ApiError(
-                    502, "drive_unreachable", "Could not delete the files in Google Drive. Try again later."
+                    502, "drive_unreachable", f"Could not delete the files in {_label(name)}. Try again later."
                 ) from exc
     _token_path(user.id).unlink(missing_ok=True)
     cancel(user.id)
@@ -588,7 +630,7 @@ def disconnect(db: Session, user: User, delete_files: bool, request_id: str | No
         db,
         actor_id=user.id,
         action="drive.disconnected",
-        details={"provider": "google", "files": "deleted" if deleted else "kept"},
+        details={"provider": name, "files": "deleted" if deleted else "kept"},
         request_id=request_id,
     )
 
@@ -599,9 +641,15 @@ def disconnect(db: Session, user: User, delete_files: bool, request_id: str | No
 def view(db: Session, user: User) -> dict[str, Any]:
     """What Settings shows. No token, no device code, no account details."""
     conn = connection(db, user.id)
-    base: dict[str, Any] = {"available": cloud.configured(), "state": "off", "pending": None}
+    base: dict[str, Any] = {
+        "available": {name: cloud.configured(name) for name in cloud.PROVIDERS},
+        "state": "off",
+        "provider": None,
+        "pending": None,
+    }
     if conn is None:
         return base | {"pending": pending(user.id)}
+    p = cloud.provider(conn.provider) if cloud.configured(conn.provider) else None
     files, size = db.execute(
         select(func.count(), func.coalesce(func.sum(DriveItem.byte_size), 0)).where(
             DriveItem.user_id == user.id, DriveItem.local_kind == "source"
@@ -610,8 +658,9 @@ def view(db: Session, user: User) -> dict[str, Any]:
     not_yet, not_yet_bytes = _not_yet(db, conn)
     return base | {
         "state": conn.state,
+        "provider": conn.provider,
         "connected_at": conn.connected_at.isoformat(),
-        "folder": f"My Drive › {ROOT_NAME}",
+        "folder": p.where + (f" › {p.drive_root}" if conn.provider == "dropbox" else "") if p else None,
         "mirror": conn.mirror,
         "exports": conn.exports,
         "files": int(files),
@@ -630,11 +679,12 @@ def attention_item(db: Session, user: User) -> dict[str, Any] | None:
     if conn is None:
         return None
     item: dict[str, Any] = {"kind": "drive", "id": None, "course_id": None}
+    label = _label(conn.provider)
     if conn.state == "revoked":
-        return item | {"title": "Your Google Drive copy stopped", "text": MESSAGES["revoked"]}
+        return item | {"title": f"Your {label} copy stopped", "text": _messages(label)["revoked"]}
     if conn.state == "failing" and conn.failing_since and clock.now() - conn.failing_since >= cloud.ATTENTION_AFTER:
         return item | {
-            "title": "Copying to your Google Drive is failing",
+            "title": f"Copying to your {label} is failing",
             "text": str((conn.error or {}).get("message")),
         }
     return None

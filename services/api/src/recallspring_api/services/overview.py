@@ -417,11 +417,11 @@ _EVENT_TEXT = {
     "auth.logout": "Signed out",
     "export.created": "Export started",
     "export.downloaded": "Export downloaded",
-    "export.sent_to_drive": "Export sent to your Google Drive",
-    "drive.connected": "Your Google Drive connected",
-    "drive.disconnected": "Your Google Drive disconnected",
-    "drive.failed": "Copying to your Google Drive failed",
-    "drive.copy_existing": "Copying earlier material to your Google Drive",
+    "export.sent_to_drive": "Export sent to your cloud folder",
+    "drive.connected": "Your cloud folder connected",
+    "drive.disconnected": "Your cloud folder disconnected",
+    "drive.failed": "Copying to your cloud folder failed",
+    "drive.copy_existing": "Copying earlier material to your cloud folder",
     "auth.passkey_added": "Passkey added",
     "auth.passkey_renamed": "Passkey renamed",
     "auth.passkey_removed": "Passkey removed",
@@ -486,14 +486,14 @@ def _detail(event_type: str, payload: dict[str, Any]) -> str | None:
         return f"{assistants.DEFAULT_LABEL.get(client, client)}, {n} token{'' if n == 1 else 's'}"
     if event_type in ("backup.encryption_on", "backup.key_replaced"):
         return f"key {payload.get('key_id')}"
-    if event_type in ("backup.cloud_connected", "backup.cloud_files_deleted"):
-        return "Google Drive" if payload.get("provider") == "google" else str(payload.get("provider"))
+    if event_type in ("backup.cloud_connected", "backup.cloud_files_deleted", "drive.connected"):
+        return cloud.LABELS.get(str(payload.get("provider")), str(payload.get("provider")))
     if event_type == "backup.cloud_disconnected":
-        return f"Google Drive, files {payload.get('files')}"
+        return f"{cloud.LABELS.get(str(payload.get('provider')), 'Google Drive')}, files {payload.get('files')}"
     if event_type == "backup.cloud_failed":
         return CLOUD_FAILURE.get(str(payload.get("code")), str(payload.get("code")))
     if event_type == "drive.disconnected":
-        return f"files {payload.get('files')}"
+        return f"{cloud.LABELS.get(str(payload.get('provider')), 'Google Drive')}, files {payload.get('files')}"
     if event_type == "drive.failed":
         return CLOUD_FAILURE.get(str(payload.get("code")), str(payload.get("code")))
     if event_type == "drive.copy_existing":

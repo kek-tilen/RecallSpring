@@ -227,7 +227,7 @@ def run_worker(poll_seconds: float = 2.0, should_stop: Callable[[], bool] = lamb
             exports.expire_all()  # finished exports are kept 24 hours
             next_backup_check = time.monotonic() + BACKUP_CHECK_SECONDS
         if time.monotonic() >= next_drive_check:
-            my_drive.sync_all()  # each learner's own Google Drive copy, when connected (services/my_drive.py)
+            my_drive.sync_all()  # each learner's own cloud folder copy, when connected (services/my_drive.py)
             next_drive_check = time.monotonic() + my_drive.CHECK_SECONDS
         if not run_once():
             time.sleep(poll_seconds)

@@ -280,7 +280,7 @@ def create(
     if busy:
         raise ApiError(409, "export_running", "An export is already being made. Wait for it or stop it.")
     if destination == "drive" and not _drive_ready(db, user):
-        raise ApiError(409, "drive_not_connected", "Connect your Google Drive and turn on Exports go here too first.")
+        raise ApiError(409, "drive_not_connected", "Connect your cloud folder and turn on Exports go here too first.")
     courses = _courses(db, user, course_ids)
     if course_ids is not None and len(courses) != len(set(course_ids)):
         raise ApiError(404, "not_found", "One of those courses is not there any more.")
@@ -704,8 +704,12 @@ def attention_item(db: Session, user: User) -> dict[str, Any] | None:
         return None
     base = {"kind": "export", "id": str(row.id), "course_id": None}
     if row.destination == "drive" and row.state == "ready" and row.error and row.downloaded_at is None:
+        from ..cloud import LABELS
+        from ..models import DriveConnection
+
+        conn = db.get(DriveConnection, user.id)
         return base | {
-            "title": "Your export could not go to Google Drive",
+            "title": f"Your export could not go to {LABELS.get(conn.provider if conn else 'google', 'the cloud')}",
             "text": "Download it in Settings → Data & backups → Export instead; it is kept for 24 hours.",
         }
     if row.destination != "download":

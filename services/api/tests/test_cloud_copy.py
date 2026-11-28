@@ -221,12 +221,13 @@ def test_needs_an_app_id_and_encryption(
     owner_api: Api, google: FakeGoogle, settings: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     view = owner_api.get("/settings/backup").json()["cloud"]
-    assert view["available"] == {"google": True} and view["state"] == "off" and view["provider"] is None
+    assert view["available"] == {"google": True, "dropbox": False}
+    assert view["state"] == "off" and view["provider"] is None
     r = owner_api.post("/settings/backup/cloud/google/start")
     assert r.status_code == 409 and r.json()["code"] == "cloud_needs_encryption"
     _encryption_on()
     monkeypatch.setattr(settings, "cloud_google_client_id", None)
-    assert owner_api.get("/settings/backup").json()["cloud"]["available"] == {"google": False}
+    assert owner_api.get("/settings/backup").json()["cloud"]["available"] == {"google": False, "dropbox": False}
     r = owner_api.post("/settings/backup/cloud/google/start")
     assert r.status_code == 409 and r.json()["code"] == "cloud_not_configured"
     assert "RS_CLOUD_GOOGLE_CLIENT_ID" in r.json()["message"]

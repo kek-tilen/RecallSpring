@@ -124,6 +124,9 @@ class Settings(BaseSettings):
     # from Git; without them Settings says a cloud copy needs an app ID.
     cloud_google_client_id: str | None = None
     cloud_google_client_secret: SecretStr | None = None
+    # Dropbox (cloud_dropbox.py, 2026-11-28): the App key of a Dropbox app with App folder access. PKCE sign-in, so
+    # there is no app secret. Only from the server settings, never from Git.
+    cloud_dropbox_app_key: str | None = None
     # Small runtime files, e.g. the worker heartbeat the API reads (runtime.py); never learner data.
     run_dir: Path = _REPO_ROOT / "local-data" / "run"
     ai_evaluation_lease_seconds: int = 180
