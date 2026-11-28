@@ -49,7 +49,7 @@ Options (PowerShell uses the same names, e.g. `-Dir`, `-Full`, `-SyncFolder`):
 | Option | What it does |
 | --- | --- |
 | `--dir <folder>` | install somewhere else than `~/RecallSpring` |
-| `--full` | the image with LibreOffice, so Word, PowerPoint and Excel files can be read (about 1 GB instead of 500 MB) |
+| `--full` | the image with LibreOffice, so Word, PowerPoint and OpenDocument pages are shown as they look (about 1 GB instead of 500 MB) |
 | `--backups <folder>` | put the nightly backups in this folder (default: `backups` in the install folder) |
 | `--sync-folder <folder>` | a folder your sync app (iCloud Drive, OneDrive, Dropbox, ...) uploads; see section 6 |
 | `--port <n>`, `--mcp-port <n>` | other ports than 4318 (web app) and 4319 (assistant connector) |
@@ -178,6 +178,8 @@ and `install.sh` / `install.ps1` with the version and the hash of `SHA256SUMS` w
 
 ## Not tested yet
 
-The image with LibreOffice (`--full`), arm64 (e.g. a Mac with Apple silicon), Claude Desktop, ChatGPT sign-in from
-inside Docker,
-iCloud Drive as the sync folder, and `update` against a real release (there is none yet). Report what you find.
+Tested locally on 2026-11-28: the install from Git Bash and from Windows PowerShell, the setup link, backups and a
+restore with the switch to it, the worker, the connector over HTTP, and both images built: LibreOffice converting a
+document inside the hardened full image, and the arm64 image starting under emulation. Not tested yet: arm64 on real
+hardware (e.g. a Mac with Apple silicon), Claude Desktop, ChatGPT sign-in from inside Docker, iCloud Drive as the
+sync folder, and `update` from one release to the next. Report what you find.

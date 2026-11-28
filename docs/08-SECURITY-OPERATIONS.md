@@ -364,7 +364,8 @@ The one-command install for any computer with Docker (docs/install-docker.md). N
 - **Rollback:** restore into a new database (`admin backup-restore`), then `RS_DB_NAME` and `RS_STORAGE_DIR` in `.env`
   switch to it; the old database is kept (docs/install-docker.md > Going back). Tested locally on 2026-11-28 in a
   separate Compose project on other ports: install, setup link, backup and restore check, upload processed by the
-  worker, connector initialize over HTTP, stop/start, restore and switch, from Git Bash and from Windows PowerShell.
+  worker, connector initialize over HTTP, stop/start, restore and switch, from Git Bash and from Windows PowerShell; the full image converted a document
+  with LibreOffice as uid 10001 on a read-only file system, and the arm64 image started under emulation.
 - **Release:** a version tag builds amd64 and arm64 images to ghcr.io with SBOM, provenance and attestations, and
   publishes the release files as a draft first. Not run yet; the first release needs the owner's approval, and so
   does making the package public.

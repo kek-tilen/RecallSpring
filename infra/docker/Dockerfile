@@ -10,7 +10,9 @@ ARG PYTHON_IMAGE=python:3.12.16-slim-bookworm@sha256:44cf1793efa7c7a476bb0f2cff8
 ARG NODE_IMAGE=node:22.23.5-bookworm-slim@sha256:be979e5523c76fa4d5ca4ebd3099078f220aa47ec39c48ad5b5df9314debd6eb
 
 # ---------------------------------------------------------------- the web app
-FROM ${NODE_IMAGE} AS web
+# The web app and RecallSpring's two wheels are the same on every CPU, so they are built once on the builder's own
+# platform (fast) and only the image stage below is built per platform.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web
 WORKDIR /src/apps/web
 COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -18,7 +20,7 @@ COPY apps/web/ ./
 RUN npm run build
 
 # ---------------------------------------------------------------- RecallSpring's own two packages, as wheels
-FROM ${PYTHON_IMAGE} AS wheels
+FROM --platform=$BUILDPLATFORM ${PYTHON_IMAGE} AS wheels
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1
 WORKDIR /src
 # The dev lock pins setuptools and wheel (with hashes), which building the two packages needs.
