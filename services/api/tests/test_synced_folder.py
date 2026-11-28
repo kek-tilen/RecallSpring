@@ -105,7 +105,12 @@ def test_backups_go_to_a_synced_folder(owner_api: Api, synced: Path) -> None:
     assert r.status_code == 200, r.text
     c = r.json()["cloud"]
     assert c["provider"] == "folder" and c["state"] == "ok" and c["backups"] == 1
-    assert c["folder"] == {"path": target, "where": "iCloud Drive › RecallSpring backups", "sync": "iCloud Drive"}
+    assert c["folder"] == {
+        "path": target,
+        "where": "iCloud Drive › RecallSpring backups",
+        "sync": "iCloud Drive",
+        "from_server": False,
+    }
     assert c["free_bytes"] and c["free_bytes"] > 0
     copied = _files(synced / "RecallSpring backups")
     assert {f"sealed/{_sealed('a')}", f"sealed/{_sealed('b')}", "snapshots/20261120-030000/manifest.json"} <= copied
