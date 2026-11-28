@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     # data). backup_settings_from_web = false keeps the folder to the server settings (e.g. a hosted operator).
     backup_settings_file: Path = _REPO_ROOT / "local-data" / "backup-settings.json"
     backup_settings_from_web: bool = True
+    # Only the folders (where backups go, the synced folder) from the server settings; schedule, encryption and the
+    # cloud copy stay in Settings. The Docker image sets this (2026-11-28): Settings would see folders inside the
+    # container, not on the computer.
+    backup_folders_from_web: bool = True
     # Schedule: every backup_every_days days at backup_time in the first account's time zone; Settings can choose
     # another (daily ... monthly, 2026-11-27). Daily backups keep the newest of each of backup_keep_daily days and
     # backup_keep_weekly weeks; less frequent ones keep the last backup_keep_last.

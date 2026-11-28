@@ -122,10 +122,10 @@ def _update_status(**changes: Any) -> dict[str, Any]:
 
 def connection() -> dict[str, Any] | None:
     """{"provider", "folder_id", "connected_at"} while connected (the folder id is not a secret). Where backups are
-    set in the server settings (RS_BACKUP_SETTINGS_FROM_WEB=false), RS_CLOUD_FOLDER_DIR turns the copy on by itself:
-    nothing can be connected from Settings there."""
+    set in the server settings (RS_BACKUP_SETTINGS_FROM_WEB=false, or only the folders: RS_BACKUP_FOLDERS_FROM_WEB=false
+    as in Docker), RS_CLOUD_FOLDER_DIR turns the copy on by itself: no folder can be chosen from Settings there."""
     s = get_settings()
-    if not s.backup_settings_from_web and s.cloud_folder_dir is not None and s.cloud_folder_dir.is_absolute():
+    if not backup.folders_from_web() and s.cloud_folder_dir is not None and s.cloud_folder_dir.is_absolute():
         server = s.cloud_folder_dir
         return {"provider": "folder", "folder_id": server.name, "path": str(server), "connected_at": None}
     value = backup.read_config().get("cloud")
@@ -152,7 +152,7 @@ def configured(provider: str = "google") -> bool:
     if provider == "onedrive":
         return bool(s.cloud_onedrive_client_id)
     if provider == "folder":
-        return bool(s.backup_settings_from_web or s.cloud_folder_dir)
+        return bool(backup.folders_from_web() or s.cloud_folder_dir)
     return bool(s.cloud_google_client_id and s.cloud_google_client_secret)
 
 

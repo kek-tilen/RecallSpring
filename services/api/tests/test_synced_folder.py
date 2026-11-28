@@ -176,6 +176,33 @@ def test_the_server_settings_can_give_the_folder(
     assert r.status_code == 409 and r.json()["code"] == "drive_folder_locked"
 
 
+def test_docker_locks_only_the_folders(
+    owner_api: Api, synced: Path, settings: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """RS_BACKUP_FOLDERS_FROM_WEB=false (the Docker image): folders come from the server settings, because Settings
+    would only see paths inside the container; schedule and encryption stay in Settings."""
+    monkeypatch.setattr(settings, "backup_folders_from_web", False)
+    b = owner_api.get("/settings/backup").json()
+    assert b["can_change"] is True and b["folder_from_web"] is False
+    r = owner_api.put("/settings/backup/folder", {"path": str(tmp_path / "elsewhere")})
+    assert r.status_code == 409 and r.json()["code"] == "folder_locked"
+    r = owner_api.put("/settings/backup/schedule", {"every": "days", "days": 2, "at": "04:00"})
+    assert r.status_code == 200, r.text
+    _encryption_on()
+    assert b["cloud"]["available"]["folder"] is False
+    r = owner_api.post("/settings/backup/cloud/folder/check", {"path": str(synced / "RecallSpring backups")})
+    assert r.status_code == 200  # checking is harmless; using it is not offered
+    r = owner_api.post("/settings/backup/cloud/folder/connect", {"path": str(synced / "RecallSpring backups")})
+    assert r.status_code == 409 and r.json()["code"] == "cloud_folder_locked"
+
+    monkeypatch.setattr(settings, "cloud_folder_dir", synced / "Backups")  # the install's --sync-folder
+    monkeypatch.setattr(settings, "drive_folder_dir", synced)
+    c = owner_api.get("/settings/backup").json()["cloud"]
+    assert c["provider"] == "folder" and c["folder"]["from_server"] is True
+    d = owner_api.get("/drive").json()
+    assert d["available"]["folder"] is True and d["synced_folder"]["can_choose"] is False
+
+
 # ---------------------------------------------------------------- learners' own copies
 
 

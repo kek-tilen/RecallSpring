@@ -55,7 +55,9 @@ _USUAL = (
 
 
 def from_web() -> bool:
-    return bool(get_settings().backup_settings_from_web)
+    """Whether the folders may be chosen in Settings (backup.folders_from_web); else RS_CLOUD_FOLDER_DIR and
+    RS_DRIVE_FOLDER_DIR give them."""
+    return backup.folders_from_web()
 
 
 def drive_base() -> Path | None:

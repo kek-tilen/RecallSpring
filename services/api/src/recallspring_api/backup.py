@@ -96,8 +96,14 @@ def read_config() -> dict[str, Any]:
         return {}
 
 
+def folders_from_web() -> bool:
+    """Whether Settings may choose folders on this computer (where backups go, the synced folder)."""
+    s = get_settings()
+    return bool(s.backup_settings_from_web and s.backup_folders_from_web)
+
+
 def _chosen_dir() -> Path | None:
-    if not get_settings().backup_settings_from_web:
+    if not folders_from_web():
         return None
     value = read_config().get("dir")
     return Path(value) if isinstance(value, str) and value and Path(value).is_absolute() else None
@@ -185,7 +191,7 @@ def status_view() -> dict[str, Any]:
         "location": str(backup_root()),
         "location_source": location_source(),
         "server_location": str(server_root()),
-        "folder_from_web": s.backup_settings_from_web,
+        "folder_from_web": folders_from_web(),
         "sync": sync_provider(backup_root()),
         "same_disk_as_storage": _same_disk(backup_root(), s.storage_dir),
         "schedule": sch,
@@ -955,7 +961,7 @@ def set_folder(raw: str | None, *, actor_id: uuid.UUID | None = None, request_id
     """Save the folder chosen in Settings (None: back to the server's). Waits for no backup: refused while one runs.
     Backups already made stay where they are. Audited as ``backup.folder_changed``."""
     s = get_settings()
-    if not s.backup_settings_from_web:
+    if not folders_from_web():
         raise BackupError("folder_locked", "The backup folder is set in the server settings here (RS_BACKUP_DIR).")
     old = backup_root()
     with _locked():
