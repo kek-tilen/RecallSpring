@@ -248,7 +248,7 @@ and any of the three parts.
   session (`Cache-Control: no-store`). Today shows a ready export until it is downloaded, and a failed one.
 - History: `export.created`, `export.downloaded`, `export.sent_to_drive`.
 
-### Your cloud folder (`services/my_drive.py`, migration 0040, 2026-11-27; Dropbox 2026-11-28)
+### Your cloud folder (`services/my_drive.py`, migration 0040, 2026-11-27; Dropbox migration 0041, 2026-11-28)
 
 Settings → Data & backups → *Your cloud folder* (called *Your Google Drive* until 2026-11-28) keeps a **readable**
 copy of each learner's own material in their own Google Drive, in `My Drive › RecallSpring › <course>/<their
@@ -280,7 +280,9 @@ RecallSpring keeps working from its own copy.
   *Delete everything RecallSpring made there* (asked once more), which deletes the RecallSpring folder.
 - History: `drive.connected`, `drive.copy_existing`, `drive.failed` (once per failing streak), `drive.disconnected`
   (files kept or deleted).
-- Rollback: migration 0040 only adds the two tables (`alembic downgrade 0039` drops them); the files in Drive and the
+- Rollback: migration 0041 only widens `drive_connections.provider` to allow `dropbox` (`alembic downgrade 0040`
+  is refused while a learner has Dropbox connected, so disconnect first); migration 0040 only adds the two tables
+  (`alembic downgrade 0039` drops them); the files in Drive and the
   token files are untouched by a downgrade, so disconnect first.
 
 ### FSRS-6 shadow report (ADR-014 §5)
