@@ -1,0 +1,72 @@
+# Publishes recallspring.org with GitHub Pages: site/ plus the brand, screenshots and diagrams from assets/, and the
+# install scripts of the newest release, so that
+#   curl -fsSL https://recallspring.org/install.sh | sh
+#   irm https://recallspring.org/install.ps1 | iex
+# install that release. The copies are the release's own files (the version and the hash of its SHA256SUMS are written
+# in), checked here against the release's build provenance before they are published.
+# Runs on changes to the site, by hand, and from release.yml after a release (a release made with GITHUB_TOKEN does
+# not start other workflows by itself). No trackers, cookies or third-party resources on the site.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "assets/brand/**", "assets/screenshots/**", "assets/diagrams/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Assemble the site
+        run: |
+          set -eu
+          mkdir -p _site/assets
+          cp -r site/. _site/
+          cp -r assets/brand assets/screenshots assets/diagrams _site/assets/
+          rm -f _site/assets/brand/README.md
+      - name: Add the install scripts of the newest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          # The newest full release; while there is none, the newest pre-release.
+          tag=$(gh release list --repo "$REPO" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // empty')
+          [ -n "$tag" ] || tag=$(gh release list --repo "$REPO" --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')
+          if [ -z "$tag" ]; then echo "No release yet: the site goes out without install scripts."; exit 0; fi
+          gh release download "$tag" --repo "$REPO" --pattern install.sh --pattern install.ps1 --dir _site
+          for f in install.sh install.ps1; do
+            gh attestation verify "_site/$f" --repo "$REPO" > /dev/null
+            if grep -q '@RS_VERSION@\|@SUMS_SHA256@' "_site/$f"; then echo "$f of $tag has no version written in"; exit 1; fi
+          done
+          echo "Install scripts of $tag, provenance checked."
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
