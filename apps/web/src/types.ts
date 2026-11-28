@@ -823,14 +823,25 @@ export interface DropboxPending {
   expires_at: string;
 }
 
-export type CloudProvider = "google" | "dropbox" | "onedrive";
+export type CloudProvider = "google" | "dropbox" | "onedrive" | "folder";
 export type CloudPending = CloudDevice | DropboxPending;
 
 export function isDropbox(p: CloudPending | null | undefined): p is DropboxPending {
   return p?.provider === "dropbox";
 }
 
-export const PROVIDER_LABEL: Record<CloudProvider, string> = { google: "Google Drive", dropbox: "Dropbox", onedrive: "OneDrive" };
+export const PROVIDER_LABEL: Record<CloudProvider, string> = {
+  google: "Google Drive",
+  dropbox: "Dropbox",
+  onedrive: "OneDrive",
+  folder: "Synced folder",
+};
+
+/** A folder a sync app usually makes, found on the computer RecallSpring runs on (a synced folder, 2026-11-28). */
+export interface FolderSuggestion {
+  app: string;
+  path: string;
+}
 
 export interface CloudView {
   /** Providers this server has an app ID or key for. */
@@ -846,6 +857,14 @@ export interface CloudView {
   next_try_at: string | null;
   progress: { done_files: number; total_files: number; done_bytes: number; total_bytes: number } | null;
   pending: CloudPending | null;
+  /** Connected to a synced folder: where it is. Not connected: the server's folder, or folders found to pick from. */
+  folder?: {
+    path?: string;
+    where?: string;
+    sync?: string | null;
+    from_server?: string | null;
+    suggestions?: FolderSuggestion[];
+  } | null;
 }
 
 /** A new recovery key, returned once and never stored by the server. */
@@ -1175,4 +1194,13 @@ export interface DriveView {
   progress?: { done_files: number; total_files: number; done_bytes: number; total_bytes: number } | null;
   error?: { code: string; message: string; at: string } | null;
   next_try_at?: string | null;
+  /** The synced folder the first account chose for learners' copies (a subfolder each). */
+  synced_folder?: {
+    path: string | null;
+    where: string | null;
+    mine: string | null;
+    sync: string | null;
+    can_choose: boolean;
+    suggestions: FolderSuggestion[];
+  };
 }

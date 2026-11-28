@@ -6,24 +6,26 @@ import { keys } from "../queries";
 import { isDropbox, PROVIDER_LABEL, type CloudDevice, type CloudProvider, type DriveView, type DropboxPending } from "../types";
 import { COMPANY, DeviceSignIn, MissingSettings, withdrawText, type DeviceOutcome, type DeviceProvider } from "./CloudSignIn";
 import { DropboxSignIn } from "./DropboxSignIn";
+import { SyncedFolderStep } from "./SyncedFolder";
 import { Confirm, ErrorNote } from "./ui";
 
-/** Settings › Data & backups › Your cloud folder (BYOS, 2026-11-27; Dropbox and OneDrive 2026-11-28): a readable copy
- * of the learner's own material, by course, in their own Google Drive, Dropbox or OneDrive. One way: RecallSpring keeps
- * working from its own copy. One provider at a time. */
+/** Settings › Data & backups › Your cloud folder (BYOS, 2026-11-27; Dropbox, OneDrive and a synced folder 2026-11-28):
+ * a readable copy of the learner's own material, by course, in their own Google Drive, Dropbox or OneDrive, or in a
+ * subfolder of the synced folder the first account chose. One way: RecallSpring keeps working from its own copy. One
+ * provider at a time. */
 
 export const DRIVE_KEY = ["drive"] as const;
 
-type Step = null | "about" | "code" | "paste" | "manage";
+type Step = null | "about" | "folder" | "choose-folder" | "code" | "paste" | "manage";
 
-const FOLDER: Record<CloudProvider, string> = {
+const FOLDER: Record<Exclude<CloudProvider, "folder">, string> = {
   google: "My Drive › RecallSpring › your course",
   dropbox: "Dropbox › Apps › RecallSpring › Material › your course",
   onedrive: "OneDrive › Apps › RecallSpring › Material › your course",
 };
 
 function summary(d: DriveView): string {
-  if (d.state === "off") return "Off · a readable copy of your material in your own Google Drive, Dropbox or OneDrive";
+  if (d.state === "off") return "Off · a readable copy of your material in your own Google Drive, Dropbox, OneDrive or a synced folder";
   if (d.state === "copying") {
     const p = d.progress;
     return p?.total_files ? `Copying ${Math.min(p.done_files + 1, p.total_files)} of ${p.total_files}` : "Copying…";
@@ -97,6 +99,23 @@ export function DriveRow() {
     },
   });
   const cancel = useMutation({ mutationFn: () => request<DriveView>("/drive/cancel", { method: "POST" }), onSuccess: set });
+  const connectFolder = useMutation({
+    mutationFn: () => request<{ state: string; drive: DriveView }>("/drive/folder/connect", { method: "POST" }),
+    onSuccess: (r) => {
+      set(r.drive);
+      setStep("manage");
+      void qc.invalidateQueries({ queryKey: keys.history });
+      void qc.invalidateQueries({ queryKey: keys.dashboard });
+    },
+  });
+  const chooseFolder = useMutation({
+    mutationFn: (path: string | null) => request<DriveView>("/drive/folder", { method: "PUT", json: { path } }),
+    onSuccess: (v) => {
+      set(v);
+      setStep("about");
+      void qc.invalidateQueries({ queryKey: keys.history });
+    },
+  });
   const options = useMutation({
     mutationFn: (json: { mirror?: boolean; exports?: boolean }) => request<DriveView>("/drive/settings", { method: "POST", json }),
     onSuccess: set,
@@ -163,8 +182,9 @@ export function DriveRow() {
   const warn = d.state === "failing" || d.state === "revoked";
   const open = step !== null;
   const provider: CloudProvider = d.provider ?? "google";
-  const label = PROVIDER_LABEL[provider];
+  const label = provider === "folder" ? "synced folder" : PROVIDER_LABEL[provider];
   const company = COMPANY[provider];
+  const sf = d.synced_folder;
   return (
     <div id="drive">
       <div className="settings-row">
@@ -202,6 +222,11 @@ export function DriveRow() {
             <li>
               OneDrive: <strong>{FOLDER.onedrive}</strong>
             </li>
+            {sf?.mine && (
+              <li>
+                A synced folder: <strong>{sf.mine} › your course</strong>
+              </li>
+            )}
           </ul>
           <ul className="folder-checks">
             <li data-level="ok">
@@ -245,11 +270,92 @@ export function DriveRow() {
             >
               Connect OneDrive
             </button>
+            <button type="button" className="btn small" disabled={!d.available.folder} onClick={() => setStep("folder")}>
+              Use a synced folder
+            </button>
             <button type="button" className="btn small" onClick={() => setStep(null)}>
               Not now
             </button>
           </div>
+          {sf?.can_choose ? (
+            <p className="tiny muted" style={{ margin: 0 }}>
+              {sf.where ? `Synced folder: ${sf.where}, a subfolder for each learner. ` : "No synced folder is offered yet. "}
+              <button type="button" className="btn ghost small" onClick={() => setStep("choose-folder")}>
+                {sf.where ? "Change the synced folder" : "Choose a synced folder"}
+              </button>
+            </p>
+          ) : (
+            !d.available.folder && (
+              <p className="tiny muted" style={{ margin: 0 }}>
+                A synced folder (iCloud Drive and other sync apps): whoever runs this RecallSpring chooses the folder first.
+              </p>
+            )
+          )}
         </div>
+      )}
+
+      {step === "folder" && sf?.mine && (
+        <section className="assistant-steps stack" style={{ gap: 10 }} aria-labelledby="drive-folder-h">
+          <h4 id="drive-folder-h" className="backup-key-title">
+            A synced folder
+          </h4>
+          <p className="small" style={{ margin: 0 }}>
+            RecallSpring copies each file you add into <strong>{sf.mine} › your course</strong>, as it is.
+          </p>
+          <ul className="folder-checks">
+            <li data-level="ok">
+              <span aria-hidden="true">✓</span>
+              <span>RecallSpring keeps working from its own copy</span>
+            </li>
+            <li data-level="warn">
+              <span aria-hidden="true">!</span>
+              <span>The folder is on the computer RecallSpring runs on and syncs to the account of whoever runs it, not to yours</span>
+            </li>
+          </ul>
+          {connectFolder.error && <ErrorNote error={connectFolder.error} />}
+          <div className="row">
+            <button type="button" className="btn primary small" disabled={connectFolder.isPending} onClick={() => connectFolder.mutate()}>
+              Use the synced folder
+            </button>
+            <button type="button" className="btn small" onClick={() => setStep("about")}>
+              Back
+            </button>
+          </div>
+        </section>
+      )}
+
+      {step === "choose-folder" && sf?.can_choose && (
+        <>
+          <SyncedFolderStep
+            id="drive-choose-h"
+            intro={
+              <>
+                Each learner&apos;s material goes into their own folder: <strong>folder › sign-in name › course</strong>.
+                {sf.where && ` Now: ${sf.where}.`}
+              </>
+            }
+            checkUrl="/drive/folder/check"
+            suggestions={sf.suggestions}
+            name="RecallSpring"
+            busy={chooseFolder.isPending}
+            error={chooseFolder.error}
+            note={
+              <p className="tiny warn-text" style={{ margin: 0 }}>
+                This folder syncs to <strong>your</strong> account at the sync app. Learners who use it put their copy in your account, not in
+                theirs; RecallSpring tells them so.
+              </p>
+            }
+            onUse={(path) => chooseFolder.mutate(path)}
+            onCancel={() => setStep("about")}
+          />
+          {sf.where && (
+            <div className="row">
+              <button type="button" className="btn ghost small" disabled={chooseFolder.isPending} onClick={() => chooseFolder.mutate(null)}>
+                Stop offering the synced folder
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {step === "code" && (
@@ -312,7 +418,7 @@ export function DriveRow() {
               <button
                 type="button"
                 className="btn primary small"
-                onClick={() => (provider === "dropbox" ? startDropbox.mutate() : start.mutate(provider))}
+                onClick={() => (provider === "dropbox" ? startDropbox.mutate() : provider !== "folder" && start.mutate(provider))}
                 disabled={start.isPending || startDropbox.isPending}
               >
                 Sign in to {company} again
@@ -360,7 +466,7 @@ export function DriveRow() {
             <legend className="small">{withdrawText(provider)}</legend>
             <label className="check-row small">
               <input type="radio" name="drive-files" checked={!deleteFiles} onChange={() => setDeleteFiles(false)} />
-              <span>Keep the files in your {label}</span>
+              <span>{provider === "folder" ? "Keep the files in the folder" : `Keep the files in your ${label}`}</span>
             </label>
             <label className="check-row small">
               <input type="radio" name="drive-files" checked={deleteFiles} onChange={() => setDeleteFiles(true)} />
@@ -389,7 +495,13 @@ export function DriveRow() {
         onConfirm={() => disconnect.mutate(true)}
         onClose={() => setConfirming(false)}
       >
-        The folder {provider === "google" ? "RecallSpring in your Google Drive" : `Apps › RecallSpring › Material in your ${label}`} and everything in it (
+        The folder{" "}
+        {provider === "google"
+          ? "RecallSpring in your Google Drive"
+          : provider === "folder"
+            ? d.folder
+            : `Apps › RecallSpring › Material in your ${label}`}{" "}
+        and everything in it (
         {plural(d.files ?? 0, "file")}
         {d.exports ? " and exports" : ""}) will be deleted. This cannot be undone. Your material in RecallSpring stays. This is recorded in History.
       </Confirm>

@@ -3,16 +3,18 @@ import { useEffect, useState } from "react";
 import { ApiError, request } from "../api";
 import { bytes, dateTime, plural } from "../format";
 import { keys } from "../queries";
-import { isDropbox, PROVIDER_LABEL, type BackupStatus, type CloudDevice, type CloudView, type DropboxPending } from "../types";
+import { isDropbox, PROVIDER_LABEL, type BackupStatus, type CloudDevice, type CloudProvider, type CloudView, type DropboxPending } from "../types";
 import { COMPANY, DeviceSignIn, MissingSettings, withdrawText, type DeviceOutcome, type DeviceProvider } from "./CloudSignIn";
 import { DropboxSignIn } from "./DropboxSignIn";
+import { SyncedFolderStep } from "./SyncedFolder";
 import { Confirm, ErrorNote } from "./ui";
 
 /** Settings › Data & backups › Cloud copy (2026-11-27): the encrypted backups to Google Drive or (2026-11-28)
- * Dropbox or OneDrive, with no sync app. Google and OneDrive: a short code typed on any device; Dropbox: a code
- * Dropbox shows, pasted back. RecallSpring sees only the files it made (Google) or its own app folder. */
+ * Dropbox or OneDrive, with no sync app, or a synced folder (iCloud Drive or any other sync app). Google and
+ * OneDrive: a short code typed on any device; Dropbox: a code Dropbox shows, pasted back; a synced folder: a folder
+ * on this computer, checked first. RecallSpring sees only the files it made (Google) or its own folder. */
 
-type Step = null | "choose" | "code" | "paste" | "connected" | "manage";
+type Step = null | "choose" | "folder" | "code" | "paste" | "connected" | "manage";
 
 const WHERE = {
   google: "My Drive › RecallSpring backups",
@@ -20,9 +22,19 @@ const WHERE = {
   onedrive: "OneDrive › Apps › RecallSpring › Backups",
 } as const;
 
+/** Where the copy goes, as Settings says it. */
+function whereOf(c: CloudView, provider: CloudProvider): string {
+  if (provider === "folder") return c.folder?.where ?? c.folder?.path ?? "the synced folder";
+  return provider === "google" ? `Google Drive › ${WHERE.google}` : WHERE[provider];
+}
+
+function nameOf(c: CloudView, provider: CloudProvider): string {
+  return provider === "folder" ? (c.folder?.sync ?? "Synced folder") : PROVIDER_LABEL[provider];
+}
+
 function summary(c: CloudView): string {
   if (c.state === "off") return "Off · backups stay on this computer";
-  const name = PROVIDER_LABEL[c.provider ?? "google"];
+  const name = nameOf(c, c.provider ?? "google");
   if (c.state === "copying") {
     const p = c.progress;
     return p && p.total_files ? `${name} · copying ${Math.min(p.done_files + 1, p.total_files)} of ${p.total_files}` : `${name} · copying…`;
@@ -30,7 +42,8 @@ function summary(c: CloudView): string {
   if (c.state === "revoked") return `${name} · stopped: ${name} no longer allows RecallSpring`;
   if (c.state === "failing") return `${name} · ${c.last_success_at ? `last copy ${dateTime(c.last_success_at)}` : "not copied yet"} · ${c.error?.message ?? ""}`;
   if (c.state === "waiting" || !c.last_success_at) return `${name} · the first copy starts soon`;
-  return `${name} · copied ${dateTime(c.last_success_at)} · ${plural(c.backups ?? 0, "backup")}, ${bytes(c.bytes ?? 0)}`;
+  const verb = c.provider === "folder" ? "handed over" : "copied";
+  return `${name} · ${verb} ${dateTime(c.last_success_at)} · ${plural(c.backups ?? 0, "backup")}, ${bytes(c.bytes ?? 0)}`;
 }
 
 function Progress({ c }: { c: CloudView }) {
@@ -55,7 +68,7 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
   const [outcome, setOutcome] = useState<DeviceOutcome | null>(null);
   const [signing, setSigning] = useState<DeviceProvider>(c?.pending && !isDropbox(c.pending) ? (c.pending.provider ?? "google") : "google");
   const provider = c?.provider ?? "google";
-  const label = PROVIDER_LABEL[provider];
+  const label = c ? nameOf(c, provider) : PROVIDER_LABEL[provider];
   const [deleteFiles, setDeleteFiles] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const setView = (v: BackupStatus) => qc.setQueryData(keys.backup, v);
@@ -93,6 +106,14 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
   const cancel = useMutation({
     mutationFn: () => request<BackupStatus>("/settings/backup/cloud/cancel", { method: "POST" }),
     onSuccess: setView,
+  });
+  const connectFolder = useMutation({
+    mutationFn: (path: string | null) => request<BackupStatus>("/settings/backup/cloud/folder/connect", { method: "POST", json: { path } }),
+    onSuccess: (v) => {
+      setView(v);
+      setStep("connected");
+      void qc.invalidateQueries({ queryKey: keys.history });
+    },
   });
   const copyNow = useMutation({
     mutationFn: () => request<BackupStatus>("/settings/backup/cloud/copy", { method: "POST", json: {} }),
@@ -233,10 +254,12 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
               <strong>OneDrive</strong>
               <span className="tiny muted">{c.available.onedrive ? "A folder in Apps › RecallSpring you can see" : "Needs a Microsoft app ID in the server settings"}</span>
             </button>
-            <div className="welcome-tile" aria-disabled="true">
-              <strong>iCloud Drive</strong>
-              <span className="tiny muted">Only through a synced folder (Where backups go)</span>
-            </div>
+            <button type="button" className="welcome-tile" disabled={!c.available.folder} onClick={() => setStep("folder")}>
+              <strong>A synced folder</strong>
+              <span className="tiny muted">
+                {c.available.folder ? "iCloud Drive, Proton Drive, Nextcloud, Syncthing… through its app on this computer" : "Not offered on this server"}
+              </span>
+            </button>
           </div>
           <MissingSettings available={c.available} where="docs/08 → Cloud copy" />
           {start.error && <ErrorNote error={start.error} />}
@@ -248,6 +271,45 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
           </div>
         </div>
       )}
+
+      {step === "folder" &&
+        (c.folder?.from_server ? (
+          <section className="assistant-steps stack" style={{ gap: 10 }} aria-labelledby="cloud-folder-h">
+            <h4 id="cloud-folder-h" className="backup-key-title">
+              A synced folder
+            </h4>
+            <p className="small" style={{ margin: 0 }}>
+              The server settings give the folder: <span className="backup-path">{c.folder.from_server}</span>. RecallSpring puts the encrypted
+              backups there; the local backup folder stays the main copy.
+            </p>
+            {connectFolder.error && <ErrorNote error={connectFolder.error} />}
+            <div className="row">
+              <button type="button" className="btn primary small" disabled={connectFolder.isPending} onClick={() => connectFolder.mutate(null)}>
+                Use this folder
+              </button>
+              <button type="button" className="btn small" onClick={() => setStep("choose")}>
+                Back
+              </button>
+            </div>
+          </section>
+        ) : (
+          <SyncedFolderStep
+            id="cloud-folder-h"
+            intro={
+              <>
+                RecallSpring puts the <strong>encrypted</strong> backups in a folder that a sync app uploads to your cloud. The local backup folder
+                stays the main copy.
+              </>
+            }
+            checkUrl="/settings/backup/cloud/folder/check"
+            suggestions={c.folder?.suggestions ?? []}
+            name="RecallSpring backups"
+            busy={connectFolder.isPending}
+            error={connectFolder.error}
+            onUse={(path) => connectFolder.mutate(path)}
+            onCancel={() => setStep("choose")}
+          />
+        ))}
 
       {step === "code" && (
         <DeviceSignIn
@@ -290,17 +352,27 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
             Connected
           </h4>
           <p className="small" style={{ margin: 0 }}>
-            {label}, as the account you signed in with. Your encrypted backups are copied now, then after every backup.
+            {provider === "folder"
+              ? "The synced folder. Your encrypted backups are copied there now, then after every backup."
+              : `${label}, as the account you signed in with. Your encrypted backups are copied now, then after every backup.`}
           </p>
           <ul className="folder-checks">
             <li data-level="ok">
               <span aria-hidden="true">✓</span>
-              <span>Folder: {WHERE[provider]}</span>
+              <span>Folder: {provider === "google" ? WHERE.google : whereOf(c, provider)}</span>
             </li>
             {c.free_bytes != null && (
               <li data-level="ok">
                 <span aria-hidden="true">✓</span>
-                <span>Room: {bytes(c.free_bytes)} free</span>
+                <span>
+                  Room: {bytes(c.free_bytes)} free{provider === "folder" ? " on this disk" : ""}
+                </span>
+              </li>
+            )}
+            {provider === "folder" && (
+              <li data-level="warn">
+                <span aria-hidden="true">!</span>
+                <span>RecallSpring sees what it put in the folder, not when {c.folder?.sync ?? "the sync app"} has uploaded it</span>
               </li>
             )}
             {b.unencrypted_snapshots > 0 && (
@@ -324,13 +396,22 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
         <section className="assistant-steps stack" style={{ gap: 10 }} aria-label="Cloud copy">
           <dl className="kv">
             <dt>Where</dt>
-            <dd>{provider === "google" ? `Google Drive › ${WHERE.google}` : WHERE[provider]}</dd>
+            <dd>
+              {whereOf(c, provider)}
+              {provider === "folder" && c.folder?.path && <span className="tiny muted backup-path"> {c.folder.path}</span>}
+            </dd>
             <dt>Last copy</dt>
-            <dd>{c.last_success_at ? `${dateTime(c.last_success_at)} · ${plural(c.backups ?? 0, "backup")} · ${bytes(c.bytes ?? 0)}` : "Not yet"}</dd>
+            <dd>
+              {c.last_success_at
+                ? `${provider === "folder" ? `Handed to ${label} ` : ""}${dateTime(c.last_success_at)} · ${plural(c.backups ?? 0, "backup")} · ${bytes(c.bytes ?? 0)}`
+                : "Not yet"}
+            </dd>
             {c.free_bytes != null && (
               <>
                 <dt>Room</dt>
-                <dd>{bytes(c.free_bytes)} free</dd>
+                <dd>
+                  {bytes(c.free_bytes)} free{provider === "folder" ? " on this disk" : ""}
+                </dd>
               </>
             )}
             {c.next_try_at && (
@@ -359,7 +440,7 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
             <legend className="small">{withdrawText(provider)}</legend>
             <label className="check-row small">
               <input type="radio" name="cloud-files" checked={!deleteFiles} onChange={() => setDeleteFiles(false)} />
-              <span>Keep the files in {label}</span>
+              <span>Keep the files {provider === "folder" ? "in the folder" : `in ${label}`}</span>
             </label>
             <label className="check-row small">
               <input type="radio" name="cloud-files" checked={deleteFiles} onChange={() => setDeleteFiles(true)} />
@@ -388,8 +469,10 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
         onConfirm={() => disconnect.mutate(true)}
         onClose={() => setConfirming(false)}
       >
-        The folder {WHERE[provider]} {provider === "google" ? "in your Google Drive " : ""}and every backup in it will be deleted. This cannot be undone. The
-        backups on this computer stay. This is recorded in History.
+        The folder {c && provider !== "google" ? whereOf(c, provider) : WHERE.google} {provider === "google" ? "in your Google Drive " : ""}and every backup
+        in it will be deleted.{" "}
+        {provider === "folder" ? "The sync app may keep them in its own bin for a while." : "This cannot be undone."} The backups on this computer
+        stay. This is recorded in History.
       </Confirm>
     </div>
   );

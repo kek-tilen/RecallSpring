@@ -23,7 +23,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const both = { google: true, dropbox: true, onedrive: true };
+const both = { google: true, dropbox: true, onedrive: true, folder: false };
 const off: DriveView = { available: both, state: "off", provider: null, pending: null };
 const on = (over: Partial<DriveView> = {}): DriveView => ({
   available: both,
@@ -53,7 +53,10 @@ function serve(first: unknown, routes: Record<string, (body: unknown) => unknown
     const method = init?.method ?? "GET";
     const body = init?.body ? JSON.parse(String(init.body)) : null;
     calls.push({ method, url, body });
-    const hit = Object.entries(routes).find(([p]) => method === "POST" && url.endsWith(p));
+    const hit = Object.entries(routes).find(([p]) => {
+      const [want, path] = p.startsWith("PUT ") ? ["PUT", p.slice(4)] : ["POST", p];
+      return method === want && url.endsWith(path);
+    });
     const out = hit ? hit[1](body) : first;
     return new Response(JSON.stringify(out), { status: 200, headers: { "Content-Type": "application/json" } });
   });
@@ -73,7 +76,7 @@ describe("Your cloud folder row", () => {
       "/drive/poll": () => (connected ? { state: "connected", drive: on() } : { state: "pending", drive: off }),
     });
     show(<DriveRow />);
-    expect(await screen.findByText("Off · a readable copy of your material in your own Google Drive, Dropbox or OneDrive")).toBeTruthy();
+    expect(await screen.findByText("Off · a readable copy of your material in your own Google Drive, Dropbox, OneDrive or a synced folder")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     expect(screen.getByText("Readable at Google, Dropbox or Microsoft, like any file you keep there")).toBeTruthy();
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -153,7 +156,7 @@ describe("Your cloud folder row", () => {
   });
 
   it("says when a server has only one of them", async () => {
-    serve({ ...off, available: { google: false, dropbox: true, onedrive: false } });
+    serve({ ...off, available: { google: false, dropbox: true, onedrive: false, folder: false } });
     show(<DriveRow />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     expect((screen.getByRole("button", { name: "Connect Google Drive" }) as HTMLButtonElement).disabled).toBe(true);
@@ -202,6 +205,55 @@ describe("Your cloud folder row", () => {
     });
     expect(await screen.findByText(/does not let RecallSpring use its own folder in OneDrive. Nothing was connected/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Get a new code" })).toBeTruthy();
+  });
+
+  it("uses the synced folder the first account chose, in a subfolder of its own", async () => {
+    const sf = { path: null, where: "iCloud Drive › RecallSpring", mine: "iCloud Drive › RecallSpring › maja", sync: "iCloud Drive", can_choose: false, suggestions: [] };
+    const offered: DriveView = { ...off, available: { ...both, folder: true }, synced_folder: sf };
+    const calls = serve(offered, {
+      "/drive/folder/connect": () => ({
+        state: "connected",
+        drive: on({ provider: "folder", folder: "iCloud Drive › RecallSpring › maja", available: offered.available, synced_folder: sf }),
+      }),
+    });
+    show(<DriveRow />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    expect(screen.getByText("iCloud Drive › RecallSpring › maja › your course")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^(Choose a|Change the) synced folder$/ })).toBeNull(); // only the first account chooses it
+    fireEvent.click(screen.getByRole("button", { name: "Use a synced folder" }));
+    expect(screen.getByText(/syncs to the account of whoever runs it, not to yours/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Use the synced folder" }));
+    expect(await screen.findByText(/Connected · folder iCloud Drive › RecallSpring › maja/)).toBeTruthy();
+    expect(calls.some((c) => c.url.endsWith("/drive/folder/connect"))).toBe(true);
+    expect(screen.getByText("Keep the files in the folder")).toBeTruthy();
+  });
+
+  it("lets the first account choose the synced folder", async () => {
+    const choosing: DriveView = {
+      ...off,
+      synced_folder: { path: null, where: null, mine: null, sync: null, can_choose: true, suggestions: [{ app: "iCloud Drive", path: "C:\\Users\\ana\\iCloudDrive" }] },
+    };
+    const calls = serve(choosing, {
+      "/drive/folder/check": () => ({ path: "C:\\Users\\ana\\iCloudDrive\\RecallSpring", ok: true, checks: [{ id: "write", level: "ok", text: "RecallSpring can make this folder" }] }),
+      "PUT /drive/folder": () => ({
+        ...choosing,
+        available: { ...both, folder: true },
+        synced_folder: { ...choosing.synced_folder!, where: "iCloud Drive › RecallSpring", mine: "iCloud Drive › RecallSpring › owner", suggestions: [] },
+      }),
+    });
+    show(<DriveRow />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    expect((screen.getByRole("button", { name: "Use a synced folder" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Choose a synced folder" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use iCloud Drive" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check folder" }));
+    expect(await screen.findByText("RecallSpring can make this folder")).toBeTruthy();
+    expect(screen.getByText(/Learners who use it put their copy in your account, not in/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Use this folder" }));
+    expect(await screen.findByText("iCloud Drive › RecallSpring › owner › your course")).toBeTruthy();
+    const put = calls.find((c) => c.method === "PUT" && c.url.endsWith("/drive/folder"));
+    expect(put?.body).toEqual({ path: "C:\\Users\\ana\\iCloudDrive\\RecallSpring" });
+    expect((screen.getByRole("button", { name: "Use a synced folder" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 

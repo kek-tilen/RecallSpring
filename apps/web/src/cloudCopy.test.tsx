@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 const off: CloudView = {
-  available: { google: true, dropbox: true, onedrive: true },
+  available: { google: true, dropbox: true, onedrive: true, folder: true },
   provider: null,
   connected_at: null,
   state: "off",
@@ -116,7 +116,7 @@ describe("Cloud copy", () => {
   });
 
   it("says a server without a Google app ID cannot connect yet", async () => {
-    setup(status({ ...off, available: { google: false, dropbox: false, onedrive: false } }));
+    setup(status({ ...off, available: { google: false, dropbox: false, onedrive: false, folder: false } }));
     fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     const google = screen.getByRole("button", { name: /Google Drive/ }) as HTMLButtonElement;
     expect(google.disabled).toBe(true);
@@ -126,7 +126,53 @@ describe("Cloud copy", () => {
     expect(screen.getByText(/RS_CLOUD_ONEDRIVE_CLIENT_ID/)).toBeTruthy();
     expect((screen.getByRole("button", { name: /^OneDrive/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/Not available yet/)).toBeTruthy();
-    expect(screen.getByText(/Only through a synced folder/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^A synced folder/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Not offered on this server")).toBeTruthy();
+  });
+
+  it("copies to a synced folder after checking it", async () => {
+    const folderOff = { ...off, folder: { from_server: null, suggestions: [{ app: "iCloud Drive", path: "C:\\Users\\ana\\iCloudDrive" }] } };
+    const done: CloudView = {
+      ...connected,
+      provider: "folder",
+      free_bytes: 182 * 1024 ** 3,
+      folder: { path: "C:\\Users\\ana\\iCloudDrive\\RecallSpring backups", where: "iCloud Drive › RecallSpring backups", sync: "iCloud Drive" },
+    };
+    const calls = setup(status(folderOff), {
+      "/cloud/folder/check": () => ({
+      path: "C:\\Users\\ana\\iCloudDrive\\RecallSpring backups",
+      ok: true,
+      checks: [
+        { id: "write", level: "ok", text: "RecallSpring can make this folder · 182 GB free on this disk" },
+        { id: "sync", level: "ok", text: "iCloud Drive, recognised from the path" },
+        { id: "upload", level: "warn", text: "RecallSpring sees what it put in the folder, not when iCloud Drive has uploaded it." },
+      ],
+      sync: "iCloud Drive",
+    }),
+      "/cloud/folder/connect": () => status(done),
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    fireEvent.click(screen.getByRole("button", { name: /^A synced folder/ }));
+    expect(screen.getByRole("heading", { level: 4, name: "A synced folder" })).toBeTruthy();
+    const use = screen.getByRole("button", { name: "Use this folder" }) as HTMLButtonElement;
+    expect(use.disabled).toBe(true); // checked first
+    fireEvent.click(screen.getByRole("button", { name: "Use iCloud Drive" }));
+    const input = within(screen.getByRole("form", { name: "Synced folder" })).getByRole("textbox") as HTMLInputElement;
+    expect(input.value).toBe("C:\\Users\\ana\\iCloudDrive\\RecallSpring backups");
+    fireEvent.click(screen.getByRole("button", { name: "Check folder" }));
+    expect(await screen.findByText("iCloud Drive, recognised from the path")).toBeTruthy();
+    expect(screen.getByText(/not when iCloud Drive has uploaded it/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Use this folder" }));
+    expect(await screen.findByRole("heading", { level: 4, name: "Connected" })).toBeTruthy();
+    expect(screen.getByText("Folder: iCloud Drive › RecallSpring backups")).toBeTruthy();
+    expect(screen.getByText(/182 GB free on this disk/)).toBeTruthy();
+    const connect = calls.find((c) => c.url.endsWith("/cloud/folder/connect"));
+    expect(connect?.body).toEqual({ path: "C:\\Users\\ana\\iCloudDrive\\RecallSpring backups" });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(within(row()).getByText(/^iCloud Drive · handed over/)).toBeTruthy();
+    fireEvent.click(within(row()).getByRole("button", { name: "Manage" }));
+    expect(screen.getByText("Disconnect: RecallSpring stops copying into the folder")).toBeTruthy();
+    expect(screen.getByText("Keep the files in the folder")).toBeTruthy();
   });
 
   it("signs in with a code and shows the first copy", async () => {

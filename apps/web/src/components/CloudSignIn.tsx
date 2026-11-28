@@ -9,7 +9,7 @@ import { ErrorNote } from "./ui";
 export type DeviceProvider = "google" | "onedrive";
 export type DeviceOutcome = "denied" | "expired" | "blocked" | "not_supported";
 
-export const COMPANY: Record<CloudProvider, string> = { google: "Google", dropbox: "Dropbox", onedrive: "Microsoft" };
+export const COMPANY: Record<CloudProvider, string> = { google: "Google", dropbox: "Dropbox", onedrive: "Microsoft", folder: "the sync app" };
 
 const OTHERS = "Use a personal Microsoft account, Google Drive or Dropbox.";
 
@@ -111,7 +111,9 @@ export function DeviceSignIn({
   );
 }
 
-const SETTING: Record<CloudProvider, React.ReactNode> = {
+type SignInProvider = Exclude<CloudProvider, "folder">;
+
+const SETTING: Record<SignInProvider, React.ReactNode> = {
   google: (
     <>
       <code>RS_CLOUD_GOOGLE_CLIENT_ID</code> and <code>RS_CLOUD_GOOGLE_CLIENT_SECRET</code> for Google Drive
@@ -129,9 +131,10 @@ const SETTING: Record<CloudProvider, React.ReactNode> = {
   ),
 };
 
-/** "Whoever runs this RecallSpring sets …" for each provider without its app setting; nothing when all are set. */
+/** "Whoever runs this RecallSpring sets …" for each provider without its app setting; nothing when all are set. A
+ * synced folder needs no app setting. */
 export function MissingSettings({ available, where }: { available: Record<CloudProvider, boolean>; where: string }) {
-  const missing = (Object.keys(SETTING) as CloudProvider[]).filter((p) => !available[p]);
+  const missing = (Object.keys(SETTING) as SignInProvider[]).filter((p) => !available[p]);
   if (missing.length === 0) return null;
   const none = missing.length === Object.keys(SETTING).length;
   return (
@@ -148,8 +151,10 @@ export function MissingSettings({ available, where }: { available: Record<CloudP
   );
 }
 
-/** The disconnect legend: Google and Dropbox are asked to withdraw the sign-in; Microsoft has no call for it. */
+/** The disconnect legend: Google and Dropbox are asked to withdraw the sign-in; Microsoft has no call for it; a synced
+ * folder has no sign-in. */
 export function withdrawText(provider: CloudProvider): string {
+  if (provider === "folder") return "Disconnect: RecallSpring stops copying into the folder";
   return provider === "onedrive"
     ? "Disconnect: RecallSpring forgets the sign-in (you can also remove RecallSpring in your Microsoft account)"
     : `Disconnect: RecallSpring forgets the sign-in and asks ${COMPANY[provider]} to withdraw it`;
