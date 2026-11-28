@@ -1,0 +1,152 @@
+# Builds a release when a version tag is pushed (docs/install-docker.md > How a release is made):
+#   v0.4.0        a release ("latest")
+#   v0.4.0-beta.1 a pre-release (install with --beta / -Beta)
+#
+# 1. Two images, each for amd64 and arm64, pushed to GitHub Packages (ghcr.io) with build provenance attestations:
+#      ghcr.io/<owner>/recallspring:<tag>       RecallSpring
+#      ghcr.io/<owner>/recallspring:<tag>-full  with LibreOffice, for Word, PowerPoint and Excel files
+# 2. A GitHub release, made as a draft first and published only when every file is there:
+#      compose.yml, recallspring, recallspring.ps1  from infra/docker
+#      images.env    the version and both images, each by its digest (compose pulls exactly what was built here)
+#      SHA256SUMS    the hashes of the four files above
+#      install.sh, install.ps1  with the version and the hash of SHA256SUMS written in, so an install checks the rest
+# Nothing here signs in anywhere else or uses any secret but the workflow's own GITHUB_TOKEN.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      base: ${{ steps.out.outputs.base }}
+      full: ${{ steps.out.outputs.full }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Image name
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/recallspring" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push RecallSpring
+        id: base
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            FULL=0
+            VERSION=${{ github.ref_name }}
+          tags: ${{ steps.name.outputs.image }}:${{ github.ref_name }}
+          push: true
+          provenance: mode=max
+          sbom: true
+      - name: Build and push RecallSpring with LibreOffice
+        id: full
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            FULL=1
+            VERSION=${{ github.ref_name }}
+          tags: ${{ steps.name.outputs.image }}:${{ github.ref_name }}-full
+          push: true
+          provenance: mode=max
+          sbom: true
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.name.outputs.image }}
+          subject-digest: ${{ steps.base.outputs.digest }}
+          push-to-registry: true
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.name.outputs.image }}
+          subject-digest: ${{ steps.full.outputs.digest }}
+          push-to-registry: true
+      - name: Image references
+        id: out
+        env:
+          IMAGE: ${{ steps.name.outputs.image }}
+          TAG: ${{ github.ref_name }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          FULL_DIGEST: ${{ steps.full.outputs.digest }}
+        run: |
+          echo "base=$IMAGE:$TAG@$BASE_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "full=$IMAGE:$TAG-full@$FULL_DIGEST" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Release files
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Make the files
+        env:
+          TAG: ${{ github.ref_name }}
+          BASE: ${{ needs.image.outputs.base }}
+          FULL: ${{ needs.image.outputs.full }}
+        run: |
+          set -eu
+          case "$BASE" in *@sha256:*) ;; *) echo "no digest for the base image"; exit 1 ;; esac
+          case "$FULL" in *@sha256:*) ;; *) echo "no digest for the full image"; exit 1 ;; esac
+          mkdir dist
+          cp infra/docker/compose.yml infra/docker/recallspring infra/docker/recallspring.ps1 dist/
+          printf 'RS_VERSION=%s\nRS_IMAGE_BASE=%s\nRS_IMAGE_FULL=%s\n' "$TAG" "$BASE" "$FULL" > dist/images.env
+          (cd dist && sha256sum compose.yml images.env recallspring recallspring.ps1 > SHA256SUMS)
+          sums=$(sha256sum dist/SHA256SUMS | cut -d' ' -f1)
+          for f in install.sh install.ps1; do
+            sed -e "s/@RS_VERSION@/$TAG/" -e "s/@SUMS_SHA256@/$sums/" "infra/docker/$f" > "dist/$f"
+            if grep -q '@RS_VERSION@\|@SUMS_SHA256@' "dist/$f"; then echo "placeholder left in $f"; exit 1; fi
+          done
+          chmod 755 dist/recallspring dist/install.sh
+          cat dist/images.env dist/SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          pre=""
+          case "$TAG" in *-*) pre="--prerelease" ;; esac
+          gh release create "$TAG" --draft $pre --verify-tag --title "RecallSpring $TAG" --generate-notes \
+            dist/compose.yml dist/images.env dist/recallspring dist/recallspring.ps1 dist/SHA256SUMS \
+            dist/install.sh dist/install.ps1
+          gh release edit "$TAG" --draft=false
