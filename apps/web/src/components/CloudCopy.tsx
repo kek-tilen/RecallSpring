@@ -4,17 +4,21 @@ import { ApiError, request } from "../api";
 import { bytes, dateTime, plural } from "../format";
 import { keys } from "../queries";
 import { isDropbox, PROVIDER_LABEL, type BackupStatus, type CloudDevice, type CloudView, type DropboxPending } from "../types";
-import { CopyButton } from "./Copy";
+import { COMPANY, DeviceSignIn, MissingSettings, withdrawText, type DeviceOutcome, type DeviceProvider } from "./CloudSignIn";
 import { DropboxSignIn } from "./DropboxSignIn";
 import { Confirm, ErrorNote } from "./ui";
 
 /** Settings › Data & backups › Cloud copy (2026-11-27): the encrypted backups to Google Drive or (2026-11-28)
- * Dropbox, with no sync app. Google: a short code typed on any device; Dropbox: a code Dropbox shows, pasted back.
- * RecallSpring sees only the files it made (Google) or its own app folder (Dropbox). */
+ * Dropbox or OneDrive, with no sync app. Google and OneDrive: a short code typed on any device; Dropbox: a code
+ * Dropbox shows, pasted back. RecallSpring sees only the files it made (Google) or its own app folder. */
 
 type Step = null | "choose" | "code" | "paste" | "connected" | "manage";
 
-const WHERE = { google: "My Drive › RecallSpring backups", dropbox: "Dropbox › Apps › RecallSpring › Backups" } as const;
+const WHERE = {
+  google: "My Drive › RecallSpring backups",
+  dropbox: "Dropbox › Apps › RecallSpring › Backups",
+  onedrive: "OneDrive › Apps › RecallSpring › Backups",
+} as const;
 
 function summary(c: CloudView): string {
   if (c.state === "off") return "Off · backups stay on this computer";
@@ -48,7 +52,8 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
   const [device, setDevice] = useState<CloudDevice | null>(c?.pending && !isDropbox(c.pending) ? c.pending : null);
   const [dropbox, setDropbox] = useState<DropboxPending | null>(isDropbox(c?.pending) ? c.pending : null);
   const [dropboxExpired, setDropboxExpired] = useState(false);
-  const [outcome, setOutcome] = useState<"denied" | "expired" | null>(null);
+  const [outcome, setOutcome] = useState<DeviceOutcome | null>(null);
+  const [signing, setSigning] = useState<DeviceProvider>(c?.pending && !isDropbox(c.pending) ? (c.pending.provider ?? "google") : "google");
   const provider = c?.provider ?? "google";
   const label = PROVIDER_LABEL[provider];
   const [deleteFiles, setDeleteFiles] = useState(false);
@@ -56,9 +61,10 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
   const setView = (v: BackupStatus) => qc.setQueryData(keys.backup, v);
 
   const start = useMutation({
-    mutationFn: () => request<CloudDevice>("/settings/backup/cloud/google/start", { method: "POST" }),
-    onSuccess: (d) => {
+    mutationFn: (p: DeviceProvider) => request<CloudDevice>(`/settings/backup/cloud/${p}/start`, { method: "POST" }),
+    onSuccess: (d, p) => {
       setDevice(d);
+      setSigning(p);
       setOutcome(null);
       setStep("code");
     },
@@ -117,25 +123,28 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
         setStep("paste");
       } else {
         setDevice(d);
+        setSigning(d.provider ?? "google");
         setStep("code");
       }
     },
   });
 
-  // While the code is shown: ask the server (which asks Google) every `interval` seconds.
+  // While the code is shown: ask the server (which asks Google or Microsoft) every `interval` seconds.
   useEffect(() => {
     if (step !== "code" || !device) return;
     let stop = false;
     const tick = async () => {
       try {
-        const r = await request<{ state: string; backup: BackupStatus }>("/settings/backup/cloud/google/poll", { method: "POST" });
+        const r = await request<{ state: string; backup: BackupStatus }>(`/settings/backup/cloud/${device.provider ?? "google"}/poll`, {
+          method: "POST",
+        });
         if (stop) return;
         if (r.state === "connected") {
           setView(r.backup);
           setStep("connected");
           void qc.invalidateQueries({ queryKey: keys.history });
-        } else if (r.state === "denied" || r.state === "expired") {
-          setOutcome(r.state);
+        } else if (r.state !== "pending") {
+          setOutcome(r.state as DeviceOutcome);
           setDevice(null);
         }
       } catch {
@@ -201,7 +210,7 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
               type="button"
               className="welcome-tile"
               disabled={!c.available.google || start.isPending}
-              onClick={() => start.mutate()}
+              onClick={() => start.mutate("google")}
             >
               <strong>Google Drive</strong>
               <span className="tiny muted">{c.available.google ? "A folder in My Drive you can see" : "Needs a Google app ID in the server settings"}</span>
@@ -215,32 +224,21 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
               <strong>Dropbox</strong>
               <span className="tiny muted">{c.available.dropbox ? "A folder in Apps › RecallSpring you can see" : "Needs a Dropbox App key in the server settings"}</span>
             </button>
-            <div className="welcome-tile" aria-disabled="true">
+            <button
+              type="button"
+              className="welcome-tile"
+              disabled={!c.available.onedrive || start.isPending}
+              onClick={() => start.mutate("onedrive")}
+            >
               <strong>OneDrive</strong>
-              <span className="tiny muted">Later</span>
-            </div>
+              <span className="tiny muted">{c.available.onedrive ? "A folder in Apps › RecallSpring you can see" : "Needs a Microsoft app ID in the server settings"}</span>
+            </button>
             <div className="welcome-tile" aria-disabled="true">
               <strong>iCloud Drive</strong>
               <span className="tiny muted">Only through a synced folder (Where backups go)</span>
             </div>
           </div>
-          {(!c.available.google || !c.available.dropbox) && (
-            <p className="tiny muted" style={{ margin: 0 }}>
-              Whoever runs this RecallSpring sets{" "}
-              {!c.available.google && (
-                <>
-                  <code>RS_CLOUD_GOOGLE_CLIENT_ID</code> and <code>RS_CLOUD_GOOGLE_CLIENT_SECRET</code> for Google Drive
-                </>
-              )}
-              {!c.available.google && !c.available.dropbox && ", "}
-              {!c.available.dropbox && (
-                <>
-                  <code>RS_CLOUD_DROPBOX_APP_KEY</code> for Dropbox
-                </>
-              )}{" "}
-              (docs/08 → Cloud copy).
-            </p>
-          )}
+          <MissingSettings available={c.available} where="docs/08 → Cloud copy" />
           {start.error && <ErrorNote error={start.error} />}
           {startDropbox.error && <ErrorNote error={startDropbox.error} />}
           <div className="row">
@@ -252,63 +250,21 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
       )}
 
       {step === "code" && (
-        <section className="assistant-steps stack" style={{ gap: 10 }} aria-labelledby="cloud-code-h">
-          <h4 id="cloud-code-h" className="backup-key-title">
-            Sign in to Google
-          </h4>
-          {device ? (
-            <>
-              <p className="small" style={{ margin: 0 }}>
-                On any device, open{" "}
-                <a href={device.verification_url} target="_blank" rel="noreferrer">
-                  {device.verification_url.replace(/^https?:\/\/(www\.)?/, "")}
-                </a>
-                , sign in and enter:
-              </p>
-              <code className="recovery-key cloud-code" aria-label="Code to enter at Google">
-                {device.user_code}
-              </code>
-              <ul className="folder-checks">
-                <li data-level="ok">
-                  <span aria-hidden="true">✓</span>
-                  <span>Google will ask to let RecallSpring use only files it creates</span>
-                </li>
-              </ul>
-              <p className="tiny muted" style={{ margin: 0 }}>
-                The code expires at {dateTime(device.expires_at)}. This page continues by itself when you are done.
-              </p>
-              <div className="row">
-                <CopyButton text={device.user_code} label="Copy code" />
-                <button
-                  type="button"
-                  className="btn small"
-                  onClick={() => {
-                    cancel.mutate();
-                    setStep(null);
-                    setDevice(null);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="small" role="alert" style={{ margin: 0 }}>
-                {outcome === "denied" ? "Google did not allow RecallSpring. Nothing was connected." : "The code expired before the sign-in finished."}
-              </p>
-              <div className="row">
-                <button type="button" className="btn primary small" onClick={() => start.mutate()} disabled={start.isPending}>
-                  Get a new code
-                </button>
-                <button type="button" className="btn small" onClick={() => setStep(null)}>
-                  Cancel
-                </button>
-              </div>
-            </>
-          )}
-          {start.error && <ErrorNote error={start.error} />}
-        </section>
+        <DeviceSignIn
+          id="cloud-code-h"
+          provider={device?.provider ?? signing}
+          device={device}
+          outcome={outcome}
+          what="your encrypted backups"
+          busy={start.isPending}
+          error={start.error}
+          onRestart={() => start.mutate(signing)}
+          onCancel={() => {
+            cancel.mutate();
+            setStep(null);
+            setDevice(null);
+          }}
+        />
       )}
 
       {step === "paste" && (
@@ -368,7 +324,7 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
         <section className="assistant-steps stack" style={{ gap: 10 }} aria-label="Cloud copy">
           <dl className="kv">
             <dt>Where</dt>
-            <dd>{provider === "google" ? `Google Drive › ${WHERE.google}` : WHERE.dropbox}</dd>
+            <dd>{provider === "google" ? `Google Drive › ${WHERE.google}` : WHERE[provider]}</dd>
             <dt>Last copy</dt>
             <dd>{c.last_success_at ? `${dateTime(c.last_success_at)} · ${plural(c.backups ?? 0, "backup")} · ${bytes(c.bytes ?? 0)}` : "Not yet"}</dd>
             {c.free_bytes != null && (
@@ -391,7 +347,7 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
           <div className="row">
             {c.state === "revoked" ? (
               <button type="button" className="btn primary small" onClick={() => signInAgain.mutate()} disabled={signInAgain.isPending}>
-                Sign in to {provider === "google" ? "Google" : "Dropbox"} again
+                Sign in to {COMPANY[provider]} again
               </button>
             ) : (
               <button type="button" className="btn small" onClick={() => copyNow.mutate()} disabled={copyNow.isPending || copying}>
@@ -400,7 +356,7 @@ export function CloudCopyRow({ b }: { b: BackupStatus }) {
             )}
           </div>
           <fieldset className="plain-choice">
-            <legend className="small">Disconnect: RecallSpring forgets the sign-in and asks {provider === "google" ? "Google" : "Dropbox"} to withdraw it</legend>
+            <legend className="small">{withdrawText(provider)}</legend>
             <label className="check-row small">
               <input type="radio" name="cloud-files" checked={!deleteFiles} onChange={() => setDeleteFiles(false)} />
               <span>Keep the files in {label}</span>

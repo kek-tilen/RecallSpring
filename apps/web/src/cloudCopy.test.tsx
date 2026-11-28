@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 const off: CloudView = {
-  available: { google: true, dropbox: true },
+  available: { google: true, dropbox: true, onedrive: true },
   provider: null,
   connected_at: null,
   state: "off",
@@ -116,13 +116,16 @@ describe("Cloud copy", () => {
   });
 
   it("says a server without a Google app ID cannot connect yet", async () => {
-    setup(status({ ...off, available: { google: false, dropbox: false } }));
+    setup(status({ ...off, available: { google: false, dropbox: false, onedrive: false } }));
     fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     const google = screen.getByRole("button", { name: /Google Drive/ }) as HTMLButtonElement;
     expect(google.disabled).toBe(true);
     expect((screen.getByRole("button", { name: /^Dropbox/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/RS_CLOUD_GOOGLE_CLIENT_ID/)).toBeTruthy();
     expect(screen.getByText(/RS_CLOUD_DROPBOX_APP_KEY/)).toBeTruthy();
+    expect(screen.getByText(/RS_CLOUD_ONEDRIVE_CLIENT_ID/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^OneDrive/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Not available yet/)).toBeTruthy();
     expect(screen.getByText(/Only through a synced folder/)).toBeTruthy();
   });
 
@@ -227,5 +230,35 @@ describe("Cloud copy", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start again" }));
     expect(await screen.findByLabelText("Code from Dropbox")).toBeTruthy();
     expect(starts).toBe(2);
+  });
+
+  it("signs in to OneDrive with a code and says when a school blocks it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const msDevice = { provider: "onedrive", user_code: "FAKE1234", verification_url: "https://microsoft.com/devicelogin", expires_at: "2026-11-28T10:00:00+00:00", interval: 5 };
+    let blocked = true;
+    const calls = setup(status(off), {
+      "/cloud/onedrive/start": () => msDevice,
+      "/cloud/onedrive/poll": () =>
+        blocked
+          ? { state: "blocked", backup: status(off) }
+          : { state: "connected", backup: status({ ...connected, provider: "onedrive", free_bytes: null }) },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    fireEvent.click(screen.getByRole("button", { name: /^OneDrive/ }));
+    expect((await screen.findByLabelText("Code to enter at Microsoft")).textContent).toBe("FAKE1234");
+    expect(screen.getByRole("link", { name: "microsoft.com/devicelogin" })).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5500);
+    });
+    expect(await screen.findByText(/Your school or work account does not allow this kind of sign-in/)).toBeTruthy();
+    blocked = false;
+    fireEvent.click(screen.getByRole("button", { name: "Get a new code" }));
+    await screen.findByLabelText("Code to enter at Microsoft");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5500);
+    });
+    expect(await screen.findByRole("heading", { level: 4, name: "Connected" })).toBeTruthy();
+    expect(screen.getByText("Folder: OneDrive › Apps › RecallSpring › Backups")).toBeTruthy();
+    expect(calls.filter((c) => c.url.endsWith("/cloud/onedrive/start")).length).toBe(2);
   });
 });

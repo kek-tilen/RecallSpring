@@ -808,7 +808,7 @@ export interface BackupStatus {
 
 /** A code to type at Google; the device code itself never reaches the browser. */
 export interface CloudDevice {
-  provider?: "google";
+  provider?: "google" | "onedrive";
   user_code: string;
   verification_url: string;
   expires_at: string;
@@ -823,14 +823,14 @@ export interface DropboxPending {
   expires_at: string;
 }
 
-export type CloudProvider = "google" | "dropbox";
+export type CloudProvider = "google" | "dropbox" | "onedrive";
 export type CloudPending = CloudDevice | DropboxPending;
 
 export function isDropbox(p: CloudPending | null | undefined): p is DropboxPending {
   return p?.provider === "dropbox";
 }
 
-export const PROVIDER_LABEL: Record<CloudProvider, string> = { google: "Google Drive", dropbox: "Dropbox" };
+export const PROVIDER_LABEL: Record<CloudProvider, string> = { google: "Google Drive", dropbox: "Dropbox", onedrive: "OneDrive" };
 
 export interface CloudView {
   /** Providers this server has an app ID or key for. */

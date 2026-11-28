@@ -4,13 +4,13 @@ import { ApiError, get, request } from "../api";
 import { bytes, dateTime, plural } from "../format";
 import { keys } from "../queries";
 import { isDropbox, PROVIDER_LABEL, type CloudDevice, type CloudProvider, type DriveView, type DropboxPending } from "../types";
-import { CopyButton } from "./Copy";
+import { COMPANY, DeviceSignIn, MissingSettings, withdrawText, type DeviceOutcome, type DeviceProvider } from "./CloudSignIn";
 import { DropboxSignIn } from "./DropboxSignIn";
 import { Confirm, ErrorNote } from "./ui";
 
-/** Settings › Data & backups › Your cloud folder (BYOS, 2026-11-27; Dropbox 2026-11-28): a readable copy of the
- * learner's own material, by course, in their own Google Drive or Dropbox. One way: RecallSpring keeps working from
- * its own copy. One provider at a time. */
+/** Settings › Data & backups › Your cloud folder (BYOS, 2026-11-27; Dropbox and OneDrive 2026-11-28): a readable copy
+ * of the learner's own material, by course, in their own Google Drive, Dropbox or OneDrive. One way: RecallSpring keeps
+ * working from its own copy. One provider at a time. */
 
 export const DRIVE_KEY = ["drive"] as const;
 
@@ -19,10 +19,11 @@ type Step = null | "about" | "code" | "paste" | "manage";
 const FOLDER: Record<CloudProvider, string> = {
   google: "My Drive › RecallSpring › your course",
   dropbox: "Dropbox › Apps › RecallSpring › Material › your course",
+  onedrive: "OneDrive › Apps › RecallSpring › Material › your course",
 };
 
 function summary(d: DriveView): string {
-  if (d.state === "off") return "Off · a readable copy of your material in your own Google Drive or Dropbox";
+  if (d.state === "off") return "Off · a readable copy of your material in your own Google Drive, Dropbox or OneDrive";
   if (d.state === "copying") {
     const p = d.progress;
     return p?.total_files ? `Copying ${Math.min(p.done_files + 1, p.total_files)} of ${p.total_files}` : "Copying…";
@@ -46,7 +47,8 @@ export function DriveRow() {
   const [device, setDevice] = useState<CloudDevice | null>(null);
   const [dropbox, setDropbox] = useState<DropboxPending | null>(null);
   const [dropboxExpired, setDropboxExpired] = useState(false);
-  const [outcome, setOutcome] = useState<"denied" | "expired" | null>(null);
+  const [outcome, setOutcome] = useState<DeviceOutcome | null>(null);
+  const [signing, setSigning] = useState<DeviceProvider>("google");
   const [deleteFiles, setDeleteFiles] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const set = (v: DriveView) => {
@@ -58,13 +60,17 @@ export function DriveRow() {
     if (!d?.pending) return;
     if (isDropbox(d.pending)) {
       if (!dropbox) setDropbox(d.pending);
-    } else if (!device) setDevice(d.pending);
+    } else if (!device) {
+      setDevice(d.pending);
+      setSigning(d.pending.provider ?? "google");
+    }
   }, [d?.pending, device, dropbox]);
 
   const start = useMutation({
-    mutationFn: () => request<CloudDevice>("/drive/start", { method: "POST" }),
-    onSuccess: (c) => {
+    mutationFn: (p: DeviceProvider) => request<CloudDevice>(p === "google" ? "/drive/start" : `/drive/${p}/start`, { method: "POST" }),
+    onSuccess: (c, p) => {
       setDevice(c);
+      setSigning(p);
       setOutcome(null);
       setStep("code");
     },
@@ -114,7 +120,7 @@ export function DriveRow() {
     },
   });
 
-  // While the code is shown: ask the server (which asks Google) every `interval` seconds.
+  // While the code is shown: ask the server (which asks Google or Microsoft) every `interval` seconds.
   useEffect(() => {
     if (step !== "code" || !device) return;
     let stop = false;
@@ -128,8 +134,8 @@ export function DriveRow() {
           setStep("manage");
           void qc.invalidateQueries({ queryKey: keys.history });
           void qc.invalidateQueries({ queryKey: keys.dashboard });
-        } else if (r.state === "denied" || r.state === "expired") {
-          setOutcome(r.state);
+        } else if (r.state !== "pending") {
+          setOutcome(r.state as DeviceOutcome);
           setDevice(null);
         }
       } catch {
@@ -158,8 +164,7 @@ export function DriveRow() {
   const open = step !== null;
   const provider: CloudProvider = d.provider ?? "google";
   const label = PROVIDER_LABEL[provider];
-  const company = provider === "google" ? "Google" : "Dropbox";
-  const none = !d.available.google && !d.available.dropbox;
+  const company = COMPANY[provider];
   return (
     <div id="drive">
       <div className="settings-row">
@@ -194,11 +199,14 @@ export function DriveRow() {
             <li>
               Dropbox: <strong>{FOLDER.dropbox}</strong>
             </li>
+            <li>
+              OneDrive: <strong>{FOLDER.onedrive}</strong>
+            </li>
           </ul>
           <ul className="folder-checks">
             <li data-level="ok">
               <span aria-hidden="true">✓</span>
-              <span>Only the files it creates (Google Drive) or its own folder (Dropbox); nothing else</span>
+              <span>Only the files it creates (Google Drive) or its own folder (Dropbox, OneDrive); nothing else</span>
             </li>
             <li data-level="ok">
               <span aria-hidden="true">✓</span>
@@ -206,30 +214,19 @@ export function DriveRow() {
             </li>
             <li data-level="warn">
               <span aria-hidden="true">!</span>
-              <span>Readable at Google or Dropbox, like any file you keep there</span>
+              <span>Readable at Google, Dropbox or Microsoft, like any file you keep there</span>
             </li>
           </ul>
-          {(!d.available.google || !d.available.dropbox) && (
-            <p className="tiny muted" style={{ margin: 0 }}>
-              {none ? "Not available yet: whoever" : "Whoever"} runs this RecallSpring sets{" "}
-              {!d.available.google && (
-                <>
-                  <code>RS_CLOUD_GOOGLE_CLIENT_ID</code> and <code>RS_CLOUD_GOOGLE_CLIENT_SECRET</code> for Google Drive
-                </>
-              )}
-              {none && ", "}
-              {!d.available.dropbox && (
-                <>
-                  <code>RS_CLOUD_DROPBOX_APP_KEY</code> for Dropbox
-                </>
-              )}{" "}
-              (docs/08 → Your cloud folder).
-            </p>
-          )}
+          <MissingSettings available={d.available} where="docs/08 → Your cloud folder" />
           {start.error && <ErrorNote error={start.error} />}
           {startDropbox.error && <ErrorNote error={startDropbox.error} />}
           <div className="row">
-            <button type="button" className="btn primary small" disabled={!d.available.google || start.isPending} onClick={() => start.mutate()}>
+            <button
+              type="button"
+              className="btn primary small"
+              disabled={!d.available.google || start.isPending}
+              onClick={() => start.mutate("google")}
+            >
               Connect Google Drive
             </button>
             <button
@@ -240,6 +237,14 @@ export function DriveRow() {
             >
               Connect Dropbox
             </button>
+            <button
+              type="button"
+              className="btn primary small"
+              disabled={!d.available.onedrive || start.isPending}
+              onClick={() => start.mutate("onedrive")}
+            >
+              Connect OneDrive
+            </button>
             <button type="button" className="btn small" onClick={() => setStep(null)}>
               Not now
             </button>
@@ -248,57 +253,21 @@ export function DriveRow() {
       )}
 
       {step === "code" && (
-        <section className="assistant-steps stack" style={{ gap: 10 }} aria-labelledby="drive-code-h">
-          <h4 id="drive-code-h" className="backup-key-title">
-            Sign in to Google
-          </h4>
-          {device ? (
-            <>
-              <p className="small" style={{ margin: 0 }}>
-                On any device, open{" "}
-                <a href={device.verification_url} target="_blank" rel="noreferrer">
-                  {device.verification_url.replace(/^https?:\/\/(www\.)?/, "")}
-                </a>
-                , sign in with your own account and enter:
-              </p>
-              <code className="recovery-key cloud-code" aria-label="Code to enter at Google">
-                {device.user_code}
-              </code>
-              <p className="tiny muted" style={{ margin: 0 }}>
-                The code expires at {dateTime(device.expires_at)}. This page continues by itself when you are done.
-              </p>
-              <div className="row">
-                <CopyButton text={device.user_code} label="Copy code" />
-                <button
-                  type="button"
-                  className="btn small"
-                  onClick={() => {
-                    cancel.mutate();
-                    setStep(null);
-                    setDevice(null);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="small" role="alert" style={{ margin: 0 }}>
-                {outcome === "denied" ? "Google did not allow RecallSpring. Nothing was connected." : "The code expired before the sign-in finished."}
-              </p>
-              <div className="row">
-                <button type="button" className="btn primary small" onClick={() => start.mutate()} disabled={start.isPending}>
-                  Get a new code
-                </button>
-                <button type="button" className="btn small" onClick={() => setStep(null)}>
-                  Cancel
-                </button>
-              </div>
-            </>
-          )}
-          {start.error && <ErrorNote error={start.error} />}
-        </section>
+        <DeviceSignIn
+          id="drive-code-h"
+          provider={device?.provider ?? signing}
+          device={device}
+          outcome={outcome}
+          what="a readable copy of your material"
+          busy={start.isPending}
+          error={start.error}
+          onRestart={() => start.mutate(signing)}
+          onCancel={() => {
+            cancel.mutate();
+            setStep(null);
+            setDevice(null);
+          }}
+        />
       )}
 
       {step === "paste" && (
@@ -343,7 +312,7 @@ export function DriveRow() {
               <button
                 type="button"
                 className="btn primary small"
-                onClick={() => (provider === "dropbox" ? startDropbox.mutate() : start.mutate())}
+                onClick={() => (provider === "dropbox" ? startDropbox.mutate() : start.mutate(provider))}
                 disabled={start.isPending || startDropbox.isPending}
               >
                 Sign in to {company} again
@@ -388,7 +357,7 @@ export function DriveRow() {
           {start.error && <ErrorNote error={start.error} />}
           {startDropbox.error && <ErrorNote error={startDropbox.error} />}
           <fieldset className="plain-choice">
-            <legend className="small">Disconnect: RecallSpring forgets the sign-in and asks {company} to withdraw it</legend>
+            <legend className="small">{withdrawText(provider)}</legend>
             <label className="check-row small">
               <input type="radio" name="drive-files" checked={!deleteFiles} onChange={() => setDeleteFiles(false)} />
               <span>Keep the files in your {label}</span>
@@ -420,7 +389,7 @@ export function DriveRow() {
         onConfirm={() => disconnect.mutate(true)}
         onClose={() => setConfirming(false)}
       >
-        The folder {provider === "google" ? "RecallSpring in your Google Drive" : "Apps › RecallSpring › Material in your Dropbox"} and everything in it (
+        The folder {provider === "google" ? "RecallSpring in your Google Drive" : `Apps › RecallSpring › Material in your ${label}`} and everything in it (
         {plural(d.files ?? 0, "file")}
         {d.exports ? " and exports" : ""}) will be deleted. This cannot be undone. Your material in RecallSpring stays. This is recorded in History.
       </Confirm>

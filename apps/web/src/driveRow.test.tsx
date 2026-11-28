@@ -23,7 +23,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const both = { google: true, dropbox: true };
+const both = { google: true, dropbox: true, onedrive: true };
 const off: DriveView = { available: both, state: "off", provider: null, pending: null };
 const on = (over: Partial<DriveView> = {}): DriveView => ({
   available: both,
@@ -73,9 +73,9 @@ describe("Your cloud folder row", () => {
       "/drive/poll": () => (connected ? { state: "connected", drive: on() } : { state: "pending", drive: off }),
     });
     show(<DriveRow />);
-    expect(await screen.findByText("Off · a readable copy of your material in your own Google Drive or Dropbox")).toBeTruthy();
+    expect(await screen.findByText("Off · a readable copy of your material in your own Google Drive, Dropbox or OneDrive")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
-    expect(screen.getByText("Readable at Google or Dropbox, like any file you keep there")).toBeTruthy();
+    expect(screen.getByText("Readable at Google, Dropbox or Microsoft, like any file you keep there")).toBeTruthy();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     fireEvent.click(screen.getByRole("button", { name: "Connect Google Drive" }));
     expect(await screen.findByLabelText("Code to enter at Google")).toBeTruthy();
@@ -153,13 +153,55 @@ describe("Your cloud folder row", () => {
   });
 
   it("says when a server has only one of them", async () => {
-    serve({ ...off, available: { google: false, dropbox: true } });
+    serve({ ...off, available: { google: false, dropbox: true, onedrive: false } });
     show(<DriveRow />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     expect((screen.getByRole("button", { name: "Connect Google Drive" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Connect Dropbox" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Connect OneDrive" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/RS_CLOUD_GOOGLE_CLIENT_ID/)).toBeTruthy();
+    expect(screen.getByText(/RS_CLOUD_ONEDRIVE_CLIENT_ID/)).toBeTruthy();
     expect(screen.queryByText(/RS_CLOUD_DROPBOX_APP_KEY/)).toBeNull();
+  });
+
+  it("connects OneDrive with a code typed at Microsoft", async () => {
+    const msDevice = { provider: "onedrive", user_code: "FAKE1234", verification_url: "https://microsoft.com/devicelogin", expires_at: "2026-11-28T09:30:00+00:00", interval: 5 };
+    let connected = false;
+    const calls = serve(off, {
+      "/drive/onedrive/start": () => msDevice,
+      "/drive/poll": () =>
+        connected ? { state: "connected", drive: on({ provider: "onedrive", folder: "OneDrive › Apps › RecallSpring › Material" }) } : { state: "pending", drive: off },
+    });
+    show(<DriveRow />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    expect(screen.getByText("OneDrive › Apps › RecallSpring › Material › your course")).toBeTruthy();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    fireEvent.click(screen.getByRole("button", { name: "Connect OneDrive" }));
+    expect((await screen.findByLabelText("Code to enter at Microsoft")).textContent).toBe("FAKE1234");
+    expect(screen.getByRole("heading", { name: "Sign in to Microsoft" })).toBeTruthy();
+    expect(screen.getByText(/only its own folder, Apps › RecallSpring, for a readable copy of your material/)).toBeTruthy();
+    connected = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(await screen.findByText(/Connected · folder OneDrive › Apps › RecallSpring › Material/)).toBeTruthy();
+    expect(calls.some((c) => c.url.endsWith("/drive/onedrive/start"))).toBe(true);
+    expect(screen.getByText(/RecallSpring forgets the sign-in \(you can also remove RecallSpring in your Microsoft account\)/)).toBeTruthy();
+  });
+
+  it("says plainly when a school account cannot be used", async () => {
+    const msDevice = { provider: "onedrive", user_code: "FAKE1234", verification_url: "https://microsoft.com/devicelogin", expires_at: "2026-11-28T09:30:00+00:00", interval: 5 };
+    serve(off, { "/drive/onedrive/start": () => msDevice, "/drive/poll": () => ({ state: "not_supported", drive: off }) });
+    show(<DriveRow />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    fireEvent.click(screen.getByRole("button", { name: "Connect OneDrive" }));
+    await screen.findByLabelText("Code to enter at Microsoft");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(await screen.findByText(/does not let RecallSpring use its own folder in OneDrive. Nothing was connected/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Get a new code" })).toBeTruthy();
   });
 });
 
