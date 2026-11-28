@@ -193,10 +193,11 @@ folder: 36 tables, every row count equal to the manifest, Alembic revision match
 checksums, that day's answers and notes present, and the API started and answered `ready` on the copy. The throwaway
 database and folder were then removed.
 
-### Cloud copy to Google Drive (`cloud.py`, 2026-11-27)
+### Cloud copy to Google Drive or Dropbox (`cloud.py`, 2026-11-27; Dropbox `cloud_dropbox.py`, 2026-11-28)
 
 Settings → Data & backups → *Cloud copy* uploads the **encrypted** backups to a folder RecallSpring creates in the
-learner's Google Drive (`My Drive › RecallSpring backups`), with no sync app. The local folder stays the main copy.
+learner's Google Drive (`My Drive › RecallSpring backups`) or Dropbox (`Dropbox › Apps › RecallSpring › Backups`),
+with no sync app. One provider at a time; the local folder stays the main copy.
 
 - **Needs encryption on.** A snapshot whose manifest is not encrypted is never uploaded; older unencrypted backups stay
   on this computer only.
@@ -204,26 +205,33 @@ learner's Google Drive (`My Drive › RecallSpring backups`), with no sync app. 
   device; no return address is needed (localhost, home server or hosted work alike). Scope `drive.file` only: the
   app sees only files it created. The app ID comes from the server settings (`RS_CLOUD_GOOGLE_CLIENT_ID`,
   `RS_CLOUD_GOOGLE_CLIENT_SECRET`), never from Git; without them the row says so (docs/cloud-copy-google.md).
-- **Secrets:** only the refresh token is kept, in `secrets_dir` (`cloud-google.bin`, DPAPI on Windows, 0600 elsewhere),
-  like the ChatGPT sign-in; the device code waits there while the learner signs in. Neither reaches the database, a
-  backup, History, logs or the browser. No account name or address is stored.
+- **Sign-in, Dropbox:** OAuth with PKCE and no redirect address: RecallSpring opens Dropbox, the learner allows it,
+  and Dropbox shows a code to paste back (it works once, within 30 minutes). App folder access only, permissions
+  `files.metadata.read` and `files.content.write`; no `account_info.read`, so no account details and no free room
+  (a full Dropbox shows as "Your Dropbox is full" when an upload fails). Only the App key from the server settings
+  (`RS_CLOUD_DROPBOX_APP_KEY`), no secret (docs/cloud-copy-dropbox.md).
+- **Secrets:** only the refresh token is kept, in `secrets_dir` (`cloud-google.bin` or `cloud-dropbox.bin`, DPAPI on
+  Windows, 0600 elsewhere), like the ChatGPT sign-in; the device code or the PKCE verifier waits there while the
+  learner signs in (`cloud-<provider>-pending.bin`). Neither reaches the database, a backup, History, logs or the
+  browser. The pasted code is used once and never stored or logged. No account name or address is stored.
 - **Layout:** the same as the backup folder (`snapshots/<name>/{db.dump.age, secret.json.age, manifest.json}` and
   `sealed/<hmac>.age`; the manifest goes last, so a snapshot is complete when its manifest is there). A folder
-  downloaded from drive.google.com restores with `recallspring backup-restore --from <folder> --key <key file>
+  downloaded from drive.google.com or dropbox.com restores with `recallspring backup-restore --from <folder> --key <key file>
   --database <new> --storage <empty folder>`.
 - **Day to day:** the worker checks every 10 minutes after its backup check; a copy runs when there is a newer local
   backup (Back up now starts one at once). Only missing files are uploaded, in resumable 8 MiB pieces (a dropped
-  piece asks Google how far it got); sizes are read back; then what the local folder removed (7 daily, 4 weekly or
+  piece asks Google how far it got; Dropbox upload sessions resume from the offset Dropbox reports); sizes are read
+  back; then what the local folder removed (7 daily, 4 weekly or
   the last 7) is removed from the cloud too. One copy at a time (PostgreSQL advisory lock).
 - **Failures:** never affect the local backup. Retries wait 15 minutes, 1, 4, then 12 hours; *not enough room* waits
-  until the next day. Today → Needs attention shows a failure after a day in a row, and at once when Google
-  withdrew access (copying stops until the learner signs in again). If the folder was deleted in Drive, it is made
-  again.
-- **Disconnect:** forgets the sign-in and asks Google to revoke it; the files stay unless the learner chooses to
-  delete them too (asked once more; permanent at Google).
+  until the next day. Today → Needs attention shows a failure after a day in a row, and at once when Google or
+  Dropbox withdrew access (copying stops until the learner signs in again). If the folder was deleted there, it is
+  made again.
+- **Disconnect:** forgets the sign-in and asks Google or Dropbox to revoke it; the files stay unless the learner
+  chooses to delete them too (asked once more; Dropbox keeps deleted files in its own deleted files for a while).
 - **Audited:** `backup.cloud_connected`, `backup.cloud_disconnected` (files kept or deleted), `backup.cloud_failed`
   (once per run of failures), `backup.cloud_files_deleted`. Only the first account may connect or disconnect.
-- **Not yet:** OneDrive and Dropbox (Dropbox next); a restore command that downloads by itself.
+- **Not yet:** OneDrive (next); a restore command that downloads by itself.
 
 ### Export (`services/exports.py`, 2026-11-27)
 
@@ -240,19 +248,25 @@ and any of the three parts.
   session (`Cache-Control: no-store`). Today shows a ready export until it is downloaded, and a failed one.
 - History: `export.created`, `export.downloaded`, `export.sent_to_drive`.
 
-### Your Google Drive (`services/my_drive.py`, migration 0040, 2026-11-27)
+### Your cloud folder (`services/my_drive.py`, migration 0040, 2026-11-27; Dropbox 2026-11-28)
 
-Settings → Data & backups → *Your Google Drive* keeps a **readable** copy of each learner's own material in their
-own Google account, in `My Drive › RecallSpring › <course>/<their folders>/<file>`. It is not a backup (that is
-Cloud copy, encrypted, for the whole installation) and it is one way: RecallSpring keeps working from its own copy.
+Settings → Data & backups → *Your cloud folder* (called *Your Google Drive* until 2026-11-28) keeps a **readable**
+copy of each learner's own material in their own Google Drive, in `My Drive › RecallSpring › <course>/<their
+folders>/<file>`, or Dropbox, in `Dropbox › Apps › RecallSpring › Material › <course>/…`. One provider at a time per
+learner. It is not a backup (that is Cloud copy, encrypted, for the whole installation) and it is one way:
+RecallSpring keeps working from its own copy.
 
 - **Sign-in:** the same device-code sign-in and the same Google app as Cloud copy (`RS_CLOUD_GOOGLE_CLIENT_ID`,
   `RS_CLOUD_GOOGLE_CLIENT_SECRET`), scope `drive.file`, but each learner signs in with their own account. With the
   app published *In production* (docs/cloud-copy-google.md) any Google account can; nothing else to set up.
+  Dropbox: the same pasted-code sign-in and Dropbox app as Cloud copy (`RS_CLOUD_DROPBOX_APP_KEY`), each learner
+  with their own account (docs/cloud-copy-dropbox.md). Dropbox names are unique regardless of letter case, so a
+  second file that differs only in case gets " (1)"; renames are moves within the app folder.
 - **Secrets:** each learner's refresh token is kept in `secrets_dir/drive-<user id>.bin` (DPAPI on Windows, 0600
   elsewhere); the device code waits in `drive-<user id>-pending.bin`. Neither reaches the database, a backup,
   History, logs or the browser. No account name or address is stored. The database keeps only the connection state
-  (`drive_connections`) and which Drive file holds which course, folder or file (`drive_items`).
+  (`drive_connections`, with the provider) and which cloud item holds which course, folder or file
+  (`drive_items`). Connecting another provider than before forgets the old items (its files stay where they are).
 - **What is copied:** material added after connecting. Material from before is copied only with *Copy what is
   already here*, which shows how many files and how much first. Renamed courses and folders are renamed in Drive;
   a folder deleted (or in the bin) in Drive is made again and its files copied again. Moving a folder in RecallSpring
@@ -260,10 +274,9 @@ Cloud copy, encrypted, for the whole installation) and it is one way: RecallSpri
 - **Day to day:** the worker looks every minute for waiting material (up to 200 files a run), with a lock per
   learner; uploads are resumable 8 MiB pieces. A failure waits 15 minutes, 1, 4 and 12 hours (no room: until
   tomorrow); Today shows a failing copy after a day, and withdrawn access at once (nothing else stops).
-- **Exports:** with *Exports go here too* on, Export offers *To my Drive*: the finished ZIP is uploaded to
-  `My Drive › RecallSpring › Exports` and deleted here. If Drive fails, the ZIP stays here to download and Today
-  says so.
-- **Disconnect** forgets the sign-in and asks Google to withdraw it. The files stay unless the learner chooses
+- **Exports:** with *Exports go here too* on, Export offers *To my cloud folder*: the finished ZIP is uploaded to
+  `Exports` in that folder and deleted here. If the upload fails, the ZIP stays here to download and Today says so.
+- **Disconnect** forgets the sign-in and asks Google or Dropbox to withdraw it. The files stay unless the learner chooses
   *Delete everything RecallSpring made there* (asked once more), which deletes the RecallSpring folder.
 - History: `drive.connected`, `drive.copy_existing`, `drive.failed` (once per failing streak), `drive.disconnected`
   (files kept or deleted).

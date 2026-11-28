@@ -18,7 +18,7 @@ Without these settings, Settings › Data & backups › Cloud copy says that a G
    External app is in *Testing*, Google lets its sign-ins expire after 7 days, so the daily copy would stop with
    "Google Drive no longer allows RecallSpring" a week after connecting. (In *Testing* only accounts listed under
    Test users can sign in at all. A name and logo on the consent screen need Google's lighter brand verification.)
-   The same app also serves *Your Google Drive* (each learner's own readable copy of their material, docs/08);
+   The same app also serves *Your cloud folder* (each learner's own readable copy of their material, docs/08);
    each learner signs in with their own account.
 4. **Clients › Create client:** application type **TVs and Limited Input devices**, a name such as "RecallSpring
    server". Copy the client ID and the client secret.
@@ -38,4 +38,5 @@ it creates. The page continues by itself; the first copy starts at once.
 ## What RecallSpring can see
 
 Only the files it created: the folder `My Drive › RecallSpring backups` and what is in it. Nothing else in the Drive,
-no account name and no email address. Details and the rest of the behaviour: docs/08 → Cloud copy.
+no account name and no email address. Details and the rest of the behaviour: docs/08 → Cloud copy. For Dropbox
+instead, see docs/cloud-copy-dropbox.md.
