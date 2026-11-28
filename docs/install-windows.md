@@ -4,6 +4,9 @@ For one person on their own Windows 10 or 11 computer. Everything stays on that 
 notes, grades and backups. Nothing is sent to the RecallSpring authors. (Decision 2026-11-21: Windows first,
 the database keeps running in Docker; docs/10.)
 
+Just want to use RecallSpring, without the code? The Docker install needs one command and no Python, Node.js or Git:
+[install-docker.md](install-docker.md). This guide is for running it from a checkout of the code.
+
 ## 1. What you need
 
 Install these yourself (the installer checks them but installs none):

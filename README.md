@@ -127,7 +127,27 @@ Use one, or several at once. Grades from any of them count the same. See
 
 ## Get started
 
-RecallSpring runs on your own Windows 10 or 11 computer; a Linux home-server setup comes next.
+RecallSpring runs on your own computer. There are two ways to install it.
+
+### With Docker, in one command (Linux, macOS, Windows)
+
+From the first release on, with Docker running:
+
+```sh
+curl -fsSL https://github.com/kek-tilen/RecallSpring/releases/latest/download/install.sh | sh
+```
+
+```powershell
+irm https://github.com/kek-tilen/RecallSpring/releases/latest/download/install.ps1 | iex
+```
+
+It checks Docker, disk space and ports, says what it will do and asks first, checks every file against the release's
+hashes, and prints a one-time link for your account. Then `~/RecallSpring/recallspring status | update | logs | stop |
+start`. The full guide, with options, updates, backups and going back: [docs/install-docker.md](docs/install-docker.md).
+
+### From the code on Windows
+
+RecallSpring runs from a checkout on your own Windows 10 or 11 computer:
 
 1. Install Python 3.12+, Node.js 22+, Docker Desktop and Git.
 2. Get the code and run the installer:

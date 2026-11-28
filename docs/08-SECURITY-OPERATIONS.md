@@ -332,6 +332,43 @@ and JSON to `local-data/reports/` next to the uploaded files: private learner da
 anywhere. After installing migration 0033 run `recallspring recompute-reviews` once, so the shadow covers answers
 given before it existed. A failure in the shadow is logged without learner data and never stops an answer or a grade.
 
+### Docker install (`infra/docker`, `.github/workflows/release.yml`, 2026-11-28)
+
+The one-command install for any computer with Docker (docs/install-docker.md). No migration; it adds no tables.
+
+- **Image:** one image for `api`, `worker`, `mcp` and the one-shot `migrate` step; base images pinned by digest,
+  Python wheels built in a separate stage and installed with `--require-hashes`, the web app built in the image.
+  It runs as uid 10001 with `RS_ENVIRONMENT=production` (no API docs). Windows-only packages are dropped from the MCP
+  lock for Linux (`infra/docker/linux_lock.py`).
+- **Containers:** read-only root file system, tmpfs `/tmp`, `cap_drop: ALL`, `no-new-privileges`, memory and pid
+  limits, the user's uid/gid; no host network, no privileged mode, no Docker socket. Ports on 127.0.0.1 only.
+  PostgreSQL 16 sits on an internal network with no port and no way out. Writable: `./data`, the backups folder and
+  an optional sync folder (`compose.local.yml`).
+- **First account:** the loopback check of first run cannot work behind Docker's network, so the install issues a
+  **setup link** (`recallspring setup-link`, `setup_link.py`): a 12-character one-time code (Crockford base32, about
+  60 bits), only its SHA-256 kept in `RS_SECRETS_DIR/setup-link.json` (0600), valid 24 hours (1-168), one at a time,
+  cleared when the first account is made, refused once any account exists. It travels after `#` in the link, so it
+  never reaches a server log; the page takes it from the address and removes it. Wrong codes count against the login
+  limiter (`setup|<client>`), 429 after too many. In production the first-run page needs the code; on a home server
+  (not loopback) it is accepted when a link is pending. Audited as `setup_link`.
+- **Folders:** `RS_BACKUP_FOLDERS_FROM_WEB=false` (set by the image) locks only the backup folder and the synced
+  folders in Settings (shown read-only, 409 `folder_locked` / `cloud_folder_locked` on change), because a container
+  can only write where it was given a mount. Schedule, encryption and the cloud copy stay in Settings.
+- **Structure changes:** the `migrate` service runs `recallspring upgrade-db` before `api` and `worker` start; it backs
+  up first when the database is behind and holds data, and refuses to migrate when that backup fails.
+- **Install and update:** `install.sh` / `install.ps1` check Docker, 4 GB disk, 2 GB memory and free ports, ask, then
+  verify `compose.yml`, `images.env` and the helper against `SHA256SUMS`, whose own hash is written into the install
+  script at release time. `.env` (random 48-hex-digit database password) is 0600 or, on Windows, an ACL for the user
+  only. `recallspring update` backs up first, keeps `*.previous`, and goes back to the old image by itself when the
+  new one does not become ready.
+- **Rollback:** restore into a new database (`admin backup-restore`), then `RS_DB_NAME` and `RS_STORAGE_DIR` in `.env`
+  switch to it; the old database is kept (docs/install-docker.md > Going back). Tested locally on 2026-11-28 in a
+  separate Compose project on other ports: install, setup link, backup and restore check, upload processed by the
+  worker, connector initialize over HTTP, stop/start, restore and switch, from Git Bash and from Windows PowerShell.
+- **Release:** a version tag builds amd64 and arm64 images to ghcr.io with SBOM, provenance and attestations, and
+  publishes the release files as a draft first. Not run yet; the first release needs the owner's approval, and so
+  does making the package public.
+
 Still required before a VPS release: an encrypted copy **off the VPS** to an owner-approved destination (owner choice
 2 in docs/10) and a restore drill there; the local backups above do not replace it.
 
